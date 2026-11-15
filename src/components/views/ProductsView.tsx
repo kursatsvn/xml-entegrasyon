@@ -57,6 +57,14 @@ export default function ProductsView({
     [products]
   );
 
+  const zeroPriceProducts = useMemo(
+    () =>
+      products.filter(
+        (p) => !p.salePrice || p.salePrice <= 0 || p.variants.some((v) => !v.salePrice || v.salePrice <= 0)
+      ),
+    [products]
+  );
+
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       if (searchQuery.trim()) {
@@ -75,6 +83,11 @@ export default function ProductsView({
         if (!matchesMain && !matchesVar) return false;
       }
 
+      if (platformFilter === 'zero-price') {
+        const isZero =
+          !p.salePrice || p.salePrice <= 0 || p.variants.some((v) => !v.salePrice || v.salePrice <= 0);
+        if (!isZero) return false;
+      }
       if (platformFilter === 'ty-active' && p.trendyolSyncStatus !== 'synced') return false;
       if (platformFilter === 'ty-error' && p.trendyolSyncStatus !== 'error') return false;
       if (platformFilter === 'hb-active' && p.hepsiburadaSyncStatus !== 'synced') return false;
@@ -213,6 +226,35 @@ export default function ProductsView({
         </div>
       </div>
 
+      {/* XML Fiyatı 0 TL Olan Ürünler İçin Otomatik Uyarı Kutusu */}
+      {zeroPriceProducts.length > 0 && (
+        <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-xs">
+          <div className="space-y-1">
+            <div className="text-sm font-bold text-rose-900 flex items-center gap-2">
+              <span>⚠️ Dikkat: XML&apos;de Fiyatı 0,00 TL Olan {zeroPriceProducts.length} Ürün / Varyant Tespit Edildi!</span>
+            </div>
+            <p className="text-xs text-rose-800">
+              XML kaynağında fiyatı <strong>0,00 ₺</strong> olan ürünler veya varyantlar pazaryerlerine (Trendyol / Hepsiburada) <strong>kesinlikle gönderilmez</strong>. Bu ürünleri göndermek istiyorsanız karşısındaki <strong>DÜZENLE</strong> butonuna tıklayarak geçerli bir satış fiyatı giriniz.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setPlatformFilter(platformFilter === 'zero-price' ? 'all' : 'zero-price');
+              setCurrentPage(1);
+            }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition ${
+              platformFilter === 'zero-price'
+                ? 'bg-slate-800 text-white'
+                : 'bg-rose-600 hover:bg-rose-700 text-white'
+            }`}
+          >
+            {platformFilter === 'zero-price'
+              ? 'Tüm Ürünleri Göster'
+              : `0 TL Fiyatlı Ürünleri Göster (${zeroPriceProducts.length})`}
+          </button>
+        </div>
+      )}
+
       {/* Sopyo Gelişmiş Filtre Çubuğu */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
@@ -239,6 +281,7 @@ export default function ProductsView({
             className="px-3 py-2 rounded-xl border border-slate-300 text-sm"
           >
             <option value="all">Tüm Platform Durumları</option>
+            <option value="zero-price">⚠️ XML Fiyatı 0 TL (Fiyat Girilmeli)</option>
             <option value="ty-active">Trendyol Aktif (Satışta)</option>
             <option value="ty-error">Trendyol Hatalı / Eksik</option>
             <option value="hb-active">Hepsiburada Aktif (Satışta)</option>
@@ -355,7 +398,10 @@ export default function ProductsView({
                   <td className="py-3.5 px-4">
                     <div className="space-y-1 text-xs">
                       <div className="text-slate-500">
-                        XML Baz: <strong className="text-slate-800">{p.salePrice.toFixed(2)} ₺</strong>
+                        XML Baz:{' '}
+                        <strong className={p.salePrice <= 0 ? 'text-rose-600 font-extrabold' : 'text-slate-800'}>
+                          {p.salePrice.toFixed(2)} ₺
+                        </strong>
                       </div>
                       <div className="text-orange-700 font-semibold">
                         Trendyol: {p.trendyolSalePrice.toFixed(2)} ₺
@@ -363,6 +409,11 @@ export default function ProductsView({
                       <div className="text-amber-700 font-semibold">
                         Hepsiburada: {p.hepsiburadaSalePrice.toFixed(2)} ₺
                       </div>
+                      {(p.salePrice <= 0 || p.variants.some((v) => !v.salePrice || v.salePrice <= 0)) && (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[11px] font-bold border border-rose-300">
+                          ⚠️ Fiyat Girilmeli (Gönderilmez)
+                        </div>
+                      )}
                       {p.xmlPriceLock && (
                         <span className="inline-flex items-center gap-1 text-[11px] text-rose-600 font-semibold">
                           <Lock className="w-3 h-3" /> Fiyat Kilidi Açık

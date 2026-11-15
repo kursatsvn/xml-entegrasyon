@@ -521,9 +521,39 @@ export async function POST(req: NextRequest) {
         (p) => p.id === incoming.id && p.tenantId === tenantId
       );
       if (idx >= 0) {
+        const prev = db.products[idx];
+        const newSalePrice = Number(incoming.salePrice ?? prev.salePrice ?? 0);
+        const newTyPrice = Number(incoming.trendyolSalePrice ?? prev.trendyolSalePrice ?? 0);
+        const newHbPrice = Number(incoming.hepsiburadaSalePrice ?? prev.hepsiburadaSalePrice ?? 0);
+        const updatedVariants = (incoming.variants || prev.variants).map((v) => {
+          if ((!v.salePrice || v.salePrice <= 0) && newSalePrice > 0) {
+            return {
+              ...v,
+              salePrice: newSalePrice,
+              buyingPrice: v.buyingPrice > 0 ? v.buyingPrice : newSalePrice,
+              trendyolSalePrice: v.trendyolSalePrice > 0 ? v.trendyolSalePrice : newTyPrice || newSalePrice,
+              hepsiburadaSalePrice: v.hepsiburadaSalePrice > 0 ? v.hepsiburadaSalePrice : newHbPrice || newSalePrice
+            };
+          }
+          return v;
+        });
+        const stillHasZero =
+          newSalePrice <= 0 || updatedVariants.some((v) => !v.salePrice || v.salePrice <= 0);
+
         db.products[idx] = {
-          ...db.products[idx],
+          ...prev,
           ...incoming,
+          variants: updatedVariants,
+          xmlPriceLock: prev.salePrice <= 0 && newSalePrice > 0 ? true : Boolean(incoming.xmlPriceLock ?? prev.xmlPriceLock),
+          status: !stillHasZero ? incoming.status || 'active' : 'passive',
+          trendyolSyncStatus: stillHasZero ? 'error' : prev.trendyolSyncStatus === 'error' ? 'pending' : prev.trendyolSyncStatus,
+          trendyolErrorMessage: stillHasZero
+            ? '⚠️ XML satış fiyatı 0,00 TL! Gönderim engellendi — Lütfen geçerli bir satış fiyatı giriniz.'
+            : undefined,
+          hepsiburadaSyncStatus: stillHasZero ? 'error' : prev.hepsiburadaSyncStatus === 'error' ? 'pending' : prev.hepsiburadaSyncStatus,
+          hepsiburadaErrorMessage: stillHasZero
+            ? '⚠️ XML satış fiyatı 0,00 TL! Gönderim engellendi — Lütfen geçerli bir satış fiyatı giriniz.'
+            : undefined,
           tenantId,
           updatedAt: new Date().toISOString()
         };

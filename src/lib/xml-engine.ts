@@ -193,14 +193,13 @@ export async function syncXmlFeedProducts(params: {
       const netStock = Math.max(0, effectiveXmlStock - reservedStock);
 
       const salePriceTagVal = parseNumber(rv[xmlSource.salePriceTag || 'SatisFiyati'] ?? rv.SatisFiyati);
-      // XML'de fiyatı 0 veya negatif olan varyantları kesinlikle içeri alma
-      if (!salePriceTagVal || salePriceTagVal <= 0) {
-        continue;
-      }
       const buyingPriceVal = parseNumber(rv[xmlSource.buyingPriceTag || 'SatisFiyati'] ?? rv.AlisFiyati ?? salePriceTagVal);
       const marketPriceVal = parseNumber(rv[xmlSource.marketPriceTag || 'IndirimliFiyat'] ?? rv.IndirimliFiyat ?? salePriceTagVal);
 
-      const channelPrices = calculateChannelPrices(salePriceTagVal, xmlSource);
+      const channelPrices =
+        salePriceTagVal > 0
+          ? calculateChannelPrices(salePriceTagVal, xmlSource)
+          : { trendyolPrice: 0, trendyolListPrice: 0, hepsiburadaPrice: 0 };
 
       // EkSecenekOzellik (Renk / Beden)
       const rawProps = asArray<Record<string, any>>(rv?.EkSecenekOzellik?.Ozellik);
@@ -247,17 +246,22 @@ export async function syncXmlFeedProducts(params: {
       });
     }
 
-    // Tüm varyantları 0 TL olan ürünleri tamamen atla
-    if (variants.length === 0) {
-      continue;
-    }
-
-    const primaryVar = variants[0];
+    const primaryVar = variants.find((v) => v.salePrice > 0) || variants[0];
+    const hasZeroPriceVariant = variants.some((v) => !v.salePrice || v.salePrice <= 0);
+    const isAllZeroPrice = variants.every((v) => !v.salePrice || v.salePrice <= 0);
     const totalXmlStock = variants.reduce((acc, v) => acc + v.xmlStock, 0);
     const reservedOrderStock = variants.reduce((acc, v) => acc + v.reservedStock, 0);
     const netAvailableStock = variants.reduce((acc, v) => acc + v.netStock, 0);
 
-    const channelPrices = calculateChannelPrices(primaryVar.salePrice, xmlSource);
+    const channelPrices =
+      primaryVar.salePrice > 0
+        ? calculateChannelPrices(primaryVar.salePrice, xmlSource)
+        : { trendyolPrice: 0, trendyolListPrice: 0, hepsiburadaPrice: 0 };
+    const zeroPriceWarningMsg = isAllZeroPrice
+      ? '⚠️ XML satış fiyatı 0,00 TL! Bu ürün pazaryerine gönderilmez, lütfen fiyat giriniz.'
+      : hasZeroPriceVariant
+      ? '⚠️ Ürünün bazı varyantlarında XML fiyatı 0,00 TL! Sıfır fiyatlı varyantlar gönderilmez, fiyat giriniz.'
+      : undefined;
 
     if (!existingProd) {
       if (xmlSource.disableNewProducts) continue;
@@ -296,29 +300,38 @@ export async function syncXmlFeedProducts(params: {
       stockDeductionPerSale: existingProd?.stockDeductionPerSale || 1,
       maxPurchaseQty: existingProd?.maxPurchaseQty || 0,
       xmlPriceLock: existingProd?.xmlPriceLock || false,
-      status: netAvailableStock > 0 ? 'active' : 'passive',
-      buyingPrice: primaryVar.buyingPrice,
-      marketPrice: primaryVar.marketPrice,
-      salePrice: primaryVar.salePrice,
-      trendyolListPrice:
-        existingProd?.xmlPriceLock || xmlSource.disablePriceSync
-          ? existingProd?.trendyolListPrice || channelPrices.trendyolListPrice
-          : channelPrices.trendyolListPrice,
-      trendyolSalePrice:
-        existingProd?.xmlPriceLock || xmlSource.disablePriceSync
-          ? existingProd?.trendyolSalePrice || channelPrices.trendyolPrice
-          : channelPrices.trendyolPrice,
-      hepsiburadaSalePrice:
-        existingProd?.xmlPriceLock || xmlSource.disablePriceSync
-          ? existingProd?.hepsiburadaSalePrice || channelPrices.hepsiburadaPrice
-          : channelPrices.hepsiburadaPrice,
+      status: !isAllZeroPrice && netAvailableStock > 0 ? 'active' : 'passive',
+      buyingPrice: isAllZeroPrice ? 0 : primaryVar.buyingPrice,
+      marketPrice: isAllZeroPrice ? 0 : primaryVar.marketPrice,
+      salePrice: isAllZeroPrice ? 0 : primaryVar.salePrice,
+      trendyolListPrice: isAllZeroPrice
+        ? 0
+        : existingProd?.xmlPriceLock || xmlSource.disablePriceSync
+        ? existingProd?.trendyolListPrice || channelPrices.trendyolListPrice
+        : channelPrices.trendyolListPrice,
+      trendyolSalePrice: isAllZeroPrice
+        ? 0
+        : existingProd?.xmlPriceLock || xmlSource.disablePriceSync
+        ? existingProd?.trendyolSalePrice || channelPrices.trendyolPrice
+        : channelPrices.trendyolPrice,
+      hepsiburadaSalePrice: isAllZeroPrice
+        ? 0
+        : existingProd?.xmlPriceLock || xmlSource.disablePriceSync
+        ? existingProd?.hepsiburadaSalePrice || channelPrices.hepsiburadaPrice
+        : channelPrices.hepsiburadaPrice,
       totalXmlStock,
       reservedOrderStock,
       netAvailableStock,
-      trendyolSyncStatus: existingProd?.trendyolSyncStatus || (xmlSource.autoPublishEnabled ? 'synced' : 'not_sent'),
-      trendyolErrorMessage: existingProd?.trendyolErrorMessage,
-      hepsiburadaSyncStatus: existingProd?.hepsiburadaSyncStatus || (xmlSource.autoPublishEnabled ? 'synced' : 'not_sent'),
-      hepsiburadaErrorMessage: existingProd?.hepsiburadaErrorMessage,
+      trendyolSyncStatus:
+        isAllZeroPrice || hasZeroPriceVariant
+          ? 'error'
+          : existingProd?.trendyolSyncStatus || (xmlSource.autoPublishEnabled ? 'synced' : 'not_sent'),
+      trendyolErrorMessage: zeroPriceWarningMsg || existingProd?.trendyolErrorMessage,
+      hepsiburadaSyncStatus:
+        isAllZeroPrice || hasZeroPriceVariant
+          ? 'error'
+          : existingProd?.hepsiburadaSyncStatus || (xmlSource.autoPublishEnabled ? 'synced' : 'not_sent'),
+      hepsiburadaErrorMessage: zeroPriceWarningMsg || existingProd?.hepsiburadaErrorMessage,
       tags: existingProd?.tags || [],
       productUrl,
       variants,

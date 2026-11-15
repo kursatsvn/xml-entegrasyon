@@ -108,6 +108,16 @@ export async function syncPriceAndInventoryToMarketplace(params: {
         continue;
       }
 
+      if (!v.salePrice || v.salePrice <= 0) {
+        errors.push({
+          stockCode: prod.stockCode,
+          title: `${prod.title}${v.size ? ` (${v.size})` : ''}`,
+          marketplace: account.marketplace === 'trendyol' ? 'Trendyol' : 'Hepsiburada',
+          message: '⚠️ XML fiyatı 0,00 TL olduğu için gönderilmedi! Lütfen Ürünler sayfasından satış fiyatı giriniz.'
+        });
+        continue;
+      }
+
       if (account.marketplace === 'trendyol') {
         itemsPayload.push({
           barcode: v.barcode,
@@ -218,6 +228,20 @@ export async function publishProductsToMarketplace(params: {
       continue;
     }
 
+    const isAllVariantsZeroPrice =
+      (!prod.salePrice || prod.salePrice <= 0) &&
+      prod.variants.every((v) => !v.salePrice || v.salePrice <= 0);
+    if (isAllVariantsZeroPrice) {
+      errors.push({
+        stockCode: prod.stockCode,
+        title: prod.title,
+        marketplace: marketplaceLabel,
+        message:
+          '⚠️ XML satış fiyatı 0,00 TL! Ürün pazaryerine gönderilmedi. Lütfen Ürünler sayfasından geçerli bir satış fiyatı giriniz.'
+      });
+      continue;
+    }
+
     // Gerçek yaprak (leaf) Trendyol kategori ID çözümlemesi
     const rawCatId = cat?.trendyolCategoryId;
     const leafCategoryId =
@@ -240,8 +264,17 @@ export async function publishProductsToMarketplace(params: {
     for (let vIdx = 0; vIdx < prod.variants.length; vIdx++) {
       const v = prod.variants[vIdx];
       if (!v.barcode) continue;
-      // XML satış fiyatı 0 olan varyantları pazaryerine kesinlikle gönderme
-      if (!v.salePrice || v.salePrice <= 0) continue;
+      // XML satış fiyatı 0 olan varyantları pazaryerine kesinlikle gönderme ve uyarı oluştur
+      if (!v.salePrice || v.salePrice <= 0) {
+        errors.push({
+          stockCode: v.sku || prod.stockCode,
+          title: `${prod.title}${v.size ? ` (Beden: ${v.size})` : ''}`,
+          marketplace: marketplaceLabel,
+          message:
+            '⚠️ Varyantın XML satış fiyatı 0,00 TL olduğu için gönderilmedi! Göndermek için varyant fiyatını giriniz.'
+        });
+        continue;
+      }
 
       const resolvedColor = normalizeColorValue(v.color, prod.title).slice(0, 30);
       const bedenValueId = resolveTrendyolBedenValueId(v.size);

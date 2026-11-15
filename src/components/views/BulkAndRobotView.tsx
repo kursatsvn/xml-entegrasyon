@@ -985,6 +985,27 @@ export default function BulkAndRobotView({
       {/* 1. TOPLU ÜRÜN GÖNDERİMİ */}
       {tab === 'publish' && (
         <div className="space-y-6">
+          {(() => {
+            const zeroProds = products.filter(
+              (p) => !p.salePrice || p.salePrice <= 0 || p.variants.some((v) => !v.salePrice || v.salePrice <= 0)
+            );
+            const zeroVarCount = products.reduce(
+              (acc, p) => acc + p.variants.filter((v) => !v.salePrice || v.salePrice <= 0).length,
+              0
+            );
+            if (zeroProds.length === 0) return null;
+            return (
+              <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-4 flex flex-col gap-1.5 shadow-xs">
+                <div className="text-sm font-bold text-rose-900">
+                  ⚠️ Dikkat: XML&apos;de Fiyatı 0,00 TL Olan {zeroProds.length} Ürün ({zeroVarCount} Varyant) Bulunuyor!
+                </div>
+                <p className="text-xs text-rose-800">
+                  Fiyatı <strong>0,00 ₺</strong> olan ürün ve varyantlar toplu gönderim sırasında <strong>otomatik olarak engellenir ve pazaryerine gönderilmez</strong>. Bu ürünleri göndermek için lütfen <strong>Ürünler → Ürün Listesi</strong> sayfasından ilgili ürüne satış fiyatı giriniz.
+                </p>
+              </div>
+            );
+          })()}
+
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-wrap items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-slate-900">
