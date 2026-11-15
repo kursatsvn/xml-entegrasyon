@@ -32,6 +32,7 @@ interface LiveTrendyolItem {
   archived: boolean;
   rejected: boolean;
   blacklisted: boolean;
+  blacklistReason?: string;
   imageUrl: string;
 }
 
@@ -615,7 +616,7 @@ export default function BulkAndRobotView({
                           )}
                           {it.blacklisted && (
                             <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-[11px] font-bold">
-                              Kara Liste
+                              Kara Liste{it.blacklistReason ? `: ${it.blacklistReason}` : ''}
                             </span>
                           )}
                           {!it.approved && (

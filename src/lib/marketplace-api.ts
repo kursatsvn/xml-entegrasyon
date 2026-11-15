@@ -356,6 +356,7 @@ export interface LiveTrendyolProductItem {
   archived: boolean;
   rejected: boolean;
   blacklisted: boolean;
+  blacklistReason?: string;
   imageUrl: string;
   lastUpdateDate?: number;
 }
@@ -461,6 +462,7 @@ export async function fetchLiveTrendyolProducts(params: {
     archived: Boolean(item.archived),
     rejected: Boolean(item.rejected),
     blacklisted: Boolean(item.blacklisted),
+    blacklistReason: item.blacklistReason ? String(item.blacklistReason) : undefined,
     imageUrl: item.images?.[0]?.url || '',
     lastUpdateDate: item.lastUpdateDate
   }));
