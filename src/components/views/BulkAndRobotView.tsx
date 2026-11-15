@@ -71,6 +71,42 @@ export default function BulkAndRobotView({
   const [newRobotMaxPrice, setNewRobotMaxPrice] = useState<number>(650);
   const [newRobotStep, setNewRobotStep] = useState<number>(1);
 
+  // XML Fiyat Ayarı (% Yüzde + Ekstra TL) state'leri
+  const [tyPercent, setTyPercent] = useState<number>(105);
+  const [tyExtraTl, setTyExtraTl] = useState<number>(75);
+  const [hbPercent, setHbPercent] = useState<number>(120);
+  const [hbExtraTl, setHbExtraTl] = useState<number>(80);
+  const [sampleXmlPrice, setSampleXmlPrice] = useState<number>(200);
+  const [savingPriceRules, setSavingPriceRules] = useState(false);
+
+  const handleApplyQuickPriceRules = async () => {
+    setSavingPriceRules(true);
+    try {
+      const res = await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_quick_price_rules',
+          trendyolPercent: tyPercent,
+          trendyolExtraTl: tyExtraTl,
+          hepsiburadaPercent: hbPercent,
+          hepsiburadaExtraTl: hbExtraTl
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        notify(data.message, 'success');
+        await onRefresh();
+      } else {
+        notify(data.message || 'Fiyat kuralları kaydedilemedi', 'error');
+      }
+    } catch (e: any) {
+      notify(e?.message || 'Fiyat güncelleme hatası', 'error');
+    } finally {
+      setSavingPriceRules(false);
+    }
+  };
+
   // Canlı Trendyol Ürün Listeleme & Silme state'leri
   const [tyItems, setTyItems] = useState<LiveTrendyolItem[]>([]);
   const [tyFilter, setTyFilter] = useState<
@@ -781,6 +817,165 @@ export default function BulkAndRobotView({
                 >
                   Sonraki →
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 1. TOPLU ÜRÜN GÖNDERİMİ VE FİYAT AYARI (% YÜZDE + EKSTRA TL) */}
+      {(tab === 'publish' || tab === 'update') && (
+        <div className="bg-white rounded-xl border border-indigo-200 p-6 shadow-sm space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                XML Fiyat Ayarı (Yüzde % Artış + Ekstra TL Ekleme)
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                XML&apos;den gelen alış/baz fiyatın üzerine kanal bazlı <strong>% Yüzde</strong> ve
+                ayrıca <strong>+ Ekstra TL (Kargo / Komisyon / Sabit Tutar)</strong> ekleyerek tüm
+                ürünlerin satış fiyatını tek tıkla hesaplayın.
+              </p>
+            </div>
+            <button
+              onClick={handleApplyQuickPriceRules}
+              disabled={savingPriceRules}
+              className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold shadow-sm cursor-pointer"
+            >
+              {savingPriceRules
+                ? 'Fiyatlar Hesaplanıyor...'
+                : 'Fiyat Ayarını Kaydet & Tüm Ürünlere Uygula'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Trendyol Fiyat Ayarı */}
+            <div className="p-4 rounded-xl bg-orange-50/70 border border-orange-200 space-y-3">
+              <div className="font-bold text-orange-900 text-xs uppercase flex items-center justify-between">
+                <span>TRENDYOL FİYAT FORMÜLÜ</span>
+                <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-800 font-mono">
+                  +%{tyPercent} + {tyExtraTl} ₺
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Yüzde Artış Oranı (+%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      value={tyPercent}
+                      onChange={(e) => setTyPercent(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-lg border border-orange-300 bg-white text-sm font-bold text-slate-900"
+                    />
+                    <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Ekstra Sabit Tutar (+TL)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      value={tyExtraTl}
+                      onChange={(e) => setTyExtraTl(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-lg border border-orange-300 bg-white text-sm font-bold text-slate-900"
+                    />
+                    <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">₺</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-[11px] text-orange-900 bg-white/80 px-3 py-2 rounded-lg border border-orange-200/80 font-medium">
+                Örnek ({sampleXmlPrice} ₺ XML Fiyatı):{' '}
+                <strong>
+                  {sampleXmlPrice} ₺ + %{tyPercent} + {tyExtraTl} ₺ ={' '}
+                  {(sampleXmlPrice * (1 + tyPercent / 100) + tyExtraTl).toFixed(2)} ₺
+                </strong>
+              </div>
+            </div>
+
+            {/* Hepsiburada Fiyat Ayarı */}
+            <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 space-y-3">
+              <div className="font-bold text-amber-900 text-xs uppercase flex items-center justify-between">
+                <span>HEPSİBURADA FİYAT FORMÜLÜ</span>
+                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-mono">
+                  +%{hbPercent} + {hbExtraTl} ₺
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Yüzde Artış Oranı (+%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      value={hbPercent}
+                      onChange={(e) => setHbPercent(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white text-sm font-bold text-slate-900"
+                    />
+                    <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">%</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Ekstra Sabit Tutar (+TL)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      value={hbExtraTl}
+                      onChange={(e) => setHbExtraTl(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-lg border border-amber-300 bg-white text-sm font-bold text-slate-900"
+                    />
+                    <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">₺</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-[11px] text-amber-900 bg-white/80 px-3 py-2 rounded-lg border border-amber-200/80 font-medium">
+                Örnek ({sampleXmlPrice} ₺ XML Fiyatı):{' '}
+                <strong>
+                  {sampleXmlPrice} ₺ + %{hbPercent} + {hbExtraTl} ₺ ={' '}
+                  {(sampleXmlPrice * (1 + hbPercent / 100) + hbExtraTl).toFixed(2)} ₺
+                </strong>
+              </div>
+            </div>
+
+            {/* Canlı Simülasyon Test Kutusu */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3 flex flex-col justify-between">
+              <div>
+                <div className="font-bold text-slate-800 text-xs uppercase mb-2">
+                  CANLI FİYAT SİMÜLASYONU
+                </div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                  Test Edilecek XML Baz Fiyatı (₺)
+                </label>
+                <input
+                  type="number"
+                  value={sampleXmlPrice}
+                  onChange={(e) => setSampleXmlPrice(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold"
+                />
+              </div>
+              <div className="text-xs space-y-1 bg-white p-2.5 rounded-lg border border-slate-200">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Trendyol Satış:</span>
+                  <strong className="text-orange-700">
+                    {(sampleXmlPrice * (1 + tyPercent / 100) + tyExtraTl).toFixed(2)} ₺
+                  </strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Hepsiburada Satış:</span>
+                  <strong className="text-amber-700">
+                    {(sampleXmlPrice * (1 + hbPercent / 100) + hbExtraTl).toFixed(2)} ₺
+                  </strong>
+                </div>
               </div>
             </div>
           </div>

@@ -1320,6 +1320,18 @@ export default function XmlView({
                     </button>
 
                     <button
+                      onClick={() => {
+                        setEditingSource(JSON.parse(JSON.stringify(src)));
+                        setWizardStep(2);
+                        setSubMode('wizard');
+                      }}
+                      title="XML Fiyat Ayarları (% Yüzde + Ekstra TL)"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer"
+                    >
+                      % + ₺ Fiyat Ayarı
+                    </button>
+
+                    <button
                       onClick={() => openEditWizard(src)}
                       title="XML Düzenle (Ürün & Fiyat Kuralları)"
                       className="p-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white cursor-pointer"

@@ -319,6 +319,81 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // 2B. Hızlı Fiyat Ayarı (% Yüzde Artış + Ekstra TL) Güncelleme ve Tüm Ürünlere Uygulama
+    if (action === 'update_quick_price_rules') {
+      const tyPercent = Number(body.trendyolPercent ?? 105);
+      const tyExtraTl = Number(body.trendyolExtraTl ?? 0);
+      const hbPercent = Number(body.hepsiburadaPercent ?? 120);
+      const hbExtraTl = Number(body.hepsiburadaExtraTl ?? 0);
+
+      const tenantSources = db.xmlSources.filter((s) => s.tenantId === tenantId);
+      for (const src of tenantSources) {
+        src.priceRuleType = 3;
+        src.marketplacePriceRules = {
+          Trendyol: [
+            {
+              ruleMinPrice: 0,
+              ruleMaxPrice: 999999999,
+              ruleType: 'increase',
+              ruleOperationType: 'percent',
+              ruleAmount: tyPercent,
+              ruleExtraPrice: tyExtraTl
+            }
+          ],
+          Hepsiburada: [
+            {
+              ruleMinPrice: 0,
+              ruleMaxPrice: 999999999,
+              ruleType: 'increase',
+              ruleOperationType: 'percent',
+              ruleAmount: hbPercent,
+              ruleExtraPrice: hbExtraTl
+            }
+          ]
+        };
+      }
+
+      let recalculatedCount = 0;
+      const primarySource = tenantSources[0];
+      for (const prod of db.products) {
+        if (prod.tenantId !== tenantId) continue;
+        if (prod.xmlPriceLock) continue;
+        const src = tenantSources.find((s) => s.id === prod.xmlSourceId) || primarySource;
+        if (src) {
+          const prices = calculateChannelPrices(prod.salePrice, src);
+          prod.trendyolSalePrice = prices.trendyolPrice;
+          prod.trendyolListPrice = prices.trendyolListPrice;
+          prod.hepsiburadaSalePrice = prices.hepsiburadaPrice;
+          for (const v of prod.variants) {
+            const vPrices = calculateChannelPrices(v.salePrice, src);
+            v.trendyolSalePrice = vPrices.trendyolPrice;
+            v.hepsiburadaSalePrice = vPrices.hepsiburadaPrice;
+          }
+        } else {
+          const tyCalc = Number((prod.salePrice * (1 + tyPercent / 100) + tyExtraTl).toFixed(2));
+          const hbCalc = Number((prod.salePrice * (1 + hbPercent / 100) + hbExtraTl).toFixed(2));
+          prod.trendyolSalePrice = tyCalc;
+          prod.trendyolListPrice = Number((tyCalc * 1.15).toFixed(2));
+          prod.hepsiburadaSalePrice = hbCalc;
+          for (const v of prod.variants) {
+            v.trendyolSalePrice = Number(
+              (v.salePrice * (1 + tyPercent / 100) + tyExtraTl).toFixed(2)
+            );
+            v.hepsiburadaSalePrice = Number(
+              (v.salePrice * (1 + hbPercent / 100) + hbExtraTl).toFixed(2)
+            );
+          }
+        }
+        recalculatedCount++;
+      }
+
+      writeDb(db);
+      return NextResponse.json({
+        ok: true,
+        message: `Fiyat ayarları güncellendi (Trendyol: +%${tyPercent} + ${tyExtraTl} TL | Hepsiburada: +%${hbPercent} + ${hbExtraTl} TL) ve ${recalculatedCount} ürünün satış fiyatı yeniden hesaplandı!`
+      });
+    }
+
     // 3. Canlı XML Çekimi & Senkronizasyonu (ariasclosetx veya herhangi bir XML)
     if (action === 'sync_xml_source') {
       const xmlSourceId = String(body.xmlSourceId || '');
