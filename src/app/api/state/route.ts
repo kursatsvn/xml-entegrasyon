@@ -1027,7 +1027,7 @@ export async function POST(req: NextRequest) {
         account: effectiveAccount,
         page: Number(body.page || 0),
         size: Number(body.size || 50),
-        filter: (body.filter || 'all') as 'all' | 'approved' | 'unapproved'
+        filter: body.filter || 'all'
       });
 
       return NextResponse.json(result);

@@ -71,13 +71,18 @@ export default function BulkAndRobotView({
 
   // Canlı Trendyol Ürün Listeleme & Silme state'leri
   const [tyItems, setTyItems] = useState<LiveTrendyolItem[]>([]);
-  const [tyFilter, setTyFilter] = useState<'all' | 'approved' | 'unapproved'>('all');
+  const [tyFilter, setTyFilter] = useState<
+    'all' | 'on_sale' | 'passive' | 'unapproved' | 'blacklisted'
+  >('all');
   const [tyPage, setTyPage] = useState<number>(0);
   const [tyTotalPages, setTyTotalPages] = useState<number>(1);
   const [tyStats, setTyStats] = useState({
     totalElements: 0,
     approvedTotal: 0,
-    unapprovedTotal: 0
+    onSaleTotal: 0,
+    passiveTotal: 0,
+    unapprovedTotal: 0,
+    blacklistedTotal: 0
   });
   const [selectedBarcodes, setSelectedBarcodes] = useState<string[]>([]);
   const [tyLoading, setTyLoading] = useState(false);
@@ -87,7 +92,10 @@ export default function BulkAndRobotView({
   }, [initialTab]);
 
   const loadLiveTrendyolProducts = useCallback(
-    async (page = 0, filter: 'all' | 'approved' | 'unapproved' = tyFilter) => {
+    async (
+      page = 0,
+      filter: 'all' | 'on_sale' | 'passive' | 'unapproved' | 'blacklisted' = tyFilter
+    ) => {
       setTyLoading(true);
       try {
         const res = await fetch('/api/state', {
@@ -108,7 +116,10 @@ export default function BulkAndRobotView({
           setTyStats({
             totalElements: data.totalElements || 0,
             approvedTotal: data.approvedTotal || 0,
-            unapprovedTotal: data.unapprovedTotal || 0
+            onSaleTotal: data.onSaleTotal || 0,
+            passiveTotal: data.passiveTotal || 0,
+            unapprovedTotal: data.unapprovedTotal || 0,
+            blacklistedTotal: data.blacklistedTotal || 0
           });
           setSelectedBarcodes([]);
         } else {
@@ -130,7 +141,14 @@ export default function BulkAndRobotView({
   }, [tab, tyFilter, loadLiveTrendyolProducts]);
 
   const handleDeleteTrendyolProducts = async (
-    deleteAllMode: 'selected' | 'unapproved' | 'approved' | 'all'
+    deleteAllMode:
+      | 'selected'
+      | 'on_sale'
+      | 'passive'
+      | 'unapproved'
+      | 'blacklisted'
+      | 'approved'
+      | 'all'
   ) => {
     if (deleteAllMode === 'selected' && selectedBarcodes.length === 0) {
       notify('Lütfen silmek istediğiniz ürünleri tablodan seçin.', 'error');
@@ -140,10 +158,14 @@ export default function BulkAndRobotView({
     const confirmText =
       deleteAllMode === 'selected'
         ? `Seçili ${selectedBarcodes.length} ürünü Trendyol'dan kalıcı olarak silmek istediğinize emin misiniz?`
+        : deleteAllMode === 'on_sale'
+        ? `Trendyol'da SATIŞTA OLAN (${tyStats.onSaleTotal} adet) aktif ürünleri silmek istediğinize emin misiniz?`
+        : deleteAllMode === 'passive'
+        ? `Trendyol'da PASİF / SATIŞ DIŞI (${tyStats.passiveTotal} adet) ürünleri silmek istediğinize emin misiniz?`
+        : deleteAllMode === 'blacklisted'
+        ? `Trendyol'da KARA LİSTEDEKİ (${tyStats.blacklistedTotal} adet) ürünleri silmek istediğinize emin misiniz?`
         : deleteAllMode === 'unapproved'
         ? `Trendyol'da ONAY BEKLEYEN (${tyStats.unapprovedTotal} adet) ürünleri silmek istediğinize emin misiniz?`
-        : deleteAllMode === 'approved'
-        ? `Trendyol'daki ONAYLI (${tyStats.approvedTotal} adet) ürünleri silmek istediğinize emin misiniz?`
         : `Trendyol mağazanızdaki TÜM ÜRÜNLERİ (${tyStats.totalElements} adet) silmek istediğinize emin misiniz?`;
 
     if (!window.confirm(confirmText)) return;
@@ -329,116 +351,176 @@ export default function BulkAndRobotView({
         </div>
       </div>
 
-      {/* 5. TRENDYOL CANLI ÜRÜNLERİ GÖRÜNTÜLE & SİL (ONAY BEKLEYENLER DAHİL) */}
+      {/* 5. TRENDYOL CANLI ÜRÜNLERİ GÖRÜNTÜLE & SİL (SATIŞTA, PASİF, KARA LİSTE, ONAY BEKLEYEN) */}
       {tab === 'trendyol_live' && (
         <div className="space-y-6">
           {/* Canlı Sayaçlar */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-              <div className="text-xs font-bold text-slate-500 uppercase">
-                TRENDYOL TOPLAM ÜRÜN / VARYANT
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+              <div className="text-[11px] font-bold text-slate-500 uppercase">
+                TOPLAM ÜRÜN / VARYANT
               </div>
               <div className="text-2xl font-black text-slate-900 mt-1">
-                {tyStats.totalElements.toLocaleString('tr-TR')} Adet
+                {tyStats.totalElements.toLocaleString('tr-TR')}
               </div>
-              <div className="text-xs text-slate-500 mt-1">
-                Satıcı ID: #1192080 (Canlı API Verisi)
-              </div>
+              <div className="text-[11px] text-slate-500 mt-1">Satıcı ID: #1192080</div>
             </div>
 
-            <div className="bg-white rounded-xl border border-emerald-200 p-5 shadow-sm">
-              <div className="text-xs font-bold text-emerald-700 uppercase">
-                ONAYLI ÜRÜNLER (approved=true)
+            <div className="bg-white rounded-xl border border-emerald-200 p-4 shadow-sm">
+              <div className="text-[11px] font-bold text-emerald-700 uppercase">
+                SATIŞTAKİ AKTİF (onSale=true)
               </div>
               <div className="text-2xl font-black text-emerald-600 mt-1">
-                {tyStats.approvedTotal.toLocaleString('tr-TR')} Adet
+                {tyStats.onSaleTotal.toLocaleString('tr-TR')}
               </div>
-              <div className="text-xs text-slate-500 mt-1">Satışta / Onaylanmış ürünler</div>
+              <div className="text-[11px] text-slate-500 mt-1">Şu an müşteriye açık</div>
             </div>
 
-            <div className="bg-white rounded-xl border border-amber-200 p-5 shadow-sm">
-              <div className="text-xs font-bold text-amber-700 uppercase">
-                ONAY BEKLEYEN / ONAYSIZ (approved=false)
+            <div className="bg-white rounded-xl border border-rose-200 p-4 shadow-sm">
+              <div className="text-[11px] font-bold text-rose-700 uppercase">
+                PASİF / SATIŞ DIŞI (onSale=false)
+              </div>
+              <div className="text-2xl font-black text-rose-600 mt-1">
+                {tyStats.passiveTotal.toLocaleString('tr-TR')}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">Stoksuz veya satışa kapalı</div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-purple-200 p-4 shadow-sm">
+              <div className="text-[11px] font-bold text-purple-700 uppercase">
+                KARA LİSTE / ASKIDA (blacklisted)
+              </div>
+              <div className="text-2xl font-black text-purple-600 mt-1">
+                {tyStats.blacklistedTotal.toLocaleString('tr-TR')}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">Trendyol tarafından kapatılan</div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm">
+              <div className="text-[11px] font-bold text-amber-700 uppercase">
+                ONAY BEKLEYEN (approved=false)
               </div>
               <div className="text-2xl font-black text-amber-600 mt-1">
-                {tyStats.unapprovedTotal.toLocaleString('tr-TR')} Adet
+                {tyStats.unapprovedTotal.toLocaleString('tr-TR')}
               </div>
-              <div className="text-xs text-slate-500 mt-1">
-                Trendyol katalog onayı bekleyen ürünler
-              </div>
+              <div className="text-[11px] text-slate-500 mt-1">Katalog onayı bekleyen</div>
             </div>
           </div>
 
           {/* Filtre & Silme Butonları */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => setTyFilter('all')}
-                className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
-                  tyFilter === 'all'
-                    ? 'bg-slate-900 text-white border-slate-900'
-                    : 'bg-white text-slate-700 border-slate-300'
-                }`}
-              >
-                Tümü ({tyStats.totalElements.toLocaleString('tr-TR')})
-              </button>
-              <button
-                onClick={() => setTyFilter('approved')}
-                className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
-                  tyFilter === 'approved'
-                    ? 'bg-emerald-600 text-white border-emerald-600'
-                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                }`}
-              >
-                Onaylılar ({tyStats.approvedTotal.toLocaleString('tr-TR')})
-              </button>
-              <button
-                onClick={() => setTyFilter('unapproved')}
-                className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
-                  tyFilter === 'unapproved'
-                    ? 'bg-amber-600 text-white border-amber-600'
-                    : 'bg-amber-50 text-amber-800 border-amber-200'
-                }`}
-              >
-                Onay Bekleyenler ({tyStats.unapprovedTotal.toLocaleString('tr-TR')})
-              </button>
-              <button
-                onClick={() => loadLiveTrendyolProducts(tyPage, tyFilter)}
-                disabled={tyLoading}
-                className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5"
-              >
-                <CloudDownload className={`w-4 h-4 ${tyLoading ? 'animate-bounce' : ''}`} />
-                Yenile
-              </button>
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setTyFilter('all')}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
+                    tyFilter === 'all'
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-700 border-slate-300'
+                  }`}
+                >
+                  Tümü ({tyStats.totalElements.toLocaleString('tr-TR')})
+                </button>
+                <button
+                  onClick={() => setTyFilter('on_sale')}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
+                    tyFilter === 'on_sale'
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  }`}
+                >
+                  Satıştaki Aktif Ürünler ({tyStats.onSaleTotal.toLocaleString('tr-TR')})
+                </button>
+                <button
+                  onClick={() => setTyFilter('passive')}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
+                    tyFilter === 'passive'
+                      ? 'bg-rose-600 text-white border-rose-600'
+                      : 'bg-rose-50 text-rose-800 border-rose-200'
+                  }`}
+                >
+                  Pasif / Satış Dışı Ürünler ({tyStats.passiveTotal.toLocaleString('tr-TR')})
+                </button>
+                <button
+                  onClick={() => setTyFilter('blacklisted')}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
+                    tyFilter === 'blacklisted'
+                      ? 'bg-purple-600 text-white border-purple-600'
+                      : 'bg-purple-50 text-purple-800 border-purple-200'
+                  }`}
+                >
+                  Kara Liste ({tyStats.blacklistedTotal.toLocaleString('tr-TR')})
+                </button>
+                <button
+                  onClick={() => setTyFilter('unapproved')}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
+                    tyFilter === 'unapproved'
+                      ? 'bg-amber-600 text-white border-amber-600'
+                      : 'bg-amber-50 text-amber-800 border-amber-200'
+                  }`}
+                >
+                  Onay Bekleyenler ({tyStats.unapprovedTotal.toLocaleString('tr-TR')})
+                </button>
+                <button
+                  onClick={() => loadLiveTrendyolProducts(tyPage, tyFilter)}
+                  disabled={tyLoading}
+                  className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5"
+                >
+                  <CloudDownload className={`w-4 h-4 ${tyLoading ? 'animate-bounce' : ''}`} />
+                  Yenile
+                </button>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {selectedBarcodes.length > 0 && (
+            {/* Toplu veya Seçili Silme Aksiyon Barı */}
+            <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-slate-600">
+                Tablodan tek tek ürün seçip silebilir veya sağdaki butonlarla grup bazlı toplu silebilirsiniz:
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedBarcodes.length > 0 && (
+                  <button
+                    onClick={() => handleDeleteTrendyolProducts('selected')}
+                    disabled={tyLoading}
+                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Seçili ({selectedBarcodes.length}) Ürünü Sil
+                  </button>
+                )}
                 <button
-                  onClick={() => handleDeleteTrendyolProducts('selected')}
-                  disabled={tyLoading}
-                  className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                  onClick={() => handleDeleteTrendyolProducts('passive')}
+                  disabled={tyLoading || tyStats.passiveTotal === 0}
+                  className="px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
                 >
                   <Trash2 className="w-4 h-4" />
-                  Seçili ({selectedBarcodes.length}) Ürünü Sil
+                  Sadece Pasif Ürünleri Sil ({tyStats.passiveTotal.toLocaleString('tr-TR')})
                 </button>
-              )}
-              <button
-                onClick={() => handleDeleteTrendyolProducts('unapproved')}
-                disabled={tyLoading || tyStats.unapprovedTotal === 0}
-                className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
-              >
-                <Trash2 className="w-4 h-4" />
-                Onay Bekleyenleri Sil ({tyStats.unapprovedTotal})
-              </button>
-              <button
-                onClick={() => handleDeleteTrendyolProducts('all')}
-                disabled={tyLoading || tyStats.totalElements === 0}
-                className="px-4 py-2 rounded-lg bg-rose-800 hover:bg-rose-900 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
-              >
-                <Trash2 className="w-4 h-4" />
-                Trendyol&apos;daki Tüm Ürünleri Sil ({tyStats.totalElements})
-              </button>
+                <button
+                  onClick={() => handleDeleteTrendyolProducts('on_sale')}
+                  disabled={tyLoading || tyStats.onSaleTotal === 0}
+                  className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Sadece Satıştaki Ürünleri Sil ({tyStats.onSaleTotal.toLocaleString('tr-TR')})
+                </button>
+                <button
+                  onClick={() => handleDeleteTrendyolProducts('blacklisted')}
+                  disabled={tyLoading || tyStats.blacklistedTotal === 0}
+                  className="px-3.5 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Kara Listedekileri Sil ({tyStats.blacklistedTotal.toLocaleString('tr-TR')})
+                </button>
+                <button
+                  onClick={() => handleDeleteTrendyolProducts('all')}
+                  disabled={tyLoading || tyStats.totalElements === 0}
+                  className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Tümünü Sil ({tyStats.totalElements.toLocaleString('tr-TR')})
+                </button>
+              </div>
             </div>
           </div>
 
@@ -521,15 +603,27 @@ export default function BulkAndRobotView({
                         <div className="text-slate-600">Stok: {it.quantity}</div>
                       </td>
                       <td className="py-3 px-4">
-                        {it.approved ? (
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
-                            Onaylı {it.onSale ? '(Satışta)' : ''}
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
-                            Onay Bekliyor
-                          </span>
-                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {it.onSale ? (
+                            <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                              Satışta (Aktif)
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold">
+                              Pasif (Satış Dışı)
+                            </span>
+                          )}
+                          {it.blacklisted && (
+                            <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-[11px] font-bold">
+                              Kara Liste
+                            </span>
+                          )}
+                          {!it.approved && (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-bold">
+                              Onay Bekliyor
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

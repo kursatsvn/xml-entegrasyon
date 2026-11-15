@@ -360,16 +360,26 @@ export interface LiveTrendyolProductItem {
   lastUpdateDate?: number;
 }
 
+export type TrendyolLiveFilter =
+  | 'all'
+  | 'on_sale'
+  | 'passive'
+  | 'unapproved'
+  | 'blacklisted';
+
 export async function fetchLiveTrendyolProducts(params: {
   account: MarketplaceAccount;
   page?: number;
   size?: number;
-  filter?: 'all' | 'approved' | 'unapproved';
+  filter?: TrendyolLiveFilter;
 }): Promise<{
   ok: boolean;
   totalElements: number;
   approvedTotal: number;
+  onSaleTotal: number;
+  passiveTotal: number;
   unapprovedTotal: number;
+  blacklistedTotal: number;
   totalPages: number;
   page: number;
   items: LiveTrendyolProductItem[];
@@ -379,27 +389,64 @@ export async function fetchLiveTrendyolProducts(params: {
   const headers = getTrendyolAuthHeaders(account);
   const baseUrl = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products`;
 
-  const filterParam =
-    filter === 'approved' ? '&approved=true' : filter === 'unapproved' ? '&approved=false' : '';
-
-  const [mainRes, appRes, unappRes] = await Promise.all([
-    fetch(`${baseUrl}?page=${page}&size=${size}${filterParam}`, {
-      headers,
-      cache: 'no-store'
-    }),
+  const [appRes, onSaleRes, unappRes, blackRes] = await Promise.all([
     fetch(`${baseUrl}?page=0&size=1&approved=true`, { headers, cache: 'no-store' }),
-    fetch(`${baseUrl}?page=0&size=1&approved=false`, { headers, cache: 'no-store' })
+    fetch(`${baseUrl}?page=0&size=1&approved=true&onSale=true`, { headers, cache: 'no-store' }),
+    fetch(`${baseUrl}?page=0&size=1&approved=false`, { headers, cache: 'no-store' }),
+    fetch(`${baseUrl}?page=0&size=1&blacklisted=true`, { headers, cache: 'no-store' })
   ]);
 
-  if (!mainRes.ok) {
-    throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
+  const appJson = appRes.ok ? await appRes.json() : { totalElements: 0 };
+  const onSaleJson = onSaleRes.ok ? await onSaleRes.json() : { totalElements: 0 };
+  const unappJson = unappRes.ok ? await unappRes.json() : { totalElements: 0 };
+  const blackJson = blackRes.ok ? await blackRes.json() : { totalElements: 0 };
+
+  const approvedTotal = Number(appJson.totalElements || 0);
+  const onSaleTotal = Number(onSaleJson.totalElements || 0);
+  const passiveTotal = Math.max(0, approvedTotal - onSaleTotal);
+  const unapprovedTotal = Number(unappJson.totalElements || 0);
+  const blacklistedTotal = Number(blackJson.totalElements || 0);
+
+  let rawContent: any[] = [];
+  let totalPages = 1;
+
+  if (filter === 'passive') {
+    // Trendyol API onSale=false parametresini tek başına filtrelemediği için
+    // sayfayı geniş çekip sadece onSale === false olan pasif ürünleri süzüyoruz
+    const fetchSize = 200;
+    const res = await fetch(`${baseUrl}?page=${page}&size=${fetchSize}&approved=true`, {
+      headers,
+      cache: 'no-store'
+    });
+    if (!res.ok) {
+      throw new Error(`Trendyol API yanıt vermedi: HTTP ${res.status}`);
+    }
+    const json = await res.json();
+    rawContent = (json.content || []).filter((item: any) => !item.onSale);
+    totalPages = Number(json.totalPages || 1);
+  } else {
+    const filterParam =
+      filter === 'on_sale'
+        ? '&approved=true&onSale=true'
+        : filter === 'unapproved'
+        ? '&approved=false'
+        : filter === 'blacklisted'
+        ? '&blacklisted=true'
+        : '';
+
+    const mainRes = await fetch(`${baseUrl}?page=${page}&size=${size}${filterParam}`, {
+      headers,
+      cache: 'no-store'
+    });
+    if (!mainRes.ok) {
+      throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
+    }
+    const mainJson = await mainRes.json();
+    rawContent = mainJson.content || [];
+    totalPages = Number(mainJson.totalPages || 1);
   }
 
-  const mainJson = await mainRes.json();
-  const appJson = appRes.ok ? await appRes.json() : { totalElements: 0 };
-  const unappJson = unappRes.ok ? await unappRes.json() : { totalElements: 0 };
-
-  const items: LiveTrendyolProductItem[] = (mainJson.content || []).map((item: any) => ({
+  const items: LiveTrendyolProductItem[] = rawContent.map((item: any) => ({
     barcode: String(item.barcode || ''),
     productMainId: String(item.productMainId || ''),
     stockCode: String(item.stockCode || ''),
@@ -420,10 +467,13 @@ export async function fetchLiveTrendyolProducts(params: {
 
   return {
     ok: true,
-    totalElements: Number(appJson.totalElements || 0) + Number(unappJson.totalElements || 0),
-    approvedTotal: Number(appJson.totalElements || 0),
-    unapprovedTotal: Number(unappJson.totalElements || 0),
-    totalPages: Number(mainJson.totalPages || 1),
+    totalElements: approvedTotal + unapprovedTotal,
+    approvedTotal,
+    onSaleTotal,
+    passiveTotal,
+    unapprovedTotal,
+    blacklistedTotal,
+    totalPages,
     page,
     items
   };
@@ -432,7 +482,14 @@ export async function fetchLiveTrendyolProducts(params: {
 export async function deleteLiveTrendyolProducts(params: {
   account: MarketplaceAccount;
   barcodes?: string[];
-  deleteAllMode?: 'selected' | 'unapproved' | 'approved' | 'all';
+  deleteAllMode?:
+    | 'selected'
+    | 'on_sale'
+    | 'passive'
+    | 'unapproved'
+    | 'blacklisted'
+    | 'approved'
+    | 'all';
   maxPagesToDelete?: number;
 }): Promise<{
   ok: boolean;
@@ -440,7 +497,7 @@ export async function deleteLiveTrendyolProducts(params: {
   batchIds: string[];
   message: string;
 }> {
-  const { account, barcodes = [], deleteAllMode = 'selected', maxPagesToDelete = 30 } = params;
+  const { account, barcodes = [], deleteAllMode = 'selected', maxPagesToDelete = 80 } = params;
   const headers = getTrendyolAuthHeaders(account);
   const baseUrl = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products`;
 
@@ -448,10 +505,14 @@ export async function deleteLiveTrendyolProducts(params: {
 
   if (deleteAllMode !== 'selected') {
     const querySuffix =
-      deleteAllMode === 'approved'
+      deleteAllMode === 'on_sale'
+        ? '&approved=true&onSale=true'
+        : deleteAllMode === 'passive' || deleteAllMode === 'approved'
         ? '&approved=true'
         : deleteAllMode === 'unapproved'
         ? '&approved=false'
+        : deleteAllMode === 'blacklisted'
+        ? '&blacklisted=true'
         : '';
 
     const collected = new Set<string>();
@@ -465,7 +526,10 @@ export async function deleteLiveTrendyolProducts(params: {
       const content = j.content || [];
       if (content.length === 0) break;
       for (const it of content) {
-        if (it.barcode) collected.add(String(it.barcode));
+        if (!it.barcode) continue;
+        if (deleteAllMode === 'passive' && it.onSale) continue; // Sadece pasifleri (onSale === false) al
+        if (deleteAllMode === 'on_sale' && !it.onSale) continue; // Sadece satıştakileri (onSale === true) al
+        collected.add(String(it.barcode));
       }
       if (p + 1 >= (j.totalPages || 1)) break;
     }
