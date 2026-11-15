@@ -193,6 +193,10 @@ export async function syncXmlFeedProducts(params: {
       const netStock = Math.max(0, effectiveXmlStock - reservedStock);
 
       const salePriceTagVal = parseNumber(rv[xmlSource.salePriceTag || 'SatisFiyati'] ?? rv.SatisFiyati);
+      // XML'de fiyatı 0 veya negatif olan varyantları kesinlikle içeri alma
+      if (!salePriceTagVal || salePriceTagVal <= 0) {
+        continue;
+      }
       const buyingPriceVal = parseNumber(rv[xmlSource.buyingPriceTag || 'SatisFiyati'] ?? rv.AlisFiyati ?? salePriceTagVal);
       const marketPriceVal = parseNumber(rv[xmlSource.marketPriceTag || 'IndirimliFiyat'] ?? rv.IndirimliFiyat ?? salePriceTagVal);
 
@@ -241,6 +245,11 @@ export async function syncXmlFeedProducts(params: {
         size,
         attributes
       });
+    }
+
+    // Tüm varyantları 0 TL olan ürünleri tamamen atla
+    if (variants.length === 0) {
+      continue;
     }
 
     const primaryVar = variants[0];

@@ -240,6 +240,8 @@ export async function publishProductsToMarketplace(params: {
     for (let vIdx = 0; vIdx < prod.variants.length; vIdx++) {
       const v = prod.variants[vIdx];
       if (!v.barcode) continue;
+      // XML satış fiyatı 0 olan varyantları pazaryerine kesinlikle gönderme
+      if (!v.salePrice || v.salePrice <= 0) continue;
 
       const resolvedColor = normalizeColorValue(v.color, prod.title).slice(0, 30);
       const bedenValueId = resolveTrendyolBedenValueId(v.size);
