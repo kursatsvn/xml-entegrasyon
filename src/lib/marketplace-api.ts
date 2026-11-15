@@ -539,11 +539,11 @@ export async function fetchLiveTrendyolProducts(params: {
   const baseUrl = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products`;
 
   const [unarchAppRes, onSaleRes, archRes, unappRes, blackRes] = await Promise.all([
-    fetch(`${baseUrl}?page=0&size=200&approved=true&archived=false`, {
+    fetch(`${baseUrl}?page=0&size=1&approved=true&archived=false`, {
       headers,
       cache: 'no-store'
     }),
-    fetch(`${baseUrl}?page=0&size=200&approved=true&onSale=true&archived=false`, {
+    fetch(`${baseUrl}?page=0&size=1&approved=true&onSale=true&archived=false`, {
       headers,
       cache: 'no-store'
     }),
@@ -555,30 +555,15 @@ export async function fetchLiveTrendyolProducts(params: {
     fetch(`${baseUrl}?page=0&size=1&blacklisted=true`, { headers, cache: 'no-store' })
   ]);
 
-  const unarchAppJson = unarchAppRes.ok
-    ? await unarchAppRes.json()
-    : { totalElements: 0, content: [] };
-  const onSaleJson = onSaleRes.ok ? await onSaleRes.json() : { totalElements: 0, content: [] };
+  const unarchAppJson = unarchAppRes.ok ? await unarchAppRes.json() : { totalElements: 0 };
+  const onSaleJson = onSaleRes.ok ? await onSaleRes.json() : { totalElements: 0 };
   const archJson = archRes.ok ? await archRes.json() : { totalElements: 0 };
   const unappJson = unappRes.ok ? await unappRes.json() : { totalElements: 0 };
   const blackJson = blackRes.ok ? await blackRes.json() : { totalElements: 0 };
 
-  const unarchContent: any[] = Array.isArray(unarchAppJson.content) ? unarchAppJson.content : [];
-  const trulyUnarchived = unarchContent.filter(
-    (it: any) => !it.archived && !sessionArchivedBarcodes.has(String(it.barcode))
-  );
-
-  const onSaleContent: any[] = Array.isArray(onSaleJson.content) ? onSaleJson.content : [];
-  const trulyOnSale = onSaleContent.filter(
-    (it: any) =>
-      Boolean(it.onSale) &&
-      Number(it.quantity ?? 0) > 0 &&
-      !it.archived &&
-      !sessionArchivedBarcodes.has(String(it.barcode))
-  );
-
-  const onSaleTotal = trulyOnSale.length;
-  const passiveTotal = Math.max(0, trulyUnarchived.length - onSaleTotal);
+  const unarchivedApprovedTotal = Number(unarchAppJson.totalElements || 0);
+  const onSaleTotal = Number(onSaleJson.totalElements || 0);
+  const passiveTotal = Math.max(0, unarchivedApprovedTotal - onSaleTotal);
   const archivedTotal = Number(archJson.totalElements || 0);
   const unapprovedTotal = Number(unappJson.totalElements || 0);
   const blacklistedTotal = Number(blackJson.totalElements || 0);
@@ -587,15 +572,29 @@ export async function fetchLiveTrendyolProducts(params: {
   let rawContent: any[] = [];
   let totalPages = 1;
 
-  if (filter === 'passive') {
-    // Sadece ARŞİVLENMEMİŞ (archived=false) ve satışta olmayan (onSale=false veya quantity=0) pasif ürünler:
-    rawContent = trulyUnarchived.filter(
-      (item: any) => !item.onSale || Number(item.quantity ?? 0) <= 0
+  if (filter === 'on_sale') {
+    const mainRes = await fetch(
+      `${baseUrl}?page=${page}&size=${size}&approved=true&onSale=true&archived=false`,
+      { headers, cache: 'no-store' }
     );
-    totalPages = 1;
-  } else if (filter === 'on_sale') {
-    rawContent = trulyOnSale;
-    totalPages = 1;
+    if (!mainRes.ok) {
+      throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
+    }
+    const mainJson = await mainRes.json();
+    rawContent = mainJson.content || [];
+    totalPages = Math.max(1, Math.ceil(onSaleTotal / size));
+  } else if (filter === 'passive') {
+    const mainRes = await fetch(
+      `${baseUrl}?page=${page}&size=${Math.max(size, 200)}&approved=true&archived=false`,
+      { headers, cache: 'no-store' }
+    );
+    if (mainRes.ok) {
+      const mainJson = await mainRes.json();
+      rawContent = (mainJson.content || [])
+        .filter((item: any) => !item.onSale || Number(item.quantity ?? 0) <= 0)
+        .slice(0, size);
+      totalPages = Math.max(1, Math.ceil(passiveTotal / size));
+    }
   } else if (filter === 'archived') {
     const mainRes = await fetch(
       `${baseUrl}?page=${page}&size=${size}&archived=true&blacklisted=false`,
@@ -611,22 +610,17 @@ export async function fetchLiveTrendyolProducts(params: {
     rawContent = mainJson.content || [];
     totalPages = Math.max(1, Math.ceil(archivedTotal / size));
   } else if (filter === 'all') {
-    if (trulyUnarchived.length > 0 && page === 0) {
-      rawContent = trulyUnarchived;
-      totalPages = 1;
-    } else {
-      const mainRes = await fetch(
-        `${baseUrl}?page=${page}&size=${size}&archived=true&blacklisted=false`,
-        {
-          headers,
-          cache: 'no-store'
-        }
-      );
-      if (mainRes.ok) {
-        const mainJson = await mainRes.json();
-        rawContent = mainJson.content || [];
-        totalPages = Math.max(1, Math.ceil(archivedTotal / size));
+    const mainRes = await fetch(
+      `${baseUrl}?page=${page}&size=${size}&approved=true&archived=false`,
+      {
+        headers,
+        cache: 'no-store'
       }
+    );
+    if (mainRes.ok) {
+      const mainJson = await mainRes.json();
+      rawContent = mainJson.content || [];
+      totalPages = Math.max(1, Math.ceil((unarchivedApprovedTotal + unapprovedTotal) / size));
     }
   } else {
     const filterParam =
