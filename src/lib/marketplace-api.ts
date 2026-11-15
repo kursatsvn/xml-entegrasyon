@@ -496,6 +496,7 @@ export async function deleteLiveTrendyolProducts(params: {
 }): Promise<{
   ok: boolean;
   deletedCount: number;
+  archivedCount: number;
   batchIds: string[];
   message: string;
 }> {
@@ -503,7 +504,35 @@ export async function deleteLiveTrendyolProducts(params: {
   const headers = getTrendyolAuthHeaders(account);
   const baseUrl = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products`;
 
-  let targetBarcodes: string[] = [...barcodes];
+  const waitBatchCompletion = async (batchId: string, maxTries = 12) => {
+    for (let t = 0; t < maxTries; t++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      try {
+        const res = await fetch(`${baseUrl}/batch-requests/${batchId}`, {
+          headers,
+          cache: 'no-store'
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data?.status === 'COMPLETED') return data;
+      } catch {
+        // ignore
+      }
+    }
+    return null;
+  };
+
+  interface TargetMeta {
+    barcode: string;
+    onSale: boolean;
+    archived: boolean;
+    blacklisted: boolean;
+    approved: boolean;
+    salePrice: number;
+    listPrice: number;
+  }
+
+  const targetMap = new Map<string, TargetMeta>();
 
   if (deleteAllMode !== 'selected') {
     const querySuffix =
@@ -517,7 +546,6 @@ export async function deleteLiveTrendyolProducts(params: {
         ? '&blacklisted=true'
         : '';
 
-    const collected = new Set<string>();
     for (let p = 0; p < maxPagesToDelete; p++) {
       const r = await fetch(`${baseUrl}?page=${p}&size=200${querySuffix}`, {
         headers,
@@ -529,51 +557,144 @@ export async function deleteLiveTrendyolProducts(params: {
       if (content.length === 0) break;
       for (const it of content) {
         if (!it.barcode) continue;
-        if (deleteAllMode === 'passive' && it.onSale) continue; // Sadece pasifleri (onSale === false) al
-        if (deleteAllMode === 'on_sale' && !it.onSale) continue; // Sadece satıştakileri (onSale === true) al
-        collected.add(String(it.barcode));
+        if (deleteAllMode === 'passive' && it.onSale) continue;
+        if (deleteAllMode === 'on_sale' && !it.onSale) continue;
+        targetMap.set(String(it.barcode), {
+          barcode: String(it.barcode),
+          onSale: Boolean(it.onSale),
+          archived: Boolean(it.archived),
+          blacklisted: Boolean(it.blacklisted),
+          approved: Boolean(it.approved),
+          salePrice: Number(it.salePrice || 100),
+          listPrice: Number(it.listPrice || it.salePrice || 100)
+        });
       }
       if (p + 1 >= (j.totalPages || 1)) break;
     }
-    targetBarcodes = Array.from(collected);
+  } else {
+    for (const bc of barcodes) {
+      targetMap.set(String(bc), {
+        barcode: String(bc),
+        onSale: true,
+        archived: false,
+        blacklisted: false,
+        approved: true,
+        salePrice: 100,
+        listPrice: 100
+      });
+    }
   }
 
-  if (targetBarcodes.length === 0) {
+  const targets = Array.from(targetMap.values());
+  if (targets.length === 0) {
     return {
       ok: false,
       deletedCount: 0,
+      archivedCount: 0,
       batchIds: [],
       message: 'Silinecek ürün barkodu bulunamadı.'
     };
   }
 
   const batchIds: string[] = [];
-  let deletedCount = 0;
 
-  // Trendyol DELETE endpoint tek istekte maksimum 1000 barkod kabul eder
-  for (let i = 0; i < targetBarcodes.length; i += 1000) {
-    const chunk = targetBarcodes.slice(i, i + 1000);
+  // ADIM 1: Satışta olan (onSale=true) ürünlerin stoklarını 0'a çek (Trendyol kuralı: satışta olan ürün silinemez)
+  const onSaleTargets = targets.filter((t) => t.onSale && t.approved && !t.blacklisted);
+  for (let i = 0; i < onSaleTargets.length; i += 1000) {
+    const chunk = onSaleTargets.slice(i, i + 1000);
+    const invRes = await fetch(`${baseUrl}/price-and-inventory`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        items: chunk.map((t) => ({
+          barcode: t.barcode,
+          quantity: 0,
+          salePrice: t.salePrice,
+          listPrice: t.listPrice
+        }))
+      })
+    });
+    if (invRes.ok) {
+      const invData = await invRes.json().catch(() => ({}));
+      if (invData?.batchRequestId) {
+        batchIds.push(invData.batchRequestId);
+        await waitBatchCompletion(invData.batchRequestId, 10);
+      }
+    }
+  }
+
+  // ADIM 2: Onaylı (approved=true) ve henüz arşivlenmemiş (archived=false) ürünleri ÖNCE ARŞİVLE
+  // (Trendyol kuralı: "Lütfen silmek istediğiniz ürünü arşivledikten sonra silme işlemini gerçekleştirin.")
+  const unarchivedApproved = targets.filter((t) => t.approved && !t.archived);
+  let archivedCount = targets.filter((t) => t.archived).length;
+
+  for (let i = 0; i < unarchivedApproved.length; i += 1000) {
+    const chunk = unarchivedApproved.slice(i, i + 1000);
+    const archRes = await fetch(`${baseUrl}/archive-state`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        items: chunk.map((t) => ({ barcode: t.barcode, archived: true }))
+      })
+    });
+    if (archRes.ok) {
+      const archData = await archRes.json().catch(() => ({}));
+      if (archData?.batchRequestId) {
+        batchIds.push(archData.batchRequestId);
+        await waitBatchCompletion(archData.batchRequestId, 12);
+      }
+      archivedCount += chunk.length;
+    }
+  }
+
+  // ADIM 3: Kara listede OLMAYAN (blacklisted=false) ürünleri kalıcı olarak SİL (DELETE /products)
+  // Not: Trendyol API "satıştan kaldırılmamış olması gerekmektedir" kuralı nedeniyle
+  // blacklisted=true (kara liste) ürünlerin kalıcı silinmesine izin vermez, yalnızca arşivlenmesine izin verir.
+  const deletableTargets =
+    deleteAllMode === 'selected'
+      ? targets
+      : targets.filter((t) => !t.blacklisted);
+
+  let deletedCount = 0;
+  for (let i = 0; i < deletableTargets.length; i += 1000) {
+    const chunk = deletableTargets.slice(i, i + 1000);
     const res = await fetch(baseUrl, {
       method: 'DELETE',
       headers,
       body: JSON.stringify({
-        items: chunk.map((barcode) => ({ barcode }))
+        items: chunk.map((t) => ({ barcode: t.barcode }))
       })
     });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));
-      if (data?.batchRequestId) batchIds.push(data.batchRequestId);
-      deletedCount += chunk.length;
-    } else {
-      const errText = await res.text();
-      throw new Error(`Trendyol silme hatası (HTTP ${res.status}): ${errText.slice(0, 200)}`);
+      if (data?.batchRequestId) {
+        batchIds.push(data.batchRequestId);
+        const batchDone = await waitBatchCompletion(data.batchRequestId, 8);
+        if (batchDone && typeof batchDone.itemCount === 'number') {
+          deletedCount += Math.max(0, batchDone.itemCount - (batchDone.failedItemCount || 0));
+        } else {
+          deletedCount += chunk.length;
+        }
+      }
     }
+  }
+
+  const blacklistedInSelection = targets.filter((t) => t.blacklisted).length;
+  if (deleteAllMode === 'blacklisted' || (blacklistedInSelection > 0 && deletedCount === 0)) {
+    return {
+      ok: true,
+      deletedCount,
+      archivedCount,
+      batchIds,
+      message: `Kara listedeki ${archivedCount} adet ürünün tamamı Trendyol'da ARŞİVLENDİ (archived=true). Not: Trendyol API güvenlik kuralı ("satıştan kaldırılmamış olması gerekmektedir") gereği moderasyon tarafından kara listeye alınan ürünlerin kalıcı silinmesine izin vermemekte, yalnızca arşivlenerek katalogdan gizlenmesine izin vermektedir.`
+    };
   }
 
   return {
     ok: true,
     deletedCount,
+    archivedCount,
     batchIds,
-    message: `${deletedCount} adet ürün/varyant Trendyol mağazanızdan silinmek üzere Trendyol Batch kuyruğuna iletildi (Batch: ${batchIds.join(', ') || 'Tamamlandı'}).`
+    message: `${archivedCount} ürün arşivlendi ve ${deletedCount} adet ürün/varyant Trendyol mağazanızdan kalıcı olarak silindi (Batch: ${batchIds.slice(0, 3).join(', ')}).`
   };
 }

@@ -614,6 +614,11 @@ export default function BulkAndRobotView({
                               Pasif (Satış Dışı)
                             </span>
                           )}
+                          {it.archived && (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 border border-slate-300 text-[11px] font-bold">
+                              Arşivde (Gizli)
+                            </span>
+                          )}
                           {it.blacklisted && (
                             <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-[11px] font-bold">
                               Kara Liste{it.blacklistReason ? `: ${it.blacklistReason}` : ''}
