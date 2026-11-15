@@ -73,8 +73,8 @@ export default function BulkAndRobotView({
   // Canlı Trendyol Ürün Listeleme & Silme state'leri
   const [tyItems, setTyItems] = useState<LiveTrendyolItem[]>([]);
   const [tyFilter, setTyFilter] = useState<
-    'all' | 'on_sale' | 'passive' | 'unapproved' | 'blacklisted'
-  >('all');
+    'all' | 'on_sale' | 'passive' | 'archived' | 'unapproved' | 'blacklisted'
+  >('archived');
   const [tyPage, setTyPage] = useState<number>(0);
   const [tyTotalPages, setTyTotalPages] = useState<number>(1);
   const [tyStats, setTyStats] = useState({
@@ -82,6 +82,7 @@ export default function BulkAndRobotView({
     approvedTotal: 0,
     onSaleTotal: 0,
     passiveTotal: 0,
+    archivedTotal: 0,
     unapprovedTotal: 0,
     blacklistedTotal: 0
   });
@@ -95,7 +96,13 @@ export default function BulkAndRobotView({
   const loadLiveTrendyolProducts = useCallback(
     async (
       page = 0,
-      filter: 'all' | 'on_sale' | 'passive' | 'unapproved' | 'blacklisted' = tyFilter
+      filter:
+        | 'all'
+        | 'on_sale'
+        | 'passive'
+        | 'archived'
+        | 'unapproved'
+        | 'blacklisted' = tyFilter
     ) => {
       setTyLoading(true);
       try {
@@ -119,6 +126,7 @@ export default function BulkAndRobotView({
             approvedTotal: data.approvedTotal || 0,
             onSaleTotal: data.onSaleTotal || 0,
             passiveTotal: data.passiveTotal || 0,
+            archivedTotal: data.archivedTotal || 0,
             unapprovedTotal: data.unapprovedTotal || 0,
             blacklistedTotal: data.blacklistedTotal || 0
           });
@@ -141,33 +149,67 @@ export default function BulkAndRobotView({
     }
   }, [tab, tyFilter, loadLiveTrendyolProducts]);
 
+  // 1. ADIM: ÖNCE ARŞİVLE (Arşivlenen ürünler Pasif listesinden çıkar ve Arşiv sekmesine taşınır)
+  const handleArchiveTrendyolProducts = async (
+    archiveMode: 'selected' | 'on_sale' | 'passive' | 'all_unarchived'
+  ) => {
+    if (archiveMode === 'selected' && selectedBarcodes.length === 0) {
+      notify('Lütfen önce arşivlemek istediğiniz ürünleri tablodan seçin.', 'error');
+      return;
+    }
+
+    setTyLoading(true);
+    try {
+      const res = await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'archive_live_trendyol_products',
+          barcodes: selectedBarcodes,
+          archiveMode
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        notify(data.message, 'success');
+        setTyFilter('archived');
+        await loadLiveTrendyolProducts(0, 'archived');
+        await onRefresh();
+      } else {
+        notify(data.message || 'Arşivleme işlemi başarısız oldu', 'error');
+      }
+    } catch (e: any) {
+      notify(e?.message || 'Arşivleme hatası', 'error');
+    } finally {
+      setTyLoading(false);
+    }
+  };
+
+  // 2. ADIM: ARŞİVLENDİKTEN SONRA KALICI OLARAK SİL
   const handleDeleteTrendyolProducts = async (
     deleteAllMode:
       | 'selected'
       | 'on_sale'
       | 'passive'
+      | 'archived'
       | 'unapproved'
       | 'blacklisted'
       | 'approved'
       | 'all'
   ) => {
     if (deleteAllMode === 'selected' && selectedBarcodes.length === 0) {
-      notify('Lütfen silmek istediğiniz ürünleri tablodan seçin.', 'error');
+      notify('Lütfen silmek istediğiniz arşivlenmiş ürünleri tablodan seçin.', 'error');
       return;
     }
 
     const confirmText =
       deleteAllMode === 'selected'
-        ? `Seçili ${selectedBarcodes.length} ürünü Trendyol'dan kalıcı olarak silmek istediğinize emin misiniz?`
-        : deleteAllMode === 'on_sale'
-        ? `Trendyol'da SATIŞTA OLAN (${tyStats.onSaleTotal} adet) aktif ürünleri silmek istediğinize emin misiniz?`
-        : deleteAllMode === 'passive'
-        ? `Trendyol'da PASİF / SATIŞ DIŞI (${tyStats.passiveTotal} adet) ürünleri silmek istediğinize emin misiniz?`
+        ? `Seçili ${selectedBarcodes.length} arşivlenmiş ürünü Trendyol'dan kalıcı olarak silmek istediğinize emin misiniz?`
+        : deleteAllMode === 'archived'
+        ? `Arşivdeki (${tyStats.archivedTotal.toLocaleString('tr-TR')} adet) ürünleri Trendyol'dan KALICI OLARAK SİLMEK istediğinize emin misiniz?`
         : deleteAllMode === 'blacklisted'
-        ? `Trendyol'da KARA LİSTEDEKİ (${tyStats.blacklistedTotal} adet) ürünleri silmek istediğinize emin misiniz?`
-        : deleteAllMode === 'unapproved'
-        ? `Trendyol'da ONAY BEKLEYEN (${tyStats.unapprovedTotal} adet) ürünleri silmek istediğinize emin misiniz?`
-        : `Trendyol mağazanızdaki TÜM ÜRÜNLERİ (${tyStats.totalElements} adet) silmek istediğinize emin misiniz?`;
+        ? `Kara listedeki (${tyStats.blacklistedTotal.toLocaleString('tr-TR')} adet) ürünleri kalıcı olarak silmek istediğinize emin misiniz?`
+        : `Arşivlenmiş tüm ürünleri kalıcı olarak silmek istediğinize emin misiniz?`;
 
     if (!window.confirm(confirmText)) return;
 
@@ -352,14 +394,14 @@ export default function BulkAndRobotView({
         </div>
       </div>
 
-      {/* 5. TRENDYOL CANLI ÜRÜNLERİ GÖRÜNTÜLE & SİL (SATIŞTA, PASİF, KARA LİSTE, ONAY BEKLEYEN) */}
+      {/* 5. TRENDYOL CANLI ÜRÜNLERİ GÖRÜNTÜLE & SİL (1. ADIM ARŞİVLE -> 2. ADIM KALICI SİL) */}
       {tab === 'trendyol_live' && (
         <div className="space-y-6">
           {/* Canlı Sayaçlar */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
               <div className="text-[11px] font-bold text-slate-500 uppercase">
-                TOPLAM ÜRÜN / VARYANT
+                TOPLAM ÜRÜN
               </div>
               <div className="text-2xl font-black text-slate-900 mt-1">
                 {tyStats.totalElements.toLocaleString('tr-TR')}
@@ -369,27 +411,37 @@ export default function BulkAndRobotView({
 
             <div className="bg-white rounded-xl border border-emerald-200 p-4 shadow-sm">
               <div className="text-[11px] font-bold text-emerald-700 uppercase">
-                SATIŞTAKİ AKTİF (onSale=true)
+                SATIŞTAKİ AKTİF
               </div>
               <div className="text-2xl font-black text-emerald-600 mt-1">
                 {tyStats.onSaleTotal.toLocaleString('tr-TR')}
               </div>
-              <div className="text-[11px] text-slate-500 mt-1">Şu an müşteriye açık</div>
+              <div className="text-[11px] text-slate-500 mt-1">Müşteriye açık (Stok &gt; 0)</div>
             </div>
 
             <div className="bg-white rounded-xl border border-rose-200 p-4 shadow-sm">
               <div className="text-[11px] font-bold text-rose-700 uppercase">
-                PASİF / SATIŞ DIŞI (onSale=false)
+                PASİF (ARŞİVLENMEMİŞ)
               </div>
               <div className="text-2xl font-black text-rose-600 mt-1">
                 {tyStats.passiveTotal.toLocaleString('tr-TR')}
               </div>
-              <div className="text-[11px] text-slate-500 mt-1">Stoksuz veya satışa kapalı</div>
+              <div className="text-[11px] text-slate-500 mt-1">1. Adım: Önce arşivlenmeli</div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-indigo-200 p-4 shadow-sm">
+              <div className="text-[11px] font-bold text-indigo-700 uppercase">
+                ARŞİVDEKİ ÜRÜNLER
+              </div>
+              <div className="text-2xl font-black text-indigo-600 mt-1">
+                {tyStats.archivedTotal.toLocaleString('tr-TR')}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">2. Adım: Silmeye hazır</div>
             </div>
 
             <div className="bg-white rounded-xl border border-purple-200 p-4 shadow-sm">
               <div className="text-[11px] font-bold text-purple-700 uppercase">
-                KARA LİSTE / ASKIDA (blacklisted)
+                KARA LİSTE / ASKIDA
               </div>
               <div className="text-2xl font-black text-purple-600 mt-1">
                 {tyStats.blacklistedTotal.toLocaleString('tr-TR')}
@@ -399,7 +451,7 @@ export default function BulkAndRobotView({
 
             <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm">
               <div className="text-[11px] font-bold text-amber-700 uppercase">
-                ONAY BEKLEYEN (approved=false)
+                ONAY BEKLEYEN
               </div>
               <div className="text-2xl font-black text-amber-600 mt-1">
                 {tyStats.unapprovedTotal.toLocaleString('tr-TR')}
@@ -408,7 +460,7 @@ export default function BulkAndRobotView({
             </div>
           </div>
 
-          {/* Filtre & Silme Butonları */}
+          {/* Filtre & 2 Aşamalı (Önce Arşivle -> Sonra Sil) Butonları */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -430,7 +482,7 @@ export default function BulkAndRobotView({
                       : 'bg-emerald-50 text-emerald-800 border-emerald-200'
                   }`}
                 >
-                  Satıştaki Aktif Ürünler ({tyStats.onSaleTotal.toLocaleString('tr-TR')})
+                  Satıştaki Aktif ({tyStats.onSaleTotal.toLocaleString('tr-TR')})
                 </button>
                 <button
                   onClick={() => setTyFilter('passive')}
@@ -440,7 +492,17 @@ export default function BulkAndRobotView({
                       : 'bg-rose-50 text-rose-800 border-rose-200'
                   }`}
                 >
-                  Pasif / Satış Dışı Ürünler ({tyStats.passiveTotal.toLocaleString('tr-TR')})
+                  Pasif Ürünler ({tyStats.passiveTotal.toLocaleString('tr-TR')})
+                </button>
+                <button
+                  onClick={() => setTyFilter('archived')}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
+                    tyFilter === 'archived'
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                  }`}
+                >
+                  Arşivdeki Ürünler ({tyStats.archivedTotal.toLocaleString('tr-TR')})
                 </button>
                 <button
                   onClick={() => setTyFilter('blacklisted')}
@@ -473,56 +535,102 @@ export default function BulkAndRobotView({
               </div>
             </div>
 
-            {/* Toplu veya Seçili Silme Aksiyon Barı */}
-            <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs font-semibold text-slate-600">
-                Tablodan tek tek ürün seçip silebilir veya sağdaki butonlarla grup bazlı toplu silebilirsiniz:
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {selectedBarcodes.length > 0 && (
-                  <button
-                    onClick={() => handleDeleteTrendyolProducts('selected')}
-                    disabled={tyLoading}
-                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Seçili ({selectedBarcodes.length}) Ürünü Sil
-                  </button>
-                )}
-                <button
-                  onClick={() => handleDeleteTrendyolProducts('passive')}
-                  disabled={tyLoading || tyStats.passiveTotal === 0}
-                  className="px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Sadece Pasif Ürünleri Sil ({tyStats.passiveTotal.toLocaleString('tr-TR')})
-                </button>
-                <button
-                  onClick={() => handleDeleteTrendyolProducts('on_sale')}
-                  disabled={tyLoading || tyStats.onSaleTotal === 0}
-                  className="px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Sadece Satıştaki Ürünleri Sil ({tyStats.onSaleTotal.toLocaleString('tr-TR')})
-                </button>
-                <button
-                  onClick={() => handleDeleteTrendyolProducts('blacklisted')}
-                  disabled={tyLoading || tyStats.blacklistedTotal === 0}
-                  className="px-3.5 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Kara Listedekileri Sil ({tyStats.blacklistedTotal.toLocaleString('tr-TR')})
-                </button>
-                <button
-                  onClick={() => handleDeleteTrendyolProducts('all')}
-                  disabled={tyLoading || tyStats.totalElements === 0}
-                  className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Tümünü Sil ({tyStats.totalElements.toLocaleString('tr-TR')})
-                </button>
-              </div>
-            </div>
+            {/* 2 Aşamalı Akış: 1. Adım Önce Arşivle -> 2. Adım Arşivlendikten Sonra Sil */}
+            {(() => {
+              const selectedItems = tyItems.filter((i) => selectedBarcodes.includes(i.barcode));
+              const hasUnarchivedSelection = selectedItems.some((i) => !i.archived);
+              const hasArchivedSelection =
+                selectedItems.length > 0 && selectedItems.every((i) => i.archived);
+              const unarchivedTotalCount = tyStats.onSaleTotal + tyStats.passiveTotal;
+              const canDeleteAllArchived =
+                unarchivedTotalCount === 0 && tyStats.archivedTotal > 0;
+
+              return (
+                <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xs font-semibold text-slate-700">
+                    {unarchivedTotalCount > 0 ? (
+                      <span className="text-amber-700">
+                        ⚠️ Silme işlemi için önce <strong>1. Adım: Önce Arşivle</strong> butonunu
+                        kullanın. Arşivlenen ürünler Pasif listesinden çıkıp Arşiv sekmesine geçer ve{' '}
+                        <strong>2. Adım: Kalıcı Sil</strong> butonu aktif olur.
+                      </span>
+                    ) : (
+                      <span className="text-emerald-700">
+                        ✓ <strong>1. Adım Tamamlandı:</strong> Satıştaki ve Pasif ürünlerin tamamı
+                        arşivlendi (Pasif: 0). Artık <strong>2. Adım: Kalıcı Olarak Sil</strong>{' '}
+                        butonları aktif!
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* SEÇİLİ ÜRÜNLER İÇİN 1. ADIM / 2. ADIM */}
+                    {selectedBarcodes.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => handleArchiveTrendyolProducts('selected')}
+                          disabled={tyLoading || !hasUnarchivedSelection}
+                          className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                        >
+                          1. Adım: Seçili ({selectedBarcodes.length}) Ürünü Önce Arşivle
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTrendyolProducts('selected')}
+                          disabled={tyLoading || !hasArchivedSelection}
+                          title={
+                            !hasArchivedSelection
+                              ? 'Seçili ürünleri silmek için önce arşivlemelisiniz!'
+                              : 'Arşivlenmiş seçili ürünleri kalıcı olarak sil'
+                          }
+                          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          2. Adım: Seçili ({selectedBarcodes.length}) Arşivli Ürünü Sil
+                        </button>
+                      </>
+                    )}
+
+                    {/* TOPLU 1. ADIM: ÖNCE ARŞİVLE BUTONU */}
+                    <button
+                      onClick={() => handleArchiveTrendyolProducts('all_unarchived')}
+                      disabled={tyLoading || unarchivedTotalCount === 0}
+                      className="px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                    >
+                      {unarchivedTotalCount > 0
+                        ? `1. Adım: Aktif/Pasif Ürünleri Önce Arşivle (${unarchivedTotalCount})`
+                        : '1. Adım: Tüm Ürünler Arşivlendi ✓'}
+                    </button>
+
+                    {/* TOPLU 2. ADIM: ARŞİVDEKİLERİ KALICI SİL BUTONU (Sadece Arşivlendikten Sonra Aktif) */}
+                    <button
+                      onClick={() => handleDeleteTrendyolProducts('archived')}
+                      disabled={tyLoading || !canDeleteAllArchived}
+                      title={
+                        !canDeleteAllArchived
+                          ? 'Önce 1. Adım ile tüm ürünleri arşivlemelisiniz'
+                          : 'Arşivlenmiş tüm ürünleri kalıcı olarak sil'
+                      }
+                      className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      {unarchivedTotalCount > 0
+                        ? '2. Adım: Sil (Önce Arşivleyin 🔒)'
+                        : `2. Adım: Arşivdekileri Kalıcı Sil (${tyStats.archivedTotal.toLocaleString('tr-TR')})`}
+                    </button>
+
+                    {/* KARA LİSTEDEKİLERİ SİL BUTONU */}
+                    <button
+                      onClick={() => handleDeleteTrendyolProducts('blacklisted')}
+                      disabled={tyLoading || tyStats.blacklistedTotal === 0}
+                      className="px-3.5 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Kara Listedekileri Sil ({tyStats.blacklistedTotal.toLocaleString('tr-TR')})
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Canlı Ürün Tablosu */}

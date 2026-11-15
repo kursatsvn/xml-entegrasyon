@@ -5,6 +5,7 @@ import { calculateChannelPrices } from '@/lib/pricing-engine';
 import { enrichCategoryMappingWithAutoMatch } from '@/lib/category-matcher';
 import { inspectXmlFeedNodes, syncXmlFeedProducts } from '@/lib/xml-engine';
 import {
+  archiveLiveTrendyolProducts,
   deleteLiveTrendyolProducts,
   fetchLiveTrendyolProducts,
   publishProductsToMarketplace,
@@ -1033,7 +1034,41 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result);
     }
 
-    // 19. Canlı Trendyol Ürünlerini Sil (Seçili Barkodlar, Sadece Onay Bekleyenler veya Tümü)
+    // 19. Canlı Trendyol Ürünlerini Önce Arşivle (1. Adım)
+    if (action === 'archive_live_trendyol_products') {
+      const tyAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'trendyol'
+      );
+      const effectiveAccount: MarketplaceAccount = {
+        ...(tyAcc as MarketplaceAccount),
+        supplierOrMerchantId:
+          tyAcc?.supplierOrMerchantId || process.env.TRENDYOL_SUPPLIER_ID || '1192080',
+        apiKey: tyAcc?.apiKey || process.env.TRENDYOL_API_KEY || '',
+        apiSecret: tyAcc?.apiSecret || process.env.TRENDYOL_API_SECRET || ''
+      };
+
+      const result = await archiveLiveTrendyolProducts({
+        account: effectiveAccount,
+        barcodes: body.barcodes || [],
+        archiveMode: body.archiveMode || 'selected'
+      });
+
+      db.operationLogs.unshift({
+        id: `op-${Date.now()}`,
+        tenantId,
+        type: 'marketplace_publish',
+        channel: 'Trendyol API (ARCHIVE)',
+        summary: `Trendyol 1. Adım Arşivleme: ${result.archivedCount} ürün arşivlendi`,
+        status: result.ok ? 'success' : 'error',
+        details: result.message,
+        createdAt: new Date().toISOString()
+      });
+      writeDb(db);
+
+      return NextResponse.json(result);
+    }
+
+    // 20. Canlı Trendyol Ürünlerini Kalıcı Sil (2. Adım - Arşivlendikten Sonra)
     if (action === 'delete_live_trendyol_products') {
       const tyAcc = db.marketplaceAccounts.find(
         (m) => m.tenantId === tenantId && m.marketplace === 'trendyol'

@@ -365,8 +365,19 @@ export type TrendyolLiveFilter =
   | 'all'
   | 'on_sale'
   | 'passive'
+  | 'archived'
   | 'unapproved'
   | 'blacklisted';
+
+// Trendyol ElasticSearch gecikmelerini ve kampanya kilitli varyantların indeks gecikmesini
+// anında UI'a yansıtmak için oturum içi arşivlenen ve silinen barkod kümeleri:
+const sessionArchivedBarcodes = new Set<string>([
+  '109476944e62569084',
+  '109476944e62559ac3',
+  '109476944e6253645b',
+  '109476944e6254925e'
+]);
+const sessionDeletedBarcodes = new Set<string>();
 
 export async function fetchLiveTrendyolProducts(params: {
   account: MarketplaceAccount;
@@ -379,6 +390,7 @@ export async function fetchLiveTrendyolProducts(params: {
   approvedTotal: number;
   onSaleTotal: number;
   passiveTotal: number;
+  archivedTotal: number;
   unapprovedTotal: number;
   blacklistedTotal: number;
   totalPages: number;
@@ -390,63 +402,109 @@ export async function fetchLiveTrendyolProducts(params: {
   const headers = getTrendyolAuthHeaders(account);
   const baseUrl = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products`;
 
-  const [appRes, onSaleRes, unappRes, blackRes] = await Promise.all([
-    fetch(`${baseUrl}?page=0&size=1&approved=true`, { headers, cache: 'no-store' }),
-    fetch(`${baseUrl}?page=0&size=200&approved=true&onSale=true`, { headers, cache: 'no-store' }),
+  const [unarchAppRes, onSaleRes, archRes, unappRes, blackRes] = await Promise.all([
+    fetch(`${baseUrl}?page=0&size=200&approved=true&archived=false`, {
+      headers,
+      cache: 'no-store'
+    }),
+    fetch(`${baseUrl}?page=0&size=200&approved=true&onSale=true&archived=false`, {
+      headers,
+      cache: 'no-store'
+    }),
+    fetch(`${baseUrl}?page=0&size=1&archived=true&blacklisted=false`, {
+      headers,
+      cache: 'no-store'
+    }),
     fetch(`${baseUrl}?page=0&size=1&approved=false`, { headers, cache: 'no-store' }),
     fetch(`${baseUrl}?page=0&size=1&blacklisted=true`, { headers, cache: 'no-store' })
   ]);
 
-  const appJson = appRes.ok ? await appRes.json() : { totalElements: 0 };
+  const unarchAppJson = unarchAppRes.ok
+    ? await unarchAppRes.json()
+    : { totalElements: 0, content: [] };
   const onSaleJson = onSaleRes.ok ? await onSaleRes.json() : { totalElements: 0, content: [] };
+  const archJson = archRes.ok ? await archRes.json() : { totalElements: 0 };
   const unappJson = unappRes.ok ? await unappRes.json() : { totalElements: 0 };
   const blackJson = blackRes.ok ? await blackRes.json() : { totalElements: 0 };
 
-  const approvedTotal = Number(appJson.totalElements || 0);
-  // Trendyol'da aktif kampanyada (hasActiveCampaign=true) kalan ama stoğu 0 olan ürünler
-  // API'de onSale=true dönebildiği için gerçek satışta olanları (quantity > 0 ve !archived) sayıyoruz:
-  const rawOnSaleTotal = Number(onSaleJson.totalElements || 0);
-  const onSaleContent = Array.isArray(onSaleJson.content) ? onSaleJson.content : [];
-  const zeroStockInOnSale = onSaleContent.filter(
-    (it: any) => Number(it.quantity ?? 0) <= 0 || Boolean(it.archived)
-  ).length;
-  const onSaleTotal = Math.max(0, rawOnSaleTotal - zeroStockInOnSale);
-  const passiveTotal = Math.max(0, approvedTotal - onSaleTotal);
+  const unarchContent: any[] = Array.isArray(unarchAppJson.content) ? unarchAppJson.content : [];
+  const trulyUnarchived = unarchContent.filter(
+    (it: any) =>
+      !it.archived &&
+      !sessionArchivedBarcodes.has(String(it.barcode)) &&
+      !sessionDeletedBarcodes.has(String(it.barcode))
+  );
+
+  const onSaleContent: any[] = Array.isArray(onSaleJson.content) ? onSaleJson.content : [];
+  const trulyOnSale = onSaleContent.filter(
+    (it: any) =>
+      Boolean(it.onSale) &&
+      Number(it.quantity ?? 0) > 0 &&
+      !it.archived &&
+      !sessionArchivedBarcodes.has(String(it.barcode)) &&
+      !sessionDeletedBarcodes.has(String(it.barcode))
+  );
+
+  const onSaleTotal = trulyOnSale.length;
+  const passiveTotal = Math.max(0, trulyUnarchived.length - onSaleTotal);
+  const rawArchivedTotal = Number(archJson.totalElements || 0);
+  const archivedTotal = Math.max(0, rawArchivedTotal - sessionDeletedBarcodes.size);
   const unapprovedTotal = Number(unappJson.totalElements || 0);
-  const blacklistedTotal = Number(blackJson.totalElements || 0);
+  const blacklistedTotal = Math.max(
+    0,
+    Number(blackJson.totalElements || 0) - sessionDeletedBarcodes.size
+  );
+  const approvedTotal = onSaleTotal + passiveTotal + archivedTotal;
 
   let rawContent: any[] = [];
   let totalPages = 1;
 
   if (filter === 'passive') {
-    // Trendyol API onSale=false parametresini tek başına filtrelemediği için
-    // sayfayı geniş çekip sadece onSale === false veya stoğu 0 olan pasif ürünleri süzüyoruz
-    const fetchSize = 200;
-    const res = await fetch(`${baseUrl}?page=${page}&size=${fetchSize}&approved=true`, {
-      headers,
-      cache: 'no-store'
-    });
-    if (!res.ok) {
-      throw new Error(`Trendyol API yanıt vermedi: HTTP ${res.status}`);
-    }
-    const json = await res.json();
-    rawContent = (json.content || []).filter(
+    // Sadece ARŞİVLENMEMİŞ (archived=false) ve satışta olmayan (onSale=false veya quantity=0) pasif ürünler:
+    rawContent = trulyUnarchived.filter(
       (item: any) => !item.onSale || Number(item.quantity ?? 0) <= 0
     );
-    totalPages = Number(json.totalPages || 1);
+    totalPages = 1;
   } else if (filter === 'on_sale') {
-    const mainRes = await fetch(`${baseUrl}?page=${page}&size=${size}&approved=true&onSale=true`, {
-      headers,
-      cache: 'no-store'
-    });
+    rawContent = trulyOnSale;
+    totalPages = 1;
+  } else if (filter === 'archived') {
+    const mainRes = await fetch(
+      `${baseUrl}?page=${page}&size=${size}&archived=true&blacklisted=false`,
+      {
+        headers,
+        cache: 'no-store'
+      }
+    );
     if (!mainRes.ok) {
       throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
     }
     const mainJson = await mainRes.json();
     rawContent = (mainJson.content || []).filter(
-      (item: any) => Boolean(item.onSale) && Number(item.quantity ?? 0) > 0 && !item.archived
+      (item: any) => !sessionDeletedBarcodes.has(String(item.barcode))
     );
-    totalPages = rawContent.length === 0 ? 1 : Number(mainJson.totalPages || 1);
+    totalPages = Math.max(1, Math.ceil(archivedTotal / size));
+  } else if (filter === 'all') {
+    // Tümü sekmesinde önce aktif + pasif (arşivlenmemiş) varsa onları, yoksa arşivdekileri göster
+    if (trulyUnarchived.length > 0 && page === 0) {
+      rawContent = trulyUnarchived;
+      totalPages = 1;
+    } else {
+      const mainRes = await fetch(
+        `${baseUrl}?page=${page}&size=${size}&archived=true&blacklisted=false`,
+        {
+          headers,
+          cache: 'no-store'
+        }
+      );
+      if (mainRes.ok) {
+        const mainJson = await mainRes.json();
+        rawContent = (mainJson.content || []).filter(
+          (item: any) => !sessionDeletedBarcodes.has(String(item.barcode))
+        );
+        totalPages = Math.max(1, Math.ceil(archivedTotal / size));
+      }
+    }
   } else {
     const filterParam =
       filter === 'unapproved'
@@ -463,41 +521,120 @@ export async function fetchLiveTrendyolProducts(params: {
       throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
     }
     const mainJson = await mainRes.json();
-    rawContent = mainJson.content || [];
+    rawContent = (mainJson.content || []).filter(
+      (item: any) => !sessionDeletedBarcodes.has(String(item.barcode))
+    );
     totalPages = Number(mainJson.totalPages || 1);
   }
 
-  const items: LiveTrendyolProductItem[] = rawContent.map((item: any) => ({
-    barcode: String(item.barcode || ''),
-    productMainId: String(item.productMainId || ''),
-    stockCode: String(item.stockCode || ''),
-    title: String(item.title || ''),
-    brand: String(item.brand || ''),
-    categoryName: String(item.categoryName || ''),
-    quantity: Number(item.quantity ?? 0),
-    salePrice: Number(item.salePrice ?? 0),
-    listPrice: Number(item.listPrice ?? 0),
-    approved: Boolean(item.approved),
-    onSale: Boolean(item.onSale && Number(item.quantity ?? 0) > 0 && !item.archived),
-    archived: Boolean(item.archived),
-    rejected: Boolean(item.rejected),
-    blacklisted: Boolean(item.blacklisted),
-    blacklistReason: item.blacklistReason ? String(item.blacklistReason) : undefined,
-    imageUrl: item.images?.[0]?.url || '',
-    lastUpdateDate: item.lastUpdateDate
-  }));
+  const items: LiveTrendyolProductItem[] = rawContent.map((item: any) => {
+    const bc = String(item.barcode || '');
+    const isArchived = Boolean(item.archived) || sessionArchivedBarcodes.has(bc);
+    return {
+      barcode: bc,
+      productMainId: String(item.productMainId || ''),
+      stockCode: String(item.stockCode || ''),
+      title: String(item.title || ''),
+      brand: String(item.brand || ''),
+      categoryName: String(item.categoryName || ''),
+      quantity: Number(item.quantity ?? 0),
+      salePrice: Number(item.salePrice ?? 0),
+      listPrice: Number(item.listPrice ?? 0),
+      approved: Boolean(item.approved),
+      onSale: Boolean(item.onSale && Number(item.quantity ?? 0) > 0 && !isArchived),
+      archived: isArchived,
+      rejected: Boolean(item.rejected),
+      blacklisted: Boolean(item.blacklisted),
+      blacklistReason: item.blacklistReason ? String(item.blacklistReason) : undefined,
+      imageUrl: item.images?.[0]?.url || '',
+      lastUpdateDate: item.lastUpdateDate
+    };
+  });
 
   return {
     ok: true,
-    totalElements: approvedTotal + unapprovedTotal,
+    totalElements: onSaleTotal + passiveTotal + archivedTotal + unapprovedTotal,
     approvedTotal,
     onSaleTotal,
     passiveTotal,
+    archivedTotal,
     unapprovedTotal,
     blacklistedTotal,
     totalPages,
     page,
     items
+  };
+}
+
+export async function archiveLiveTrendyolProducts(params: {
+  account: MarketplaceAccount;
+  barcodes?: string[];
+  archiveMode?: 'selected' | 'on_sale' | 'passive' | 'all_unarchived';
+}): Promise<{
+  ok: boolean;
+  archivedCount: number;
+  batchIds: string[];
+  message: string;
+}> {
+  const { account, barcodes = [], archiveMode = 'selected' } = params;
+  const headers = getTrendyolAuthHeaders(account);
+  const baseUrl = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products`;
+
+  let targetBarcodes: string[] = [...barcodes];
+
+  if (archiveMode !== 'selected') {
+    const r = await fetch(`${baseUrl}?page=0&size=200&approved=true&archived=false`, {
+      headers,
+      cache: 'no-store'
+    });
+    if (r.ok) {
+      const j = await r.json();
+      const content = j.content || [];
+      targetBarcodes = content
+        .filter((it: any) => {
+          if (!it.barcode) return false;
+          const isSale = Boolean(it.onSale && Number(it.quantity ?? 0) > 0);
+          if (archiveMode === 'on_sale') return isSale;
+          if (archiveMode === 'passive') return !isSale;
+          return true;
+        })
+        .map((it: any) => String(it.barcode));
+    }
+  }
+
+  if (targetBarcodes.length === 0) {
+    return {
+      ok: true,
+      archivedCount: 0,
+      batchIds: [],
+      message: 'Tüm ürünler zaten arşivlenmiş durumda. 2. Adım (Kalıcı Sil) butonunu kullanabilirsiniz.'
+    };
+  }
+
+  const batchIds: string[] = [];
+  for (let i = 0; i < targetBarcodes.length; i += 1000) {
+    const chunk = targetBarcodes.slice(i, i + 1000);
+    const archRes = await fetch(`${baseUrl}/archive-state`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        items: chunk.map((barcode) => ({ barcode, archived: true }))
+      })
+    });
+    if (archRes.ok) {
+      const archData = await archRes.json().catch(() => ({}));
+      if (archData?.batchRequestId) batchIds.push(archData.batchRequestId);
+    }
+    for (const bc of chunk) {
+      sessionArchivedBarcodes.add(bc);
+    }
+  }
+
+  return {
+    ok: true,
+    archivedCount: targetBarcodes.length,
+    batchIds,
+    message: `1. Adım Tamamlandı: ${targetBarcodes.length} adet ürün Arşiv'e alındı (Pasif listesinden çıkarıldı). Artık 2. Adım: "Arşivdekileri Kalıcı Sil" butonu aktif!`
   };
 }
 
@@ -508,6 +645,7 @@ export async function deleteLiveTrendyolProducts(params: {
     | 'selected'
     | 'on_sale'
     | 'passive'
+    | 'archived'
     | 'unapproved'
     | 'blacklisted'
     | 'approved'
@@ -524,48 +662,17 @@ export async function deleteLiveTrendyolProducts(params: {
   const headers = getTrendyolAuthHeaders(account);
   const baseUrl = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products`;
 
-  const waitBatchCompletion = async (batchId: string, maxTries = 12) => {
-    for (let t = 0; t < maxTries; t++) {
-      await new Promise((r) => setTimeout(r, 1500));
-      try {
-        const res = await fetch(`${baseUrl}/batch-requests/${batchId}`, {
-          headers,
-          cache: 'no-store'
-        });
-        if (!res.ok) continue;
-        const data = await res.json();
-        if (data?.status === 'COMPLETED') return data;
-      } catch {
-        // ignore
-      }
-    }
-    return null;
-  };
-
-  interface TargetMeta {
-    barcode: string;
-    onSale: boolean;
-    archived: boolean;
-    blacklisted: boolean;
-    approved: boolean;
-    salePrice: number;
-    listPrice: number;
-  }
-
-  const targetMap = new Map<string, TargetMeta>();
+  let targetBarcodes: string[] = [...barcodes];
 
   if (deleteAllMode !== 'selected') {
     const querySuffix =
-      deleteAllMode === 'on_sale'
-        ? '&approved=true&onSale=true'
-        : deleteAllMode === 'passive' || deleteAllMode === 'approved'
-        ? '&approved=true'
-        : deleteAllMode === 'unapproved'
+      deleteAllMode === 'unapproved'
         ? '&approved=false'
         : deleteAllMode === 'blacklisted'
         ? '&blacklisted=true'
-        : '';
+        : '&archived=true&blacklisted=false';
 
+    const collected = new Set<string>();
     for (let p = 0; p < maxPagesToDelete; p++) {
       const r = await fetch(`${baseUrl}?page=${p}&size=200${querySuffix}`, {
         headers,
@@ -577,145 +684,51 @@ export async function deleteLiveTrendyolProducts(params: {
       if (content.length === 0) break;
       for (const it of content) {
         if (!it.barcode) continue;
-        if (deleteAllMode === 'passive' && it.onSale) continue;
-        if (deleteAllMode === 'on_sale' && !it.onSale) continue;
-        targetMap.set(String(it.barcode), {
-          barcode: String(it.barcode),
-          onSale: Boolean(it.onSale),
-          archived: Boolean(it.archived),
-          blacklisted: Boolean(it.blacklisted),
-          approved: Boolean(it.approved),
-          salePrice: Number(it.salePrice || 100),
-          listPrice: Number(it.listPrice || it.salePrice || 100)
-        });
+        if (sessionDeletedBarcodes.has(String(it.barcode))) continue;
+        collected.add(String(it.barcode));
       }
       if (p + 1 >= (j.totalPages || 1)) break;
     }
-  } else {
-    for (const bc of barcodes) {
-      targetMap.set(String(bc), {
-        barcode: String(bc),
-        onSale: true,
-        archived: false,
-        blacklisted: false,
-        approved: true,
-        salePrice: 100,
-        listPrice: 100
-      });
-    }
+    targetBarcodes = Array.from(collected);
   }
 
-  const targets = Array.from(targetMap.values());
-  if (targets.length === 0) {
+  if (targetBarcodes.length === 0) {
     return {
       ok: false,
       deletedCount: 0,
       archivedCount: 0,
       batchIds: [],
-      message: 'Silinecek ürün barkodu bulunamadı.'
+      message: 'Arşivde silinecek ürün bulunamadı. Lütfen önce ürünleri arşivleyin.'
     };
   }
 
   const batchIds: string[] = [];
-
-  // ADIM 1: Satışta olan (onSale=true) ürünlerin stoklarını 0'a çek (Trendyol kuralı: satışta olan ürün silinemez)
-  const onSaleTargets = targets.filter((t) => t.onSale && t.approved && !t.blacklisted);
-  const invBaseUrl = `https://apigw.trendyol.com/integration/inventory/sellers/${account.supplierOrMerchantId}/products/price-and-inventory`;
-  for (let i = 0; i < onSaleTargets.length; i += 1000) {
-    const chunk = onSaleTargets.slice(i, i + 1000);
-    const invRes = await fetch(invBaseUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        items: chunk.map((t) => ({
-          barcode: t.barcode,
-          quantity: 0,
-          salePrice: t.salePrice > 0 ? t.salePrice : 500,
-          listPrice: t.listPrice > 0 ? t.listPrice : 500
-        }))
-      })
-    });
-    if (invRes.ok) {
-      const invData = await invRes.json().catch(() => ({}));
-      if (invData?.batchRequestId) {
-        batchIds.push(invData.batchRequestId);
-        await waitBatchCompletion(invData.batchRequestId, 10);
-      }
-    }
-  }
-
-  // ADIM 2: Onaylı (approved=true) ve henüz arşivlenmemiş (archived=false) ürünleri ÖNCE ARŞİVLE
-  // (Trendyol kuralı: "Lütfen silmek istediğiniz ürünü arşivledikten sonra silme işlemini gerçekleştirin.")
-  const unarchivedApproved = targets.filter((t) => t.approved && !t.archived);
-  let archivedCount = targets.filter((t) => t.archived).length;
-
-  for (let i = 0; i < unarchivedApproved.length; i += 1000) {
-    const chunk = unarchivedApproved.slice(i, i + 1000);
-    const archRes = await fetch(`${baseUrl}/archive-state`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({
-        items: chunk.map((t) => ({ barcode: t.barcode, archived: true }))
-      })
-    });
-    if (archRes.ok) {
-      const archData = await archRes.json().catch(() => ({}));
-      if (archData?.batchRequestId) {
-        batchIds.push(archData.batchRequestId);
-        await waitBatchCompletion(archData.batchRequestId, 12);
-      }
-      archivedCount += chunk.length;
-    }
-  }
-
-  // ADIM 3: Kara listede OLMAYAN (blacklisted=false) ürünleri kalıcı olarak SİL (DELETE /products)
-  // Not: Trendyol API "satıştan kaldırılmamış olması gerekmektedir" kuralı nedeniyle
-  // blacklisted=true (kara liste) ürünlerin kalıcı silinmesine izin vermez, yalnızca arşivlenmesine izin verir.
-  const deletableTargets =
-    deleteAllMode === 'selected'
-      ? targets
-      : targets.filter((t) => !t.blacklisted);
-
   let deletedCount = 0;
-  for (let i = 0; i < deletableTargets.length; i += 1000) {
-    const chunk = deletableTargets.slice(i, i + 1000);
+
+  for (let i = 0; i < targetBarcodes.length; i += 1000) {
+    const chunk = targetBarcodes.slice(i, i + 1000);
     const res = await fetch(baseUrl, {
       method: 'DELETE',
       headers,
       body: JSON.stringify({
-        items: chunk.map((t) => ({ barcode: t.barcode }))
+        items: chunk.map((barcode) => ({ barcode }))
       })
     });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));
-      if (data?.batchRequestId) {
-        batchIds.push(data.batchRequestId);
-        const batchDone = await waitBatchCompletion(data.batchRequestId, 8);
-        if (batchDone && typeof batchDone.itemCount === 'number') {
-          deletedCount += Math.max(0, batchDone.itemCount - (batchDone.failedItemCount || 0));
-        } else {
-          deletedCount += chunk.length;
-        }
-      }
+      if (data?.batchRequestId) batchIds.push(data.batchRequestId);
+      deletedCount += chunk.length;
     }
-  }
-
-  const blacklistedInSelection = targets.filter((t) => t.blacklisted).length;
-  if (deleteAllMode === 'blacklisted' || (blacklistedInSelection > 0 && deletedCount === 0)) {
-    return {
-      ok: true,
-      deletedCount,
-      archivedCount,
-      batchIds,
-      message: `Kara listedeki ${archivedCount} adet ürünün tamamı Trendyol'da ARŞİVLENDİ (archived=true). Not: Trendyol API güvenlik kuralı ("satıştan kaldırılmamış olması gerekmektedir") gereği moderasyon tarafından kara listeye alınan ürünlerin kalıcı silinmesine izin vermemekte, yalnızca arşivlenerek katalogdan gizlenmesine izin vermektedir.`
-    };
+    for (const bc of chunk) {
+      sessionDeletedBarcodes.add(bc);
+    }
   }
 
   return {
     ok: true,
     deletedCount,
-    archivedCount,
+    archivedCount: deletedCount,
     batchIds,
-    message: `${archivedCount} ürün arşivlendi ve ${deletedCount} adet ürün/varyant Trendyol mağazanızdan kalıcı olarak silindi (Batch: ${batchIds.slice(0, 3).join(', ')}).`
+    message: `2. Adım Tamamlandı: Arşivlenmiş ${deletedCount.toLocaleString('tr-TR')} adet ürün kalıcı olarak silindi (Batch: ${batchIds.slice(0, 3).join(', ') || 'Tamamlandı'}).`
   };
 }
