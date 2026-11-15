@@ -392,18 +392,25 @@ export async function fetchLiveTrendyolProducts(params: {
 
   const [appRes, onSaleRes, unappRes, blackRes] = await Promise.all([
     fetch(`${baseUrl}?page=0&size=1&approved=true`, { headers, cache: 'no-store' }),
-    fetch(`${baseUrl}?page=0&size=1&approved=true&onSale=true`, { headers, cache: 'no-store' }),
+    fetch(`${baseUrl}?page=0&size=200&approved=true&onSale=true`, { headers, cache: 'no-store' }),
     fetch(`${baseUrl}?page=0&size=1&approved=false`, { headers, cache: 'no-store' }),
     fetch(`${baseUrl}?page=0&size=1&blacklisted=true`, { headers, cache: 'no-store' })
   ]);
 
   const appJson = appRes.ok ? await appRes.json() : { totalElements: 0 };
-  const onSaleJson = onSaleRes.ok ? await onSaleRes.json() : { totalElements: 0 };
+  const onSaleJson = onSaleRes.ok ? await onSaleRes.json() : { totalElements: 0, content: [] };
   const unappJson = unappRes.ok ? await unappRes.json() : { totalElements: 0 };
   const blackJson = blackRes.ok ? await blackRes.json() : { totalElements: 0 };
 
   const approvedTotal = Number(appJson.totalElements || 0);
-  const onSaleTotal = Number(onSaleJson.totalElements || 0);
+  // Trendyol'da aktif kampanyada (hasActiveCampaign=true) kalan ama stoğu 0 olan ürünler
+  // API'de onSale=true dönebildiği için gerçek satışta olanları (quantity > 0 ve !archived) sayıyoruz:
+  const rawOnSaleTotal = Number(onSaleJson.totalElements || 0);
+  const onSaleContent = Array.isArray(onSaleJson.content) ? onSaleJson.content : [];
+  const zeroStockInOnSale = onSaleContent.filter(
+    (it: any) => Number(it.quantity ?? 0) <= 0 || Boolean(it.archived)
+  ).length;
+  const onSaleTotal = Math.max(0, rawOnSaleTotal - zeroStockInOnSale);
   const passiveTotal = Math.max(0, approvedTotal - onSaleTotal);
   const unapprovedTotal = Number(unappJson.totalElements || 0);
   const blacklistedTotal = Number(blackJson.totalElements || 0);
@@ -413,7 +420,7 @@ export async function fetchLiveTrendyolProducts(params: {
 
   if (filter === 'passive') {
     // Trendyol API onSale=false parametresini tek başına filtrelemediği için
-    // sayfayı geniş çekip sadece onSale === false olan pasif ürünleri süzüyoruz
+    // sayfayı geniş çekip sadece onSale === false veya stoğu 0 olan pasif ürünleri süzüyoruz
     const fetchSize = 200;
     const res = await fetch(`${baseUrl}?page=${page}&size=${fetchSize}&approved=true`, {
       headers,
@@ -423,13 +430,26 @@ export async function fetchLiveTrendyolProducts(params: {
       throw new Error(`Trendyol API yanıt vermedi: HTTP ${res.status}`);
     }
     const json = await res.json();
-    rawContent = (json.content || []).filter((item: any) => !item.onSale);
+    rawContent = (json.content || []).filter(
+      (item: any) => !item.onSale || Number(item.quantity ?? 0) <= 0
+    );
     totalPages = Number(json.totalPages || 1);
+  } else if (filter === 'on_sale') {
+    const mainRes = await fetch(`${baseUrl}?page=${page}&size=${size}&approved=true&onSale=true`, {
+      headers,
+      cache: 'no-store'
+    });
+    if (!mainRes.ok) {
+      throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
+    }
+    const mainJson = await mainRes.json();
+    rawContent = (mainJson.content || []).filter(
+      (item: any) => Boolean(item.onSale) && Number(item.quantity ?? 0) > 0 && !item.archived
+    );
+    totalPages = rawContent.length === 0 ? 1 : Number(mainJson.totalPages || 1);
   } else {
     const filterParam =
-      filter === 'on_sale'
-        ? '&approved=true&onSale=true'
-        : filter === 'unapproved'
+      filter === 'unapproved'
         ? '&approved=false'
         : filter === 'blacklisted'
         ? '&blacklisted=true'
@@ -458,7 +478,7 @@ export async function fetchLiveTrendyolProducts(params: {
     salePrice: Number(item.salePrice ?? 0),
     listPrice: Number(item.listPrice ?? 0),
     approved: Boolean(item.approved),
-    onSale: Boolean(item.onSale),
+    onSale: Boolean(item.onSale && Number(item.quantity ?? 0) > 0 && !item.archived),
     archived: Boolean(item.archived),
     rejected: Boolean(item.rejected),
     blacklisted: Boolean(item.blacklisted),
@@ -600,17 +620,18 @@ export async function deleteLiveTrendyolProducts(params: {
 
   // ADIM 1: Satışta olan (onSale=true) ürünlerin stoklarını 0'a çek (Trendyol kuralı: satışta olan ürün silinemez)
   const onSaleTargets = targets.filter((t) => t.onSale && t.approved && !t.blacklisted);
+  const invBaseUrl = `https://apigw.trendyol.com/integration/inventory/sellers/${account.supplierOrMerchantId}/products/price-and-inventory`;
   for (let i = 0; i < onSaleTargets.length; i += 1000) {
     const chunk = onSaleTargets.slice(i, i + 1000);
-    const invRes = await fetch(`${baseUrl}/price-and-inventory`, {
+    const invRes = await fetch(invBaseUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         items: chunk.map((t) => ({
           barcode: t.barcode,
           quantity: 0,
-          salePrice: t.salePrice,
-          listPrice: t.listPrice
+          salePrice: t.salePrice > 0 ? t.salePrice : 500,
+          listPrice: t.listPrice > 0 ? t.listPrice : 500
         }))
       })
     });
