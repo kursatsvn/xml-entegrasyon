@@ -340,3 +340,174 @@ export async function pullOrdersFromMarketplace(account: MarketplaceAccount): Pr
   }
   return [];
 }
+
+export interface LiveTrendyolProductItem {
+  barcode: string;
+  productMainId: string;
+  stockCode: string;
+  title: string;
+  brand: string;
+  categoryName: string;
+  quantity: number;
+  salePrice: number;
+  listPrice: number;
+  approved: boolean;
+  onSale: boolean;
+  archived: boolean;
+  rejected: boolean;
+  blacklisted: boolean;
+  imageUrl: string;
+  lastUpdateDate?: number;
+}
+
+export async function fetchLiveTrendyolProducts(params: {
+  account: MarketplaceAccount;
+  page?: number;
+  size?: number;
+  filter?: 'all' | 'approved' | 'unapproved';
+}): Promise<{
+  ok: boolean;
+  totalElements: number;
+  approvedTotal: number;
+  unapprovedTotal: number;
+  totalPages: number;
+  page: number;
+  items: LiveTrendyolProductItem[];
+  message?: string;
+}> {
+  const { account, page = 0, size = 50, filter = 'all' } = params;
+  const headers = getTrendyolAuthHeaders(account);
+  const baseUrl = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products`;
+
+  const filterParam =
+    filter === 'approved' ? '&approved=true' : filter === 'unapproved' ? '&approved=false' : '';
+
+  const [mainRes, appRes, unappRes] = await Promise.all([
+    fetch(`${baseUrl}?page=${page}&size=${size}${filterParam}`, {
+      headers,
+      cache: 'no-store'
+    }),
+    fetch(`${baseUrl}?page=0&size=1&approved=true`, { headers, cache: 'no-store' }),
+    fetch(`${baseUrl}?page=0&size=1&approved=false`, { headers, cache: 'no-store' })
+  ]);
+
+  if (!mainRes.ok) {
+    throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
+  }
+
+  const mainJson = await mainRes.json();
+  const appJson = appRes.ok ? await appRes.json() : { totalElements: 0 };
+  const unappJson = unappRes.ok ? await unappRes.json() : { totalElements: 0 };
+
+  const items: LiveTrendyolProductItem[] = (mainJson.content || []).map((item: any) => ({
+    barcode: String(item.barcode || ''),
+    productMainId: String(item.productMainId || ''),
+    stockCode: String(item.stockCode || ''),
+    title: String(item.title || ''),
+    brand: String(item.brand || ''),
+    categoryName: String(item.categoryName || ''),
+    quantity: Number(item.quantity ?? 0),
+    salePrice: Number(item.salePrice ?? 0),
+    listPrice: Number(item.listPrice ?? 0),
+    approved: Boolean(item.approved),
+    onSale: Boolean(item.onSale),
+    archived: Boolean(item.archived),
+    rejected: Boolean(item.rejected),
+    blacklisted: Boolean(item.blacklisted),
+    imageUrl: item.images?.[0]?.url || '',
+    lastUpdateDate: item.lastUpdateDate
+  }));
+
+  return {
+    ok: true,
+    totalElements: Number(appJson.totalElements || 0) + Number(unappJson.totalElements || 0),
+    approvedTotal: Number(appJson.totalElements || 0),
+    unapprovedTotal: Number(unappJson.totalElements || 0),
+    totalPages: Number(mainJson.totalPages || 1),
+    page,
+    items
+  };
+}
+
+export async function deleteLiveTrendyolProducts(params: {
+  account: MarketplaceAccount;
+  barcodes?: string[];
+  deleteAllMode?: 'selected' | 'unapproved' | 'approved' | 'all';
+  maxPagesToDelete?: number;
+}): Promise<{
+  ok: boolean;
+  deletedCount: number;
+  batchIds: string[];
+  message: string;
+}> {
+  const { account, barcodes = [], deleteAllMode = 'selected', maxPagesToDelete = 30 } = params;
+  const headers = getTrendyolAuthHeaders(account);
+  const baseUrl = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products`;
+
+  let targetBarcodes: string[] = [...barcodes];
+
+  if (deleteAllMode !== 'selected') {
+    const querySuffix =
+      deleteAllMode === 'approved'
+        ? '&approved=true'
+        : deleteAllMode === 'unapproved'
+        ? '&approved=false'
+        : '';
+
+    const collected = new Set<string>();
+    for (let p = 0; p < maxPagesToDelete; p++) {
+      const r = await fetch(`${baseUrl}?page=${p}&size=200${querySuffix}`, {
+        headers,
+        cache: 'no-store'
+      });
+      if (!r.ok) break;
+      const j = await r.json();
+      const content = j.content || [];
+      if (content.length === 0) break;
+      for (const it of content) {
+        if (it.barcode) collected.add(String(it.barcode));
+      }
+      if (p + 1 >= (j.totalPages || 1)) break;
+    }
+    targetBarcodes = Array.from(collected);
+  }
+
+  if (targetBarcodes.length === 0) {
+    return {
+      ok: false,
+      deletedCount: 0,
+      batchIds: [],
+      message: 'Silinecek ürün barkodu bulunamadı.'
+    };
+  }
+
+  const batchIds: string[] = [];
+  let deletedCount = 0;
+
+  // Trendyol DELETE endpoint tek istekte maksimum 1000 barkod kabul eder
+  for (let i = 0; i < targetBarcodes.length; i += 1000) {
+    const chunk = targetBarcodes.slice(i, i + 1000);
+    const res = await fetch(baseUrl, {
+      method: 'DELETE',
+      headers,
+      body: JSON.stringify({
+        items: chunk.map((barcode) => ({ barcode }))
+      })
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data?.batchRequestId) batchIds.push(data.batchRequestId);
+      deletedCount += chunk.length;
+    } else {
+      const errText = await res.text();
+      throw new Error(`Trendyol silme hatası (HTTP ${res.status}): ${errText.slice(0, 200)}`);
+    }
+  }
+
+  return {
+    ok: true,
+    deletedCount,
+    batchIds,
+    message: `${deletedCount} adet ürün/varyant Trendyol mağazanızdan silinmek üzere Trendyol Batch kuyruğuna iletildi (Batch: ${batchIds.join(', ') || 'Tamamlandı'}).`
+  };
+}

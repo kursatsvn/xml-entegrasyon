@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { PriceRobotItem, Product, SyncBatch } from '@/types/sopyo';
 import {
   Send,
@@ -12,11 +12,31 @@ import {
   Plus,
   Play,
   FileWarning,
+  Trash2,
+  CloudDownload,
   X
 } from 'lucide-react';
 
+interface LiveTrendyolItem {
+  barcode: string;
+  productMainId: string;
+  stockCode: string;
+  title: string;
+  brand: string;
+  categoryName: string;
+  quantity: number;
+  salePrice: number;
+  listPrice: number;
+  approved: boolean;
+  onSale: boolean;
+  archived: boolean;
+  rejected: boolean;
+  blacklisted: boolean;
+  imageUrl: string;
+}
+
 interface BulkAndRobotViewProps {
-  initialTab?: 'publish' | 'update' | 'diff' | 'robot';
+  initialTab?: 'publish' | 'update' | 'diff' | 'robot' | 'trendyol_live';
   batches: SyncBatch[];
   products: Product[];
   priceRobotItems: PriceRobotItem[];
@@ -32,7 +52,9 @@ export default function BulkAndRobotView({
   onRefresh,
   notify
 }: BulkAndRobotViewProps) {
-  const [tab, setTab] = useState<'publish' | 'update' | 'diff' | 'robot'>(initialTab);
+  const [tab, setTab] = useState<'publish' | 'update' | 'diff' | 'robot' | 'trendyol_live'>(
+    initialTab
+  );
   const [selectedMarketplace, setSelectedMarketplace] = useState<
     'Tümü' | 'Trendyol' | 'Hepsiburada'
   >('Tümü');
@@ -47,9 +69,111 @@ export default function BulkAndRobotView({
   const [newRobotMaxPrice, setNewRobotMaxPrice] = useState<number>(650);
   const [newRobotStep, setNewRobotStep] = useState<number>(1);
 
-  React.useEffect(() => {
+  // Canlı Trendyol Ürün Listeleme & Silme state'leri
+  const [tyItems, setTyItems] = useState<LiveTrendyolItem[]>([]);
+  const [tyFilter, setTyFilter] = useState<'all' | 'approved' | 'unapproved'>('all');
+  const [tyPage, setTyPage] = useState<number>(0);
+  const [tyTotalPages, setTyTotalPages] = useState<number>(1);
+  const [tyStats, setTyStats] = useState({
+    totalElements: 0,
+    approvedTotal: 0,
+    unapprovedTotal: 0
+  });
+  const [selectedBarcodes, setSelectedBarcodes] = useState<string[]>([]);
+  const [tyLoading, setTyLoading] = useState(false);
+
+  useEffect(() => {
     setTab(initialTab);
   }, [initialTab]);
+
+  const loadLiveTrendyolProducts = useCallback(
+    async (page = 0, filter: 'all' | 'approved' | 'unapproved' = tyFilter) => {
+      setTyLoading(true);
+      try {
+        const res = await fetch('/api/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'fetch_live_trendyol_products',
+            page,
+            size: 50,
+            filter
+          })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setTyItems(data.items || []);
+          setTyPage(data.page || 0);
+          setTyTotalPages(data.totalPages || 1);
+          setTyStats({
+            totalElements: data.totalElements || 0,
+            approvedTotal: data.approvedTotal || 0,
+            unapprovedTotal: data.unapprovedTotal || 0
+          });
+          setSelectedBarcodes([]);
+        } else {
+          notify(data.message || 'Trendyol ürünleri çekilemedi', 'error');
+        }
+      } catch (e: any) {
+        notify(e?.message || 'Trendyol API hatası', 'error');
+      } finally {
+        setTyLoading(false);
+      }
+    },
+    [tyFilter, notify]
+  );
+
+  useEffect(() => {
+    if (tab === 'trendyol_live') {
+      loadLiveTrendyolProducts(0, tyFilter);
+    }
+  }, [tab, tyFilter, loadLiveTrendyolProducts]);
+
+  const handleDeleteTrendyolProducts = async (
+    deleteAllMode: 'selected' | 'unapproved' | 'approved' | 'all'
+  ) => {
+    if (deleteAllMode === 'selected' && selectedBarcodes.length === 0) {
+      notify('Lütfen silmek istediğiniz ürünleri tablodan seçin.', 'error');
+      return;
+    }
+
+    const confirmText =
+      deleteAllMode === 'selected'
+        ? `Seçili ${selectedBarcodes.length} ürünü Trendyol'dan kalıcı olarak silmek istediğinize emin misiniz?`
+        : deleteAllMode === 'unapproved'
+        ? `Trendyol'da ONAY BEKLEYEN (${tyStats.unapprovedTotal} adet) ürünleri silmek istediğinize emin misiniz?`
+        : deleteAllMode === 'approved'
+        ? `Trendyol'daki ONAYLI (${tyStats.approvedTotal} adet) ürünleri silmek istediğinize emin misiniz?`
+        : `Trendyol mağazanızdaki TÜM ÜRÜNLERİ (${tyStats.totalElements} adet) silmek istediğinize emin misiniz?`;
+
+    if (!window.confirm(confirmText)) return;
+
+    setTyLoading(true);
+    try {
+      const res = await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_live_trendyol_products',
+          barcodes: selectedBarcodes,
+          deleteAllMode,
+          maxPagesToDelete: 80
+        })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        notify(data.message, 'success');
+        await loadLiveTrendyolProducts(0, tyFilter);
+        await onRefresh();
+      } else {
+        notify(data.message || 'Silme işlemi başarısız oldu', 'error');
+      }
+    } catch (e: any) {
+      notify(e?.message || 'Silme hatası', 'error');
+    } finally {
+      setTyLoading(false);
+    }
+  };
 
   const handleBulkPublish = async () => {
     setLoading(true);
@@ -191,8 +315,253 @@ export default function BulkAndRobotView({
             <Bot className="w-4 h-4" />
             Fiyat Rekabet Robotu (Buybox)
           </button>
+          <button
+            onClick={() => setTab('trendyol_live')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+              tab === 'trendyol_live'
+                ? 'bg-orange-600 text-white shadow-sm'
+                : 'bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100'
+            }`}
+          >
+            <Trash2 className="w-4 h-4" />
+            Trendyol Canlı Ürünler & Silme (API)
+          </button>
         </div>
       </div>
+
+      {/* 5. TRENDYOL CANLI ÜRÜNLERİ GÖRÜNTÜLE & SİL (ONAY BEKLEYENLER DAHİL) */}
+      {tab === 'trendyol_live' && (
+        <div className="space-y-6">
+          {/* Canlı Sayaçlar */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <div className="text-xs font-bold text-slate-500 uppercase">
+                TRENDYOL TOPLAM ÜRÜN / VARYANT
+              </div>
+              <div className="text-2xl font-black text-slate-900 mt-1">
+                {tyStats.totalElements.toLocaleString('tr-TR')} Adet
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                Satıcı ID: #1192080 (Canlı API Verisi)
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-emerald-200 p-5 shadow-sm">
+              <div className="text-xs font-bold text-emerald-700 uppercase">
+                ONAYLI ÜRÜNLER (approved=true)
+              </div>
+              <div className="text-2xl font-black text-emerald-600 mt-1">
+                {tyStats.approvedTotal.toLocaleString('tr-TR')} Adet
+              </div>
+              <div className="text-xs text-slate-500 mt-1">Satışta / Onaylanmış ürünler</div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-amber-200 p-5 shadow-sm">
+              <div className="text-xs font-bold text-amber-700 uppercase">
+                ONAY BEKLEYEN / ONAYSIZ (approved=false)
+              </div>
+              <div className="text-2xl font-black text-amber-600 mt-1">
+                {tyStats.unapprovedTotal.toLocaleString('tr-TR')} Adet
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                Trendyol katalog onayı bekleyen ürünler
+              </div>
+            </div>
+          </div>
+
+          {/* Filtre & Silme Butonları */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setTyFilter('all')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
+                  tyFilter === 'all'
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-700 border-slate-300'
+                }`}
+              >
+                Tümü ({tyStats.totalElements.toLocaleString('tr-TR')})
+              </button>
+              <button
+                onClick={() => setTyFilter('approved')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
+                  tyFilter === 'approved'
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                }`}
+              >
+                Onaylılar ({tyStats.approvedTotal.toLocaleString('tr-TR')})
+              </button>
+              <button
+                onClick={() => setTyFilter('unapproved')}
+                className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
+                  tyFilter === 'unapproved'
+                    ? 'bg-amber-600 text-white border-amber-600'
+                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                }`}
+              >
+                Onay Bekleyenler ({tyStats.unapprovedTotal.toLocaleString('tr-TR')})
+              </button>
+              <button
+                onClick={() => loadLiveTrendyolProducts(tyPage, tyFilter)}
+                disabled={tyLoading}
+                className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5"
+              >
+                <CloudDownload className={`w-4 h-4 ${tyLoading ? 'animate-bounce' : ''}`} />
+                Yenile
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedBarcodes.length > 0 && (
+                <button
+                  onClick={() => handleDeleteTrendyolProducts('selected')}
+                  disabled={tyLoading}
+                  className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Seçili ({selectedBarcodes.length}) Ürünü Sil
+                </button>
+              )}
+              <button
+                onClick={() => handleDeleteTrendyolProducts('unapproved')}
+                disabled={tyLoading || tyStats.unapprovedTotal === 0}
+                className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                Onay Bekleyenleri Sil ({tyStats.unapprovedTotal})
+              </button>
+              <button
+                onClick={() => handleDeleteTrendyolProducts('all')}
+                disabled={tyLoading || tyStats.totalElements === 0}
+                className="px-4 py-2 rounded-lg bg-rose-800 hover:bg-rose-900 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                Trendyol&apos;daki Tüm Ürünleri Sil ({tyStats.totalElements})
+              </button>
+            </div>
+          </div>
+
+          {/* Canlı Ürün Tablosu */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
+                    <th className="py-3.5 px-4 w-10">
+                      <input
+                        type="checkbox"
+                        checked={
+                          tyItems.length > 0 && selectedBarcodes.length === tyItems.length
+                        }
+                        onChange={(e) =>
+                          setSelectedBarcodes(
+                            e.target.checked ? tyItems.map((i) => i.barcode) : []
+                          )
+                        }
+                        className="rounded border-slate-300"
+                      />
+                    </th>
+                    <th className="py-3.5 px-4">BARKOD & MODEL KODU</th>
+                    <th className="py-3.5 px-4">ÜRÜN ADI</th>
+                    <th className="py-3.5 px-4">MARKA & KATEGORİ</th>
+                    <th className="py-3.5 px-4">STOK & FİYAT</th>
+                    <th className="py-3.5 px-4">ONAY DURUMU</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-sm">
+                  {tyItems.map((it, idx) => (
+                    <tr key={`${it.barcode}-${idx}`} className="hover:bg-slate-50">
+                      <td className="py-3 px-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedBarcodes.includes(it.barcode)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedBarcodes((prev) => [...prev, it.barcode]);
+                            } else {
+                              setSelectedBarcodes((prev) =>
+                                prev.filter((b) => b !== it.barcode)
+                              );
+                            }
+                          }}
+                          className="rounded border-slate-300"
+                        />
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-mono font-bold text-slate-900 text-xs">
+                          {it.barcode}
+                        </div>
+                        <div className="text-xs text-slate-500 font-mono">
+                          Model: {it.productMainId} | SKU: {it.stockCode}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          {it.imageUrl && (
+                            <img
+                              src={it.imageUrl}
+                              alt={it.title}
+                              className="w-10 h-12 object-cover rounded border border-slate-200 shrink-0"
+                            />
+                          )}
+                          <span className="font-medium text-slate-900 text-xs line-clamp-2">
+                            {it.title}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-xs">
+                        <div className="font-bold text-slate-800">{it.brand}</div>
+                        <div className="text-slate-500">{it.categoryName}</div>
+                      </td>
+                      <td className="py-3 px-4 text-xs">
+                        <div className="font-bold text-orange-600">
+                          {it.salePrice.toFixed(2)} TL
+                        </div>
+                        <div className="text-slate-600">Stok: {it.quantity}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        {it.approved ? (
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                            Onaylı {it.onSale ? '(Satışta)' : ''}
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
+                            Onay Bekliyor
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Sayfalama */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs">
+              <span>
+                Sayfa {tyPage + 1} / {tyTotalPages} (Her sayfada 50 varyant gösteriliyor)
+              </span>
+              <div className="flex gap-2">
+                <button
+                  disabled={tyPage <= 0 || tyLoading}
+                  onClick={() => loadLiveTrendyolProducts(tyPage - 1, tyFilter)}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white disabled:opacity-50 font-semibold"
+                >
+                  ← Önceki
+                </button>
+                <button
+                  disabled={tyPage + 1 >= tyTotalPages || tyLoading}
+                  onClick={() => loadLiveTrendyolProducts(tyPage + 1, tyFilter)}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white disabled:opacity-50 font-semibold"
+                >
+                  Sonraki →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 1. TOPLU ÜRÜN GÖNDERİMİ */}
       {tab === 'publish' && (
@@ -369,8 +738,8 @@ export default function BulkAndRobotView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-sm">
-                {products.slice(0, 30).map((p) => (
-                  <tr key={p.id} className="hover:bg-slate-50">
+                {products.slice(0, 30).map((p, idx) => (
+                  <tr key={`${p.id}-${idx}`} className="hover:bg-slate-50">
                     <td className="py-3 px-4 font-mono font-bold text-slate-800">{p.stockCode}</td>
                     <td className="py-3 px-4 font-medium text-slate-900">{p.title}</td>
                     <td className="py-3 px-4 text-xs">

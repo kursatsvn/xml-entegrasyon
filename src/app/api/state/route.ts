@@ -5,6 +5,8 @@ import { calculateChannelPrices } from '@/lib/pricing-engine';
 import { enrichCategoryMappingWithAutoMatch } from '@/lib/category-matcher';
 import { inspectXmlFeedNodes, syncXmlFeedProducts } from '@/lib/xml-engine';
 import {
+  deleteLiveTrendyolProducts,
+  fetchLiveTrendyolProducts,
   publishProductsToMarketplace,
   pullOrdersFromMarketplace,
   syncPriceAndInventoryToMarketplace,
@@ -984,6 +986,86 @@ export async function POST(req: NextRequest) {
       });
       writeDb(db);
       return NextResponse.json({ ok: true, message: 'Ürün Fiyat Rekabet Robotuna eklendi.' });
+    }
+
+    // 18. Canlı Trendyol Ürünlerini Listele (Onaylı + Onay Bekleyenler Dahil)
+    if (action === 'fetch_live_trendyol_products') {
+      const tyAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'trendyol'
+      );
+      const effectiveAccount: MarketplaceAccount = {
+        ...(tyAcc || {
+          id: 'mkt-ty-lunerose',
+          tenantId,
+          marketplace: 'trendyol',
+          storeName: 'LuneRose',
+          supplierOrMerchantId: process.env.TRENDYOL_SUPPLIER_ID || '1192080',
+          apiKey: '',
+          apiSecret: '',
+          isActive: true,
+          autoConfirmOrders: false,
+          shipmentProviderId: '7',
+          shipmentProviderName: 'Aras Kargo Marketplace',
+          shipmentAddressId: '7853340',
+          shipmentAddressText: '',
+          returningAddressId: '7853341',
+          returningAddressText: '',
+          dispatchTimeHours: 24,
+          hbOrderPullStatus: 'ready_to_ship',
+          stockCodeType: 'modelCode',
+          descriptionPrefixHtml: '',
+          descriptionSuffixHtml: '',
+          connectionStatus: 'connected'
+        }),
+        supplierOrMerchantId:
+          tyAcc?.supplierOrMerchantId || process.env.TRENDYOL_SUPPLIER_ID || '1192080',
+        apiKey: tyAcc?.apiKey || process.env.TRENDYOL_API_KEY || '',
+        apiSecret: tyAcc?.apiSecret || process.env.TRENDYOL_API_SECRET || ''
+      };
+
+      const result = await fetchLiveTrendyolProducts({
+        account: effectiveAccount,
+        page: Number(body.page || 0),
+        size: Number(body.size || 50),
+        filter: (body.filter || 'all') as 'all' | 'approved' | 'unapproved'
+      });
+
+      return NextResponse.json(result);
+    }
+
+    // 19. Canlı Trendyol Ürünlerini Sil (Seçili Barkodlar, Sadece Onay Bekleyenler veya Tümü)
+    if (action === 'delete_live_trendyol_products') {
+      const tyAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'trendyol'
+      );
+      const effectiveAccount: MarketplaceAccount = {
+        ...(tyAcc as MarketplaceAccount),
+        supplierOrMerchantId:
+          tyAcc?.supplierOrMerchantId || process.env.TRENDYOL_SUPPLIER_ID || '1192080',
+        apiKey: tyAcc?.apiKey || process.env.TRENDYOL_API_KEY || '',
+        apiSecret: tyAcc?.apiSecret || process.env.TRENDYOL_API_SECRET || ''
+      };
+
+      const result = await deleteLiveTrendyolProducts({
+        account: effectiveAccount,
+        barcodes: body.barcodes || [],
+        deleteAllMode: body.deleteAllMode || 'selected',
+        maxPagesToDelete: Number(body.maxPagesToDelete || 20)
+      });
+
+      db.operationLogs.unshift({
+        id: `op-${Date.now()}`,
+        tenantId,
+        type: 'marketplace_publish',
+        channel: 'Trendyol API (DELETE)',
+        summary: `Trendyol Ürün Silme: ${result.deletedCount} barkod silme kuyruğuna alındı`,
+        status: result.ok ? 'success' : 'error',
+        details: result.message,
+        createdAt: new Date().toISOString()
+      });
+      writeDb(db);
+
+      return NextResponse.json(result);
     }
 
     // 17. Süper Admin: Mağaza/Kullanıcı Yönetimi
