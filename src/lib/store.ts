@@ -493,7 +493,7 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'FANTAZİ GİYİM/Babydoll',
       sourceName: 'ariasclosetx',
       productCount: 46,
-      trendyolCategoryId: 1042,
+      trendyolCategoryId: 552,
       trendyolCategoryName: 'Giyim > İç Giyim > Fantezi Giyim > Babydoll',
       trendyolStatus: 'mapped',
       trendyolAttributes: [
@@ -513,8 +513,8 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'KADIN GİYİM/Büyük Beden Kadın Pijama',
       sourceName: 'ariasclosetx',
       productCount: 40,
-      trendyolCategoryId: 1051,
-      trendyolCategoryName: 'Giyim > İç Giyim > Pijama Takımı',
+      trendyolCategoryId: 3610,
+      trendyolCategoryName: 'Giyim > İç Giyim > Büyük Beden > Büyük Beden Pijama Takımı',
       trendyolStatus: 'mapped',
       trendyolAttributes: [
         { attributeName: 'Cinsiyet', mappedValue: 'Kadın / Kız', required: true },
@@ -532,8 +532,8 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'FANTAZİ GİYİM/Jartiyer Takımları',
       sourceName: 'ariasclosetx',
       productCount: 192,
-      trendyolCategoryId: 1048,
-      trendyolCategoryName: 'Giyim > İç Giyim > Fantezi Giyim > Jartiyer Takım',
+      trendyolCategoryId: 3104,
+      trendyolCategoryName: 'Giyim > İç Giyim > Fantezi Giyim > Fantezi Jartiyer',
       trendyolStatus: 'mapped',
       trendyolAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın / Kız', required: true }],
       hepsiburadaCategoryId: 'HB-60000684',
@@ -548,10 +548,14 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'MARKALAR/MONAMISE',
       sourceName: 'ariasclosetx',
       productCount: 290,
-      trendyolStatus: 'unmapped',
-      trendyolAttributes: [],
-      hepsiburadaStatus: 'unmapped',
-      hepsiburadaAttributes: []
+      trendyolCategoryId: 563,
+      trendyolCategoryName: 'Giyim > İç Giyim > Uyku & Ev Giyim > Pijama Takımı',
+      trendyolStatus: 'mapped',
+      trendyolAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın / Kız', required: true }],
+      hepsiburadaCategoryId: 'HB-60000678',
+      hepsiburadaCategoryName: 'Moda > Kadın > İç Giyim > Uyku & Ev Giyim > Pijama Takımı',
+      hepsiburadaStatus: 'mapped',
+      hepsiburadaAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın', required: true }]
     },
     {
       id: 'cat-5',
@@ -560,14 +564,14 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'FANTAZİ GİYİM/Gecelik Modelleri',
       sourceName: 'ariasclosetx',
       productCount: 265,
-      trendyolCategoryId: 1045,
-      trendyolCategoryName: 'Giyim > İç Giyim > Gecelik',
-      trendyolStatus: 'missing_options',
-      trendyolAttributes: [],
+      trendyolCategoryId: 553,
+      trendyolCategoryName: 'Giyim > İç Giyim > Uyku & Ev Giyim > Gecelik',
+      trendyolStatus: 'mapped',
+      trendyolAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın / Kız', required: true }],
       hepsiburadaCategoryId: 'HB-60000680',
       hepsiburadaCategoryName: 'Moda > Kadın > İç Giyim > Uyku & Ev Giyim > Gecelik',
-      hepsiburadaStatus: 'missing_attributes',
-      hepsiburadaAttributes: []
+      hepsiburadaStatus: 'mapped',
+      hepsiburadaAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın', required: true }]
     },
     {
       id: 'cat-6',
@@ -576,12 +580,14 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'FANTAZİ GİYİM/Saten Gecelik',
       sourceName: 'ariasclosetx',
       productCount: 219,
-      trendyolCategoryId: 1045,
-      trendyolCategoryName: 'Giyim > İç Giyim > Gecelik',
+      trendyolCategoryId: 553,
+      trendyolCategoryName: 'Giyim > İç Giyim > Uyku & Ev Giyim > Gecelik',
       trendyolStatus: 'mapped',
       trendyolAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın / Kız', required: true }],
-      hepsiburadaStatus: 'missing_attributes',
-      hepsiburadaAttributes: []
+      hepsiburadaCategoryId: 'HB-60000680',
+      hepsiburadaCategoryName: 'Moda > Kadın > İç Giyim > Uyku & Ev Giyim > Gecelik',
+      hepsiburadaStatus: 'mapped',
+      hepsiburadaAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın', required: true }]
     },
     {
       id: 'cat-7',
@@ -590,12 +596,14 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'İÇ GİYİM/Şortlu Takım',
       sourceName: 'ariasclosetx',
       productCount: 183,
-      trendyolCategoryId: 1051,
-      trendyolCategoryName: 'Giyim > İç Giyim > Pijama Takımı',
+      trendyolCategoryId: 563,
+      trendyolCategoryName: 'Giyim > İç Giyim > Uyku & Ev Giyim > Pijama Takımı',
       trendyolStatus: 'mapped',
-      trendyolAttributes: [],
-      hepsiburadaStatus: 'missing_options',
-      hepsiburadaAttributes: []
+      trendyolAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın / Kız', required: true }],
+      hepsiburadaCategoryId: 'HB-60000678',
+      hepsiburadaCategoryName: 'Moda > Kadın > İç Giyim > Uyku & Ev Giyim > Pijama Takımı',
+      hepsiburadaStatus: 'mapped',
+      hepsiburadaAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın', required: true }]
     },
     {
       id: 'cat-8',
@@ -604,12 +612,14 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'FANTAZİ GİYİM/Fantazi Kostüm',
       sourceName: 'ariasclosetx',
       productCount: 181,
-      trendyolStatus: 'missing_options',
-      trendyolAttributes: [],
+      trendyolCategoryId: 3097,
+      trendyolCategoryName: 'Giyim > İç Giyim > Fantezi Giyim > Fantezi Kostüm',
+      trendyolStatus: 'mapped',
+      trendyolAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın / Kız', required: true }],
       hepsiburadaCategoryId: 'HB-60000686',
       hepsiburadaCategoryName: 'Moda > Kadın > İç Giyim > Fantezi İç Giyim > Fantezi Kostüm',
       hepsiburadaStatus: 'mapped',
-      hepsiburadaAttributes: []
+      hepsiburadaAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın', required: true }]
     },
     {
       id: 'cat-9',
@@ -618,10 +628,14 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'FANTAZİ GİYİM/Fantazi Elbise',
       sourceName: 'ariasclosetx',
       productCount: 139,
-      trendyolStatus: 'missing_options',
-      trendyolAttributes: [],
-      hepsiburadaStatus: 'missing_options',
-      hepsiburadaAttributes: []
+      trendyolCategoryId: 3110,
+      trendyolCategoryName: 'Giyim > İç Giyim > Fantezi Giyim > Fantezi Gecelik',
+      trendyolStatus: 'mapped',
+      trendyolAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın / Kız', required: true }],
+      hepsiburadaCategoryId: 'HB-60000680',
+      hepsiburadaCategoryName: 'Moda > Kadın > İç Giyim > Fantezi İç Giyim > Fantezi Gecelik',
+      hepsiburadaStatus: 'mapped',
+      hepsiburadaAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın', required: true }]
     },
     {
       id: 'cat-10',
@@ -630,10 +644,14 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'FANTAZİ GİYİM/Fantezi Body',
       sourceName: 'ariasclosetx',
       productCount: 112,
-      trendyolStatus: 'missing_options',
-      trendyolAttributes: [],
-      hepsiburadaStatus: 'missing_options',
-      hepsiburadaAttributes: []
+      trendyolCategoryId: 3103,
+      trendyolCategoryName: 'Giyim > İç Giyim > Fantezi Giyim > Fantezi İç Çamaşır Takımı',
+      trendyolStatus: 'mapped',
+      trendyolAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın / Kız', required: true }],
+      hepsiburadaCategoryId: 'HB-60000688',
+      hepsiburadaCategoryName: 'Moda > Kadın > İç Giyim > Fantezi İç Giyim > Fantezi İç Çamaşır Takımı',
+      hepsiburadaStatus: 'mapped',
+      hepsiburadaAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın', required: true }]
     },
     {
       id: 'cat-11',
@@ -642,12 +660,14 @@ function createInitialSeedData(): DatabaseState {
       xmlCategoryTree: 'FANTAZİ GİYİM/Tanga G-String',
       sourceName: 'ariasclosetx',
       productCount: 118,
-      trendyolCategoryId: 1063,
-      trendyolCategoryName: 'Giyim > İç Giyim > Külot & Tanga & String',
+      trendyolCategoryId: 3108,
+      trendyolCategoryName: 'Giyim > İç Giyim > Fantezi Giyim > Fantezi String',
       trendyolStatus: 'mapped',
       trendyolAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın / Kız', required: true }],
-      hepsiburadaStatus: 'missing_attributes',
-      hepsiburadaAttributes: []
+      hepsiburadaCategoryId: 'HB-60000674',
+      hepsiburadaCategoryName: 'Moda > Kadın > İç Giyim > Külot & String',
+      hepsiburadaStatus: 'mapped',
+      hepsiburadaAttributes: [{ attributeName: 'Cinsiyet', mappedValue: 'Kadın', required: true }]
     }
   ];
 
@@ -657,7 +677,7 @@ function createInitialSeedData(): DatabaseState {
       tenantId: LUNEROSE_TENANT_ID,
       name: "Aria's Closet",
       productCount: 4284,
-      trendyolBrandId: 1845920,
+      trendyolBrandId: 995293,
       trendyolBrandName: "Aria's Closet",
       hepsiburadaBrandName: "Aria's Closet",
       isMapped: true
@@ -667,21 +687,30 @@ function createInitialSeedData(): DatabaseState {
       tenantId: LUNEROSE_TENANT_ID,
       name: 'Brand',
       productCount: 894,
-      isMapped: false
+      trendyolBrandId: 995293,
+      trendyolBrandName: "Aria's Closet",
+      hepsiburadaBrandName: "Aria's Closet",
+      isMapped: true
     },
     {
       id: 'brand-3',
       tenantId: LUNEROSE_TENANT_ID,
       name: 'MONAMİSE',
       productCount: 290,
-      isMapped: false
+      trendyolBrandId: 7990,
+      trendyolBrandName: 'MONAMİSE',
+      hepsiburadaBrandName: 'MONAMİSE',
+      isMapped: true
     },
     {
       id: 'brand-4',
       tenantId: LUNEROSE_TENANT_ID,
       name: 'Tegan',
       productCount: 0,
-      isMapped: false
+      trendyolBrandId: 1741014,
+      trendyolBrandName: 'Tegan',
+      hepsiburadaBrandName: 'Tegan',
+      isMapped: true
     }
   ];
 

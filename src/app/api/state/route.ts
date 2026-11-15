@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getTenantData, readDb, writeDb } from '@/lib/store';
 import { calculateChannelPrices } from '@/lib/pricing-engine';
-import { enrichCategoryMappingWithAutoMatch } from '@/lib/category-matcher';
+import {
+  enrichCategoryMappingWithAutoMatch,
+  resolveTrendyolBrandId
+} from '@/lib/category-matcher';
 import { inspectXmlFeedNodes, syncXmlFeedProducts } from '@/lib/xml-engine';
 import {
   archiveLiveTrendyolProducts,
@@ -626,9 +629,9 @@ export async function POST(req: NextRequest) {
         if (b.tenantId !== tenantId) return b;
         return {
           ...b,
-          trendyolBrandId: b.trendyolBrandId || 1845920,
-          trendyolBrandName: b.trendyolBrandName || defaultBrandName,
-          hepsiburadaBrandName: b.hepsiburadaBrandName || defaultBrandName,
+          trendyolBrandId: resolveTrendyolBrandId(b.name, b.trendyolBrandId),
+          trendyolBrandName: b.trendyolBrandName || b.name || defaultBrandName,
+          hepsiburadaBrandName: b.hepsiburadaBrandName || b.name || defaultBrandName,
           isMapped: true
         };
       });
