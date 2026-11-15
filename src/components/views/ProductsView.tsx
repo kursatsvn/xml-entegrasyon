@@ -308,8 +308,8 @@ export default function ProductsView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {paginatedProducts.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50/80 transition">
+              {paginatedProducts.map((p, idx) => (
+                <tr key={`${p.id}-${idx}`} className="hover:bg-slate-50/80 transition">
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-3">
                       <img

@@ -1208,14 +1208,16 @@ export default function XmlView({
           <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl text-xs">
             <span className="text-slate-600 font-medium">Çekilecek Ürün Limiti:</span>
             <select
+              id="xml-sync-limit"
+              name="xmlSyncLimit"
               value={syncLimit}
               onChange={(e) => setSyncLimit(Number(e.target.value))}
               className="bg-white px-2 py-1 rounded-lg border border-slate-300 font-semibold text-slate-800"
             >
+              <option value={0}>Tüm Ürünler (1.648+ Tam Çekim)</option>
               <option value={100}>İlk 100 Ürün (Hızlı)</option>
               <option value={250}>İlk 250 Ürün</option>
               <option value={500}>İlk 500 Ürün</option>
-              <option value={2000}>Tüm Ürünler (1.648+ Tam Çekim)</option>
             </select>
           </div>
 

@@ -132,9 +132,11 @@ export async function syncXmlFeedProducts(params: {
 
   const sliceToProcess = limit > 0 ? rawProducts.slice(0, limit) : rawProducts;
   const syncedProducts: Product[] = [];
+  const usedProductIds = new Set<string>();
 
-  for (const rawProd of sliceToProcess) {
-    const externalId = String(rawProd.UrunKartiID || rawProd.id || '');
+  for (let prodIdx = 0; prodIdx < sliceToProcess.length; prodIdx++) {
+    const rawProd = sliceToProcess[prodIdx];
+    const externalId = String(rawProd.UrunKartiID || rawProd.id || `${prodIdx + 1}`);
     const title = String(rawProd.UrunAdi || rawProd.name || 'İsimsiz Ürün');
     const descriptionHtml = String(rawProd.Aciklama || rawProd.OnYazi || '');
     const brandName = String(rawProd.Marka || "Aria's Closet");
@@ -148,10 +150,18 @@ export async function syncXmlFeedProducts(params: {
     const firstVariant = rawVariants[0] || rawProd;
     const rawBaseSku = String(firstVariant?.StokKodu || externalId || '0000');
     const prefix = xmlSource.stockCodePrefix || '';
-    const stockCode = rawBaseSku.startsWith(prefix) ? rawBaseSku : `${prefix}${rawBaseSku}`;
+    const baseStockCode = rawBaseSku.startsWith(prefix) ? rawBaseSku : `${prefix}${rawBaseSku}`;
+    const stockCode = seenStockCodes.has(baseStockCode)
+      ? `${baseStockCode}-${externalId}-${prodIdx}`
+      : baseStockCode;
     seenStockCodes.add(stockCode);
 
     const existingProd = existingByCode.get(stockCode);
+    let uniqueProdId = existingProd?.id || `prod-${externalId}-${stockCode}`;
+    if (usedProductIds.has(uniqueProdId)) {
+      uniqueProdId = `prod-${externalId}-${stockCode}-${prodIdx}`;
+    }
+    usedProductIds.add(uniqueProdId);
     const variants: ProductVariant[] = [];
 
     for (let idx = 0; idx < (rawVariants.length || 1); idx++) {
@@ -253,7 +263,7 @@ export async function syncXmlFeedProducts(params: {
     }
 
     syncedProducts.push({
-      id: existingProd?.id || `prod-${externalId || stockCode}`,
+      id: uniqueProdId,
       tenantId: xmlSource.tenantId,
       xmlSourceId: xmlSource.id,
       sourceName: xmlSource.name,
