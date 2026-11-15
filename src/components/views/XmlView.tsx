@@ -35,7 +35,7 @@ export default function XmlView({
   const [selectedReportSource, setSelectedReportSource] = useState<XmlSource | null>(null);
   const [activePriceMarketplaceTab, setActivePriceMarketplaceTab] = useState<'Trendyol' | 'Hepsiburada'>('Trendyol');
   const [syncingId, setSyncingId] = useState<string | null>(null);
-  const [syncLimit, setSyncLimit] = useState<number>(250);
+  const [syncLimit, setSyncLimit] = useState<number>(0);
   const [inspectingNodes, setInspectingNodes] = useState(false);
   const [detectedNodes, setDetectedNodes] = useState<{ tag: string; count: number }[]>([
     { tag: 'UrunKartiID', count: 1648 },

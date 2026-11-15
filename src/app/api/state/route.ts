@@ -38,8 +38,101 @@ async function resolveCurrentTenantId(): Promise<{ userId: string; tenantId: str
 
 export async function GET() {
   const { tenantId, role } = await resolveCurrentTenantId();
-  const data = getTenantData(tenantId);
   const db = readDb();
+
+  // Eğer veritabanında henüz sadece 12 başlangıç (seed) ürünü varsa, canlı XML'den tüm ürünleri (1.648 ürün) otomatik çek
+  const tenantProducts = db.products.filter((p) => p.tenantId === tenantId);
+  const primaryXml = db.xmlSources.find((x) => x.tenantId === tenantId);
+  if (primaryXml && process.env.ARIASCLOSET_XML_URL && primaryXml.url.includes('YOUR_XML_TOKEN')) {
+    primaryXml.url = process.env.ARIASCLOSET_XML_URL;
+  }
+
+  if (
+    tenantProducts.length <= 20 &&
+    primaryXml &&
+    primaryXml.url &&
+    !primaryXml.url.includes('YOUR_XML_TOKEN')
+  ) {
+    try {
+      const { products: syncedProducts, report, totalInXml, totalVariantsInXml } =
+        await syncXmlFeedProducts({
+          xmlSource: primaryXml,
+          existingProducts: tenantProducts,
+          limit: 0
+        });
+      primaryXml.totalProductCount = totalInXml;
+      primaryXml.totalVariantCount = totalVariantsInXml;
+      primaryXml.lastCheckedAt = new Date().toISOString();
+      const otherProducts = db.products.filter(
+        (p) => !(p.tenantId === tenantId && p.xmlSourceId === primaryXml.id)
+      );
+      db.products = [...otherProducts, ...syncedProducts];
+      db.xmlReports.unshift(report);
+
+      // Kategorileri ve Markaları da tüm 1.648 üründen otomatik çıkar
+      const catCounts = new Map<string, { tree: string; count: number }>();
+      const brandCounts = new Map<string, number>();
+      for (const p of syncedProducts) {
+        const prevCat = catCounts.get(p.categoryName);
+        catCounts.set(p.categoryName, {
+          tree: p.categoryTree || p.categoryName,
+          count: (prevCat?.count || 0) + 1
+        });
+        brandCounts.set(p.brandName, (brandCounts.get(p.brandName) || 0) + 1);
+      }
+
+      for (const [catName, info] of catCounts.entries()) {
+        const existingCat = db.categories.find(
+          (c) => c.tenantId === tenantId && c.name === catName
+        );
+        if (existingCat) {
+          existingCat.productCount = info.count;
+          existingCat.xmlCategoryTree = info.tree;
+        } else {
+          db.categories.push(
+            enrichCategoryMappingWithAutoMatch({
+              id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              tenantId,
+              name: catName,
+              xmlCategoryTree: info.tree,
+              sourceName: primaryXml.name,
+              productCount: info.count,
+              trendyolStatus: 'unmapped',
+              trendyolAttributes: [],
+              hepsiburadaStatus: 'unmapped',
+              hepsiburadaAttributes: []
+            })
+          );
+        }
+      }
+
+      for (const [bName, count] of brandCounts.entries()) {
+        const existingBrand = db.brands.find(
+          (b) => b.tenantId === tenantId && b.name === bName
+        );
+        if (existingBrand) {
+          existingBrand.productCount = count;
+        } else {
+          db.brands.push({
+            id: `brand-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            tenantId,
+            name: bName,
+            productCount: count,
+            trendyolBrandId: 1845920,
+            trendyolBrandName: "Aria's Closet",
+            hepsiburadaBrandName: "Aria's Closet",
+            isMapped: true
+          });
+        }
+      }
+
+      writeDb(db);
+    } catch (e) {
+      console.error('Auto XML sync on initial load failed:', e);
+    }
+  }
+
+  const data = getTenantData(tenantId);
 
   return NextResponse.json({
     ...data,
@@ -226,7 +319,7 @@ export async function POST(req: NextRequest) {
     // 3. Canlı XML Çekimi & Senkronizasyonu (ariasclosetx veya herhangi bir XML)
     if (action === 'sync_xml_source') {
       const xmlSourceId = String(body.xmlSourceId || '');
-      const limit = Number(body.limit || 250);
+      const limit = Number(body.limit ?? 0);
       const xmlSource = db.xmlSources.find((x) => x.id === xmlSourceId && x.tenantId === tenantId);
       if (!xmlSource) {
         return NextResponse.json({ ok: false, message: 'XML kaynağı bulunamadı' }, { status: 404 });

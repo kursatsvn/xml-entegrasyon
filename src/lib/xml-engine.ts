@@ -97,7 +97,7 @@ export async function syncXmlFeedProducts(params: {
   totalInXml: number;
   totalVariantsInXml: number;
 }> {
-  const { xmlSource, existingProducts, limit = 500 } = params;
+  const { xmlSource, existingProducts, limit = 0 } = params;
   const startedAt = new Date().toISOString();
 
   const response = await fetch(xmlSource.url, {
