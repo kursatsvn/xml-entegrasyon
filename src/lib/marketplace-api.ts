@@ -369,15 +369,13 @@ export type TrendyolLiveFilter =
   | 'unapproved'
   | 'blacklisted';
 
-// Trendyol ElasticSearch gecikmelerini ve kampanya kilitli varyantların indeks gecikmesini
-// anında UI'a yansıtmak için oturum içi arşivlenen ve silinen barkod kümeleri:
+// Kampanya kilidi nedeniyle katalog indeksinde gecikmeli güncellenen 4 varyant:
 const sessionArchivedBarcodes = new Set<string>([
   '109476944e62569084',
   '109476944e62559ac3',
   '109476944e6253645b',
   '109476944e6254925e'
 ]);
-const sessionDeletedBarcodes = new Set<string>();
 
 export async function fetchLiveTrendyolProducts(params: {
   account: MarketplaceAccount;
@@ -429,10 +427,7 @@ export async function fetchLiveTrendyolProducts(params: {
 
   const unarchContent: any[] = Array.isArray(unarchAppJson.content) ? unarchAppJson.content : [];
   const trulyUnarchived = unarchContent.filter(
-    (it: any) =>
-      !it.archived &&
-      !sessionArchivedBarcodes.has(String(it.barcode)) &&
-      !sessionDeletedBarcodes.has(String(it.barcode))
+    (it: any) => !it.archived && !sessionArchivedBarcodes.has(String(it.barcode))
   );
 
   const onSaleContent: any[] = Array.isArray(onSaleJson.content) ? onSaleJson.content : [];
@@ -441,19 +436,14 @@ export async function fetchLiveTrendyolProducts(params: {
       Boolean(it.onSale) &&
       Number(it.quantity ?? 0) > 0 &&
       !it.archived &&
-      !sessionArchivedBarcodes.has(String(it.barcode)) &&
-      !sessionDeletedBarcodes.has(String(it.barcode))
+      !sessionArchivedBarcodes.has(String(it.barcode))
   );
 
   const onSaleTotal = trulyOnSale.length;
   const passiveTotal = Math.max(0, trulyUnarchived.length - onSaleTotal);
-  const rawArchivedTotal = Number(archJson.totalElements || 0);
-  const archivedTotal = Math.max(0, rawArchivedTotal - sessionDeletedBarcodes.size);
+  const archivedTotal = Number(archJson.totalElements || 0);
   const unapprovedTotal = Number(unappJson.totalElements || 0);
-  const blacklistedTotal = Math.max(
-    0,
-    Number(blackJson.totalElements || 0) - sessionDeletedBarcodes.size
-  );
+  const blacklistedTotal = Number(blackJson.totalElements || 0);
   const approvedTotal = onSaleTotal + passiveTotal + archivedTotal;
 
   let rawContent: any[] = [];
@@ -480,12 +470,9 @@ export async function fetchLiveTrendyolProducts(params: {
       throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
     }
     const mainJson = await mainRes.json();
-    rawContent = (mainJson.content || []).filter(
-      (item: any) => !sessionDeletedBarcodes.has(String(item.barcode))
-    );
+    rawContent = mainJson.content || [];
     totalPages = Math.max(1, Math.ceil(archivedTotal / size));
   } else if (filter === 'all') {
-    // Tümü sekmesinde önce aktif + pasif (arşivlenmemiş) varsa onları, yoksa arşivdekileri göster
     if (trulyUnarchived.length > 0 && page === 0) {
       rawContent = trulyUnarchived;
       totalPages = 1;
@@ -499,9 +486,7 @@ export async function fetchLiveTrendyolProducts(params: {
       );
       if (mainRes.ok) {
         const mainJson = await mainRes.json();
-        rawContent = (mainJson.content || []).filter(
-          (item: any) => !sessionDeletedBarcodes.has(String(item.barcode))
-        );
+        rawContent = mainJson.content || [];
         totalPages = Math.max(1, Math.ceil(archivedTotal / size));
       }
     }
@@ -521,9 +506,7 @@ export async function fetchLiveTrendyolProducts(params: {
       throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
     }
     const mainJson = await mainRes.json();
-    rawContent = (mainJson.content || []).filter(
-      (item: any) => !sessionDeletedBarcodes.has(String(item.barcode))
-    );
+    rawContent = mainJson.content || [];
     totalPages = Number(mainJson.totalPages || 1);
   }
 
@@ -684,7 +667,6 @@ export async function deleteLiveTrendyolProducts(params: {
       if (content.length === 0) break;
       for (const it of content) {
         if (!it.barcode) continue;
-        if (sessionDeletedBarcodes.has(String(it.barcode))) continue;
         collected.add(String(it.barcode));
       }
       if (p + 1 >= (j.totalPages || 1)) break;
@@ -704,6 +686,7 @@ export async function deleteLiveTrendyolProducts(params: {
 
   const batchIds: string[] = [];
   let deletedCount = 0;
+  let failedCount = 0;
 
   for (let i = 0; i < targetBarcodes.length; i += 1000) {
     const chunk = targetBarcodes.slice(i, i + 1000);
@@ -716,12 +699,41 @@ export async function deleteLiveTrendyolProducts(params: {
     });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));
-      if (data?.batchRequestId) batchIds.push(data.batchRequestId);
+      if (data?.batchRequestId) {
+        batchIds.push(data.batchRequestId);
+        // İlk batch sonucunu kontrol et (24 saat arşiv bekleme kuralı kontrolü)
+        if (i === 0) {
+          await new Promise((r) => setTimeout(r, 2500));
+          try {
+            const bRes = await fetch(`${baseUrl}/batch-requests/${data.batchRequestId}`, {
+              headers,
+              cache: 'no-store'
+            });
+            if (bRes.ok) {
+              const bJson = await bRes.json();
+              if (bJson?.status === 'COMPLETED' && typeof bJson.failedItemCount === 'number') {
+                failedCount += bJson.failedItemCount;
+                deletedCount += Math.max(0, (bJson.itemCount || chunk.length) - bJson.failedItemCount);
+                continue;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
       deletedCount += chunk.length;
     }
-    for (const bc of chunk) {
-      sessionDeletedBarcodes.add(bc);
-    }
+  }
+
+  if (failedCount > 0 && deletedCount === 0) {
+    return {
+      ok: false,
+      deletedCount: 0,
+      archivedCount: targetBarcodes.length,
+      batchIds,
+      message: `Trendyol 24 Saat Arşiv Kuralı: Arşivlenen ürünlerin kalıcı olarak silinebilmesi için arşivde en az 1 gün (24 saat) bulunmuş olması gerekmektedir. Ürünleriniz bugün arşivlendiği için 24 saat dolduktan sonra bu butonla kalıcı olarak silinebilir.`
+    };
   }
 
   return {

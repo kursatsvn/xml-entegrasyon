@@ -34,6 +34,7 @@ interface LiveTrendyolItem {
   blacklisted: boolean;
   blacklistReason?: string;
   imageUrl: string;
+  lastUpdateDate?: number;
 }
 
 interface BulkAndRobotViewProps {
@@ -722,11 +723,26 @@ export default function BulkAndRobotView({
                               Pasif (Satış Dışı)
                             </span>
                           )}
-                          {it.archived && (
-                            <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 border border-slate-300 text-[11px] font-bold">
-                              Arşivde (Gizli)
-                            </span>
-                          )}
+                          {it.archived && (() => {
+                            const hoursInArchive = it.lastUpdateDate
+                              ? (Date.now() - it.lastUpdateDate) / 3600000
+                              : 0;
+                            const remainingHours = Math.max(1, Math.ceil(24 - hoursInArchive));
+                            const isReadyToDelete = hoursInArchive >= 24 && !it.blacklisted;
+                            return (
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+                                  isReadyToDelete
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                    : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                                }`}
+                              >
+                                {isReadyToDelete
+                                  ? 'Arşivde (>24 Saat • Silmeye Hazır ✓)'
+                                  : `Arşivde (${remainingHours} saat sonra silinebilir ⏳)`}
+                              </span>
+                            );
+                          })()}
                           {it.blacklisted && (
                             <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-[11px] font-bold">
                               Kara Liste{it.blacklistReason ? `: ${it.blacklistReason}` : ''}
