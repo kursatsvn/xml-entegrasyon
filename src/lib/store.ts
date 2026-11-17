@@ -17,6 +17,7 @@ import {
   XmlSource,
   XmlSyncReport
 } from '@/types/sopyo';
+import { createSupabaseServerClient, getSupabaseEnv, isSupabaseConfigured } from '@/lib/supabase';
 
 export interface DatabaseState {
   tenants: Tenant[];
@@ -1151,14 +1152,172 @@ export function readDb(): DatabaseState {
 }
 
 export function writeDb(state: DatabaseState): void {
-  if (!fs.existsSync(DB_DIR)) {
-    fs.mkdirSync(DB_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DB_DIR)) {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+    }
+    fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), 'utf8');
+  } catch {
+    // Salt okunur serverless ortamda (Vercel) yerel dosya yazımı atlanır, Supabase esas alınır
   }
-  fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), 'utf8');
 }
 
-export function getTenantData(tenantId: string) {
-  const db = readDb();
+export async function readDbAsync(): Promise<DatabaseState> {
+  if (!isSupabaseConfigured()) {
+    return readDb();
+  }
+
+  try {
+    const supabase = createSupabaseServerClient();
+    const { serverSecret } = getSupabaseEnv();
+    if (!supabase || !serverSecret) {
+      return readDb();
+    }
+
+    const { data: meta, error: metaError } = await supabase.rpc('sopyo_get_meta_state', {
+      p_secret: serverSecret
+    });
+
+    if (metaError || !meta || !Array.isArray(meta.tenants) || meta.tenants.length === 0) {
+      // Supabase henüz boşsa yerel DB/seed verisini dön (ilk kurulum / migration fallback)
+      return readDb();
+    }
+
+    const CHUNK_SIZE = 450;
+    const { data: firstChunk, error: prodError } = await supabase.rpc('sopyo_get_products_chunk', {
+      p_secret: serverSecret,
+      p_offset: 0,
+      p_limit: CHUNK_SIZE
+    });
+
+    if (prodError || !firstChunk) {
+      throw new Error(prodError?.message || 'Supabase ürün okuma hatası');
+    }
+
+    const totalProducts = Number(firstChunk.total || 0);
+    const allProducts: Product[] = Array.isArray(firstChunk.items) ? [...firstChunk.items] : [];
+
+    if (totalProducts > CHUNK_SIZE) {
+      const offsets: number[] = [];
+      for (let off = CHUNK_SIZE; off < totalProducts; off += CHUNK_SIZE) {
+        offsets.push(off);
+      }
+      const chunkResults = await Promise.all(
+        offsets.map((off) =>
+          supabase.rpc('sopyo_get_products_chunk', {
+            p_secret: serverSecret,
+            p_offset: off,
+            p_limit: CHUNK_SIZE
+          })
+        )
+      );
+      for (const res of chunkResults) {
+        if (res.data && Array.isArray(res.data.items)) {
+          allProducts.push(...res.data.items);
+        }
+      }
+    }
+
+    return {
+      tenants: meta.tenants || [],
+      users: meta.users || [],
+      marketplaceAccounts: meta.marketplaceAccounts || [],
+      xmlSources: meta.xmlSources || [],
+      xmlReports: meta.xmlReports || [],
+      products: allProducts,
+      categories: meta.categories || [],
+      brands: meta.brands || [],
+      variantGroups: meta.variantGroups || [],
+      tags: meta.tags || [],
+      syncBatches: meta.syncBatches || [],
+      priceRobotItems: meta.priceRobotItems || [],
+      orders: meta.orders || [],
+      claims: meta.claims || [],
+      operationLogs: meta.operationLogs || []
+    };
+  } catch (err) {
+    console.error('[Supabase readDbAsync fallback]', err);
+    return readDb();
+  }
+}
+
+export async function writeDbAsync(
+  state: DatabaseState,
+  options?: {
+    skipProducts?: boolean;
+    onlyProductIds?: string[];
+    syncDeletedProducts?: boolean;
+  }
+): Promise<void> {
+  // Yerel ortamda JSON yedeğini güncel tut (Vercel salt okunur diskte hata vermez)
+  writeDb(state);
+
+  if (!isSupabaseConfigured()) {
+    return;
+  }
+
+  const supabase = createSupabaseServerClient();
+  const { serverSecret } = getSupabaseEnv();
+  if (!supabase || !serverSecret) return;
+
+  const metaPayload = {
+    tenants: state.tenants,
+    users: state.users,
+    marketplaceAccounts: state.marketplaceAccounts,
+    xmlSources: state.xmlSources,
+    xmlReports: state.xmlReports.slice(0, 50),
+    categories: state.categories,
+    brands: state.brands,
+    variantGroups: state.variantGroups,
+    tags: state.tags,
+    syncBatches: state.syncBatches.slice(0, 50),
+    priceRobotItems: state.priceRobotItems,
+    orders: state.orders,
+    claims: state.claims,
+    operationLogs: state.operationLogs.slice(0, 150)
+  };
+
+  const { error: metaError } = await supabase.rpc('sopyo_save_meta_state', {
+    p_secret: serverSecret,
+    p_payload: metaPayload
+  });
+
+  if (metaError) {
+    throw new Error(`Supabase meta kayıt hatası: ${metaError.message}`);
+  }
+
+  if (options?.skipProducts) {
+    return;
+  }
+
+  const targetProducts =
+    options?.onlyProductIds && options.onlyProductIds.length > 0
+      ? state.products.filter((p) => options.onlyProductIds!.includes(p.id))
+      : state.products;
+
+  const WRITE_CHUNK = 200;
+  for (let i = 0; i < targetProducts.length; i += WRITE_CHUNK) {
+    const slice = targetProducts.slice(i, i + WRITE_CHUNK);
+    const { error: prodErr } = await supabase.rpc('sopyo_upsert_products_chunk', {
+      p_secret: serverSecret,
+      p_products: slice
+    });
+    if (prodErr) {
+      throw new Error(`Supabase ürün kayıt hatası: ${prodErr.message}`);
+    }
+  }
+
+  if (options?.syncDeletedProducts && !options?.onlyProductIds) {
+    const keepIds = state.products.map((p) => p.id);
+    await supabase.rpc('sopyo_mark_missing_products_deleted', {
+      p_secret: serverSecret,
+      p_keep_ids: keepIds
+    });
+  }
+}
+
+export function getTenantData(tenantId: string, sourceDb?: DatabaseState) {
+  const db = sourceDb || readDb();
   const tenant = db.tenants.find((t) => t.id === tenantId) || db.tenants[0];
   const effectiveTenantId = tenant.id;
 

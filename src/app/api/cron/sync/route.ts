@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { readDb, writeDb } from '@/lib/store';
+import { readDbAsync, writeDbAsync } from '@/lib/store';
 import { syncXmlFeedProducts } from '@/lib/xml-engine';
 import { pullOrdersFromMarketplace, syncPriceAndInventoryToMarketplace } from '@/lib/marketplace-api';
 
 export async function GET() {
-  const db = readDb();
+  const db = await readDbAsync();
   const summary: string[] = [];
 
   for (const tenant of db.tenants) {
@@ -42,7 +42,7 @@ export async function GET() {
     }
   }
 
-  writeDb(db);
+  await writeDbAsync(db);
   return NextResponse.json({
     ok: true,
     executedAt: new Date().toISOString(),

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getTenantData, readDb, writeDb } from '@/lib/store';
+import { DatabaseState, getTenantData, readDbAsync, writeDbAsync } from '@/lib/store';
 import { calculateChannelPrices } from '@/lib/pricing-engine';
 import {
   enrichCategoryMappingWithAutoMatch,
@@ -20,10 +20,11 @@ import { CategoryMapping, MarketplaceAccount, Order, Product, XmlSource } from '
 
 const SESSION_COOKIE = 'sopyo_session_v1';
 
-async function resolveCurrentTenantId(): Promise<{ userId: string; tenantId: string; role: string }> {
+async function resolveCurrentTenantId(
+  db: DatabaseState
+): Promise<{ userId: string; tenantId: string; role: string }> {
   const cookieStore = await cookies();
   const raw = cookieStore.get(SESSION_COOKIE)?.value;
-  const db = readDb();
   const defaultUser = db.users[0];
 
   if (!raw) {
@@ -43,8 +44,8 @@ async function resolveCurrentTenantId(): Promise<{ userId: string; tenantId: str
 }
 
 export async function GET() {
-  const { tenantId, role } = await resolveCurrentTenantId();
-  const db = readDb();
+  const db = await readDbAsync();
+  const { tenantId, role } = await resolveCurrentTenantId(db);
 
   // Eğer veritabanında henüz sadece 12 başlangıç (seed) ürünü varsa, canlı XML'den tüm ürünleri (1.648 ürün) otomatik çek
   const tenantProducts = db.products.filter((p) => p.tenantId === tenantId);
@@ -132,13 +133,13 @@ export async function GET() {
         }
       }
 
-      writeDb(db);
+      await writeDbAsync(db);
     } catch (e) {
       console.error('Auto XML sync on initial load failed:', e);
     }
   }
 
-  const data = getTenantData(tenantId);
+  const data = getTenantData(tenantId, db);
 
   return NextResponse.json({
     ...data,
@@ -155,8 +156,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action } = body;
-    const { tenantId, role } = await resolveCurrentTenantId();
-    const db = readDb();
+    const db = await readDbAsync();
+    const { tenantId, role } = await resolveCurrentTenantId(db);
 
     // 1. XML Etiketlerini İncele (Sopyo Step 3 getXMLNodes.php)
     if (action === 'inspect_xml_nodes') {
@@ -314,7 +315,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      writeDb(db);
+      await writeDbAsync(db);
       return NextResponse.json({
         ok: true,
         message: 'XML kaynağı ve fiyat/stok kuralları kaydedildi.',
@@ -390,7 +391,7 @@ export async function POST(req: NextRequest) {
         recalculatedCount++;
       }
 
-      writeDb(db);
+      await writeDbAsync(db);
       return NextResponse.json({
         ok: true,
         message: `Fiyat ayarları güncellendi (Trendyol: +%${tyPercent} + ${tyExtraTl} TL | Hepsiburada: +%${hbPercent} + ${hbExtraTl} TL) ve ${recalculatedCount} ürünün satış fiyatı yeniden hesaplandı!`
@@ -490,7 +491,7 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString()
       });
 
-      writeDb(db);
+      await writeDbAsync(db, { syncDeletedProducts: true });
       return NextResponse.json({
         ok: true,
         message: `${xmlSource.name} kaynağından ${syncedProducts.length} ürün (Toplam XML: ${totalInXml} ürün / ${totalVariantsInXml} varyant) başarıyla çekildi ve fiyat kuralları uygulandı!`,
@@ -510,7 +511,7 @@ export async function POST(req: NextRequest) {
           (p) => !(p.xmlSourceId === xmlSourceId && p.tenantId === tenantId)
         );
       }
-      writeDb(db);
+      await writeDbAsync(db, { skipProducts: !deleteProducts, syncDeletedProducts: deleteProducts });
       return NextResponse.json({ ok: true, message: 'XML kaynağı silindi.' });
     }
 
@@ -620,7 +621,8 @@ export async function POST(req: NextRequest) {
         };
         db.products.unshift(newProd);
       }
-      writeDb(db);
+      const savedProdId = incoming.id || db.products[0]?.id;
+      await writeDbAsync(db, { onlyProductIds: savedProdId ? [savedProdId] : undefined });
       return NextResponse.json({ ok: true, message: 'Ürün bilgileri kaydedildi.' });
     }
 
@@ -632,7 +634,7 @@ export async function POST(req: NextRequest) {
         matchedCount++;
         return enrichCategoryMappingWithAutoMatch(cat);
       });
-      writeDb(db);
+      await writeDbAsync(db, { skipProducts: true });
       return NextResponse.json({
         ok: true,
         message: `${matchedCount} kategori Trendyol ve Hepsiburada kategori ağacı ve zorunlu özellikleriyle otomatik eşitlendi!`
@@ -648,7 +650,7 @@ export async function POST(req: NextRequest) {
       if (idx >= 0) {
         db.categories[idx] = { ...db.categories[idx], ...incoming };
       }
-      writeDb(db);
+      await writeDbAsync(db, { skipProducts: true });
       return NextResponse.json({ ok: true, message: 'Kategori eşleştirmesi güncellendi.' });
     }
 
@@ -665,7 +667,7 @@ export async function POST(req: NextRequest) {
           isMapped: true
         };
       });
-      writeDb(db);
+      await writeDbAsync(db, { skipProducts: true });
       return NextResponse.json({
         ok: true,
         message: 'Tüm markalar Trendyol ve Hepsiburada için eşitlendi!'
@@ -682,7 +684,7 @@ export async function POST(req: NextRequest) {
           hepsiburadaMapped: true
         };
       });
-      writeDb(db);
+      await writeDbAsync(db, { skipProducts: true });
       return NextResponse.json({
         ok: true,
         message: 'Renk ve Beden seçenek grupları Trendyol ve Hepsiburada için eşitlendi!'
@@ -710,7 +712,7 @@ export async function POST(req: NextRequest) {
       } else {
         db.marketplaceAccounts.push(updated);
       }
-      writeDb(db);
+      await writeDbAsync(db, { skipProducts: true });
       return NextResponse.json({
         ok: testResult.ok,
         message: testResult.message,
@@ -793,7 +795,7 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString()
       });
 
-      writeDb(db);
+      await writeDbAsync(db);
       return NextResponse.json({
         ok: true,
         message: `Toplu ürün gönderimi tamamlandı (#${newBatch.batchNumber}): ${totalSuccess} ürün aktarıldı, ${allErrors.length} hata döndü.`,
@@ -849,7 +851,7 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString()
       });
 
-      writeDb(db);
+      await writeDbAsync(db, { skipProducts: true });
       return NextResponse.json({
         ok: true,
         message: `${tenantProducts.length} ürünün güncel stok ve fiyatları ${targetMarketplace} kanallarına başarıyla gönderildi!`,
@@ -996,7 +998,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      writeDb(db);
+      await writeDbAsync(db);
       return NextResponse.json({
         ok: true,
         message:
@@ -1019,7 +1021,7 @@ export async function POST(req: NextRequest) {
           }
         }
         if (typeof labelPrinted === 'boolean') ord.labelPrinted = labelPrinted;
-        writeDb(db);
+        await writeDbAsync(db, { skipProducts: true });
       }
       return NextResponse.json({ ok: true, message: 'Sipariş güncellendi.' });
     }
@@ -1032,7 +1034,7 @@ export async function POST(req: NextRequest) {
           ...db.tenants[idx],
           ...body.settings
         };
-        writeDb(db);
+        await writeDbAsync(db, { skipProducts: true });
       }
       return NextResponse.json({
         ok: true,
@@ -1043,6 +1045,7 @@ export async function POST(req: NextRequest) {
     // 16. Rekabet Robotu Çalıştır / Ekle
     if (action === 'run_price_robot') {
       let updatedCount = 0;
+      const modifiedProdIds: string[] = [];
       for (const item of db.priceRobotItems) {
         if (item.tenantId !== tenantId || !item.isActive) continue;
         if (item.buyboxPrice < item.currentPrice) {
@@ -1056,10 +1059,14 @@ export async function POST(req: NextRequest) {
           if (prod) {
             if (item.marketplace === 'trendyol') prod.trendyolSalePrice = target;
             else prod.hepsiburadaSalePrice = target;
+            modifiedProdIds.push(prod.id);
           }
         }
       }
-      writeDb(db);
+      await writeDbAsync(
+        db,
+        modifiedProdIds.length > 0 ? { onlyProductIds: modifiedProdIds } : { skipProducts: true }
+      );
       return NextResponse.json({
         ok: true,
         message: `Fiyat Rekabet Robotu çalıştırıldı: ${updatedCount} üründe dip fiyat korunarak Buybox fiyatı optimize edildi!`
@@ -1093,7 +1100,7 @@ export async function POST(req: NextRequest) {
         isActive: true,
         lastCheckedAt: new Date().toISOString()
       });
-      writeDb(db);
+      await writeDbAsync(db, { skipProducts: true });
       return NextResponse.json({ ok: true, message: 'Ürün Fiyat Rekabet Robotuna eklendi.' });
     }
 
@@ -1171,7 +1178,7 @@ export async function POST(req: NextRequest) {
         details: result.message,
         createdAt: new Date().toISOString()
       });
-      writeDb(db);
+      await writeDbAsync(db, { skipProducts: true });
 
       return NextResponse.json(result);
     }
@@ -1206,7 +1213,7 @@ export async function POST(req: NextRequest) {
         details: result.message,
         createdAt: new Date().toISOString()
       });
-      writeDb(db);
+      await writeDbAsync(db, { skipProducts: true });
 
       return NextResponse.json(result);
     }
@@ -1220,7 +1227,7 @@ export async function POST(req: NextRequest) {
           ...db.tenants[idx],
           ...body.updates
         };
-        writeDb(db);
+        await writeDbAsync(db, { skipProducts: true });
       }
       return NextResponse.json({ ok: true, message: 'Mağaza yetki ve limitleri güncellendi.' });
     }

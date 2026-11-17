@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { readDb, writeDb } from '@/lib/store';
+import { readDbAsync, writeDbAsync } from '@/lib/store';
 import { Tenant, UserProfile } from '@/types/sopyo';
 
 const SESSION_COOKIE = 'sopyo_session_v1';
@@ -8,7 +8,7 @@ const SESSION_COOKIE = 'sopyo_session_v1';
 export async function GET() {
   const cookieStore = await cookies();
   const rawSession = cookieStore.get(SESSION_COOKIE)?.value;
-  const db = readDb();
+  const db = await readDbAsync();
 
   let currentUser = db.users[0];
   let activeTenantId = currentUser.tenantId;
@@ -50,7 +50,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { action } = body;
-  const db = readDb();
+  const db = await readDbAsync();
   const cookieStore = await cookies();
 
   if (action === 'login') {
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
 
     db.tenants.push(newTenant);
     db.users.push(newUser);
-    writeDb(db);
+    await writeDbAsync(db, { skipProducts: true });
 
     const token = Buffer.from(
       JSON.stringify({ userId: newUser.id, tenantId: newTenant.id })
