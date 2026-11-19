@@ -203,9 +203,19 @@ export async function syncXmlFeedProducts(params: {
       const reservedStock = existingVariant?.reservedStock || 0;
       const netStock = Math.max(0, effectiveXmlStock - reservedStock);
 
-      const salePriceTagVal = parseNumber(rv[xmlSource.salePriceTag || 'SatisFiyati'] ?? rv.SatisFiyati);
-      const buyingPriceVal = parseNumber(rv[xmlSource.buyingPriceTag || 'SatisFiyati'] ?? rv.AlisFiyati ?? salePriceTagVal);
-      const marketPriceVal = parseNumber(rv[xmlSource.marketPriceTag || 'IndirimliFiyat'] ?? rv.IndirimliFiyat ?? salePriceTagVal);
+      const rawSalePriceTagVal = parseNumber(rv[xmlSource.salePriceTag || 'SatisFiyati'] ?? rv.SatisFiyati);
+      const rawBuyingPriceVal = parseNumber(rv[xmlSource.buyingPriceTag || 'SatisFiyati'] ?? rv.AlisFiyati ?? rawSalePriceTagVal);
+      const rawMarketPriceVal = parseNumber(rv[xmlSource.marketPriceTag || 'IndirimliFiyat'] ?? rv.IndirimliFiyat ?? rawSalePriceTagVal);
+
+      // Eğer kullanıcı 0 TL'lik ürüne elle fiyat girdiyse (xmlPriceLock=true) ve XML'de hala 0 TL ise, kullanıcının girdiği fiyatı koru!
+      const preserveManualPrice =
+        (existingProd?.xmlPriceLock || xmlSource.disablePriceSync) &&
+        existingVariant &&
+        existingVariant.salePrice > 0;
+
+      const salePriceTagVal = preserveManualPrice ? existingVariant.salePrice : rawSalePriceTagVal;
+      const buyingPriceVal = preserveManualPrice ? existingVariant.buyingPrice || existingVariant.salePrice : rawBuyingPriceVal;
+      const marketPriceVal = preserveManualPrice ? existingVariant.marketPrice || existingVariant.salePrice : rawMarketPriceVal;
 
       const channelPrices =
         salePriceTagVal > 0

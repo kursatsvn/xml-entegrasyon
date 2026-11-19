@@ -493,11 +493,11 @@ export async function POST(req: NextRequest) {
           // 1. Mevcut ürünlerin stok ve fiyatlarını güncelle
           await syncPriceAndInventoryToMarketplace({ account: acc, products: validProducts });
 
-          // 2. Yeni eklenen / henüz gönderilmemiş ürünleri otomatik Trendyol'a gönder
+          // 2. Yeni eklenen / henüz gönderilmemiş veya fiyatı yeni girilmiş (pending) ürünleri otomatik Trendyol'a gönder
           const unsent = validProducts.filter(
             (p) =>
-              (acc.marketplace === 'trendyol' && p.trendyolSyncStatus === 'not_sent') ||
-              (acc.marketplace === 'hepsiburada' && p.hepsiburadaSyncStatus === 'not_sent')
+              (acc.marketplace === 'trendyol' && (p.trendyolSyncStatus === 'not_sent' || p.trendyolSyncStatus === 'pending')) ||
+              (acc.marketplace === 'hepsiburada' && (p.hepsiburadaSyncStatus === 'not_sent' || p.hepsiburadaSyncStatus === 'pending'))
           );
           if (unsent.length > 0) {
             const pubRes = await publishProductsToMarketplace({

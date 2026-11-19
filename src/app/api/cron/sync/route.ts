@@ -50,11 +50,11 @@ export async function GET() {
       await pullOrdersFromMarketplace(acc);
       await syncPriceAndInventoryToMarketplace({ account: acc, products: tenantProducts });
 
-      // Yeni eklenen ve henüz pazaryerine gönderilmemiş ürünleri otomatik temizlenmiş olarak gönder
+      // Yeni eklenen, henüz gönderilmemiş veya fiyatı sonradan girilmiş (pending) ürünleri otomatik gönder
       const newUnsent = tenantProducts.filter(
         (p) =>
-          (acc.marketplace === 'trendyol' && p.trendyolSyncStatus === 'not_sent') ||
-          (acc.marketplace === 'hepsiburada' && p.hepsiburadaSyncStatus === 'not_sent')
+          (acc.marketplace === 'trendyol' && (p.trendyolSyncStatus === 'not_sent' || p.trendyolSyncStatus === 'pending')) ||
+          (acc.marketplace === 'hepsiburada' && (p.hepsiburadaSyncStatus === 'not_sent' || p.hepsiburadaSyncStatus === 'pending'))
       );
       if (newUnsent.length > 0) {
         const pubRes = await publishProductsToMarketplace({
