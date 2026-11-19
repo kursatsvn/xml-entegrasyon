@@ -61,21 +61,35 @@ export default function XmlView({
   }
   const [inspectingNodes, setInspectingNodes] = useState(false);
   const [detectedNodes, setDetectedNodes] = useState<{ tag: string; count: number }[]>([
-    { tag: 'UrunKartiID', count: 1648 },
-    { tag: 'UrunAdi', count: 1648 },
+    { tag: 'UrunKartiID', count: 1647 },
+    { tag: 'UrunAdi', count: 1647 },
     { tag: 'Aciklama', count: 1550 },
-    { tag: 'Marka', count: 1648 },
-    { tag: 'Kategori', count: 1648 },
-    { tag: 'KategoriTree', count: 1647 },
-    { tag: 'VaryasyonID', count: 7283 },
-    { tag: 'StokKodu', count: 7283 },
-    { tag: 'Barkod', count: 7101 },
-    { tag: 'StokAdedi', count: 7283 },
-    { tag: 'AlisFiyati', count: 7283 },
-    { tag: 'SatisFiyati', count: 7283 },
-    { tag: 'IndirimliFiyat', count: 7161 },
-    { tag: 'KdvOrani', count: 7283 },
-    { tag: 'Desi', count: 7283 }
+    { tag: 'Marka', count: 1647 },
+    { tag: 'MarkaID', count: 1647 },
+    { tag: 'SatisBirimi', count: 1647 },
+    { tag: 'KategoriID', count: 1647 },
+    { tag: 'Kategori', count: 1647 },
+    { tag: 'KategoriTree', count: 1646 },
+    { tag: 'UrunUrl', count: 1647 },
+    { tag: 'VaryasyonID', count: 7273 },
+    { tag: 'StokKodu', count: 7273 },
+    { tag: 'Barkod', count: 7091 },
+    { tag: 'StokAdedi', count: 7273 },
+    { tag: 'AlisFiyati', count: 7273 },
+    { tag: 'SatisFiyati', count: 7273 },
+    { tag: 'IndirimliFiyat', count: 7151 },
+    { tag: 'KDVDahil', count: 7273 },
+    { tag: 'KdvOrani', count: 7273 },
+    { tag: 'ParaBirimi', count: 7273 },
+    { tag: 'ParaBirimiKodu', count: 7273 },
+    { tag: 'Desi', count: 7273 },
+    { tag: 'OnYazi', count: 76 },
+    { tag: 'Ozellik', count: 4 },
+    { tag: 'Resim', count: 344 },
+    { tag: 'OzellikID', count: 10 },
+    { tag: 'OzellikTanim', count: 10 },
+    { tag: 'DegerID', count: 10 },
+    { tag: 'DegerTanim', count: 10 }
   ]);
 
   function openNewXmlWizard() {
@@ -98,9 +112,9 @@ export default function XmlView({
       autoPublishChannels: ['Trendyol', 'Hepsiburada'],
       salePriceTag: 'SatisFiyati',
       buyingPriceTag: 'SatisFiyati',
-      marketPriceTag: 'IndirimliFiyat',
+      marketPriceTag: '',
       taxIncludedMode: 0,
-      fixedTaxRate: 10,
+      fixedTaxRate: 20,
       useCurrencyConversion: false,
       priceRoundEnabled: false,
       priceRoundType: 'x9',
@@ -472,572 +486,738 @@ export default function XmlView({
     const progressPct = (wizardStep + 1) * 25;
 
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              {editingSource.id
-                ? `Mevcut XML Ürün Kaynağı Düzenleme (#${editingSource.xmlIdNumber})`
-                : 'Yeni XML Ürün Kaynağı Tanımla'}
-            </h1>
-            <p className="text-xs text-slate-500 mt-1">
-              XML tanımlama süreci: <strong>%{progressPct}</strong>
-            </p>
-          </div>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between bg-white px-6 py-4 rounded-2xl border border-slate-200 shadow-xs">
+          <h1 className="text-xl font-bold text-slate-900">
+            {editingSource.id
+              ? 'Mevcut XML Ürün Kaynağı Düzenleme'
+              : 'Yeni XML Ürün Kaynağı Tanımla'}
+          </h1>
           <button
             onClick={() => setSubMode('list')}
-            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
           >
-            İptal & Listeye Dön
+            ← XML Ürün Kaynaklarına Dön
           </button>
         </div>
 
-        {/* 4 Adımlı Sopyo Sihirbaz Barı */}
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            '1. TANIMLAMA BİLGİLERİ',
-            '2. ÜRÜN AYARLARI',
-            '3. FİYAT AYARLARI',
-            '4. ONAY'
-          ].map((label, idx) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setWizardStep(idx)}
-              className={`p-3.5 rounded-xl border text-left font-semibold text-xs transition cursor-pointer ${
-                wizardStep === idx
-                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                  : wizardStep > idx
-                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
-          {/* ADIM 1: TANIMLAMA BİLGİLERİ */}
-          {wizardStep === 0 && (
-            <div className="space-y-5 max-w-3xl">
-              <h2 className="text-lg font-bold text-slate-900 border-b pb-3">
-                TANIMLAMA BİLGİLERİ
-              </h2>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Sopyo Sol-Sağ Bölmeli 4 Adımlı Sihirbaz Kartı */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[620px]">
+            {/* SOL PANEL: % İlerleme, 4 Adım, Bilgilendirme Kutusu */}
+            <div className="lg:col-span-3 border-b lg:border-b-0 lg:border-r border-slate-200 p-6 flex flex-col justify-between bg-slate-50/40">
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    XML Kaynak Adı *
-                  </label>
-                  <input
-                    type="text"
-                    value={editingSource.name}
-                    onChange={(e) =>
-                      setEditingSource({ ...editingSource, name: e.target.value })
-                    }
-                    placeholder="Örn: ariasclosetx / yenitoptanci"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm"
-                  />
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-3xl font-extrabold text-slate-900">{progressPct}%</span>
+                    <span className="text-xs text-slate-400 font-medium">XML tanımlama süreci</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-200 rounded-full mt-3 overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-300"
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    XML Şablon / Altyapı Tipi
-                  </label>
-                  <select
-                    value={editingSource.providerType}
-                    onChange={(e) =>
-                      setEditingSource({
-                        ...editingSource,
-                        providerType: e.target.value as any
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm"
-                  >
-                    <option value="ticimax">Ticimax Standart XML (ariasclosetx, yenitoptanci vb.)</option>
-                    <option value="ideasoft">IdeaSoft XML</option>
-                    <option value="custom">Özel / Genel XML (Etiket Eşleştirmeli)</option>
-                  </select>
+
+                {/* Dikey 4 Adım Listesi */}
+                <div className="space-y-1">
+                  {[
+                    { idx: 0, title: 'TANIMLAMA BİLGİLERİ' },
+                    { idx: 1, title: 'ÜRÜN AYARLARI' },
+                    { idx: 2, title: 'FİYAT AYARLARI' },
+                    { idx: 3, title: 'ONAY' }
+                  ].map((step, i) => {
+                    const isCompleted = wizardStep > step.idx;
+                    const isCurrent = wizardStep === step.idx;
+                    return (
+                      <React.Fragment key={step.idx}>
+                        <button
+                          type="button"
+                          onClick={() => setWizardStep(step.idx)}
+                          className="w-full flex items-center gap-3 py-2 text-left cursor-pointer group"
+                        >
+                          <div
+                            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition ${
+                              isCompleted
+                                ? 'bg-emerald-500 text-white'
+                                : isCurrent
+                                ? 'bg-blue-600 text-white shadow-xs'
+                                : 'bg-white border border-slate-300 text-slate-400'
+                            }`}
+                          >
+                            {isCompleted ? '✓' : step.idx + 1}
+                          </div>
+                          <span
+                            className={`text-xs font-bold tracking-wide transition ${
+                              isCompleted
+                                ? 'text-emerald-600'
+                                : isCurrent
+                                ? 'text-blue-600'
+                                : 'text-slate-400 group-hover:text-slate-600'
+                            }`}
+                          >
+                            {step.title}
+                          </span>
+                        </button>
+                        {i < 3 && <div className="ml-3.5 h-4 border-l border-slate-200" />}
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                  XML Kaynak Linki *
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={editingSource.url}
-                    onChange={(e) =>
-                      setEditingSource({ ...editingSource, url: e.target.value })
-                    }
-                    placeholder="https://www.ariasclosetx.com/TicimaxXmlV2/..."
-                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono"
-                  />
-                  <button
-                    type="button"
-                    disabled={inspectingNodes || !editingSource.url}
-                    onClick={() => handleInspectXmlNodes(editingSource.url)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shrink-0 cursor-pointer"
-                  >
-                    {inspectingNodes ? 'Kontrol Ediliyor...' : 'XML Linkini & Etiketleri Test Et'}
-                  </button>
+              {/* Sol Alt Bilgilendirme Kutusu (IP Adresi) */}
+              <div className="mt-8 p-4 rounded-xl bg-orange-50/80 border border-orange-200/70 text-xs space-y-1.5">
+                <div className="font-bold text-orange-600 flex items-center gap-1.5">
+                  <span>☆</span> BİLGİLENDİRME
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                  XML Ekstra Notlar
-                </label>
-                <textarea
-                  rows={3}
-                  value={editingSource.extraNotes}
-                  onChange={(e) =>
-                    setEditingSource({ ...editingSource, extraNotes: e.target.value })
-                  }
-                  placeholder="XML ile alakalı dikkat etmemiz gereken ekstra notları buraya girebilirsiniz."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* ADIM 2: ÜRÜN AYARLARI */}
-          {wizardStep === 1 && (
-            <div className="space-y-5 max-w-3xl">
-              <h2 className="text-lg font-bold text-slate-900 border-b pb-3">
-                ÜRÜN AYARLARI
-              </h2>
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                  Ürün Kodu Ön Eki (beforeProductStockCode)
-                </label>
-                <input
-                  type="text"
-                  value={editingSource.stockCodePrefix}
-                  onChange={(e) =>
-                    setEditingSource({ ...editingSource, stockCodePrefix: e.target.value })
-                  }
-                  placeholder="Örn: AX"
-                  className="w-48 px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Ürünleriniz yüklenirken stok kodlarına eklenecek ön ek (Örn: AX33322).
+                <p className="text-orange-700/90 leading-relaxed">
+                  Tedarikçinize aşağıda yer alan ip adresimizi iletebilirsiniz.
                 </p>
-              </div>
-
-              <div className="space-y-3 divide-y divide-slate-100">
-                <label className="flex items-center justify-between pt-3 cursor-pointer">
-                  <div>
-                    <div className="font-semibold text-sm text-slate-900">
-                      ÜRÜN BARKODLARI YENİDEN OLUŞTURULSUN
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Ürünleriniz yüklenirken barkodları benzersiz EAN-13 formatında yeniden oluşturulsun.
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={editingSource.generateBarcode}
-                    onChange={(e) =>
-                      setEditingSource({
-                        ...editingSource,
-                        generateBarcode: e.target.checked
-                      })
-                    }
-                    className="w-5 h-5 accent-indigo-600"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between pt-3 cursor-pointer">
-                  <div>
-                    <div className="font-semibold text-sm text-slate-900">
-                      ÜRÜN STOK GÜNCELLEMESİ YAPILMASIN
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Aktif edilirse XML kontrollerinde stoklar güncellenmez.
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={editingSource.disableStockSync}
-                    onChange={(e) =>
-                      setEditingSource({
-                        ...editingSource,
-                        disableStockSync: e.target.checked
-                      })
-                    }
-                    className="w-5 h-5 accent-indigo-600"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between pt-3 cursor-pointer">
-                  <div>
-                    <div className="font-semibold text-sm text-slate-900">
-                      ÜRÜN FİYAT GÜNCELLEMESİ YAPILMASIN
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Aktif edilirse XML kontrollerinde fiyatlar güncellenmez.
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={editingSource.disablePriceSync}
-                    onChange={(e) =>
-                      setEditingSource({
-                        ...editingSource,
-                        disablePriceSync: e.target.checked
-                      })
-                    }
-                    className="w-5 h-5 accent-indigo-600"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between pt-3 cursor-pointer">
-                  <div>
-                    <div className="font-semibold text-sm text-slate-900">
-                      SİSTEMDE OLMAYAN YENİ ÜRÜNLER EKLENMESİN
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Aktif edilirse sadece mevcut ürünlerin stok/fiyatı güncellenir, yeni ürün eklenmez.
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={editingSource.disableNewProducts}
-                    onChange={(e) =>
-                      setEditingSource({
-                        ...editingSource,
-                        disableNewProducts: e.target.checked
-                      })
-                    }
-                    className="w-5 h-5 accent-indigo-600"
-                  />
-                </label>
-
-                <div className="pt-3 space-y-3">
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <div>
-                      <div className="font-semibold text-sm text-slate-900">
-                        STOK SIFIRLAMA TANIMI (KRİTİK STOK)
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        XML&apos;de stok miktarı girdiğiniz değer ve altına düştüğünde stok sıfırlanarak satışa kapatılır.
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={editingSource.criticalStockEnabled}
-                      onChange={(e) =>
-                        setEditingSource({
-                          ...editingSource,
-                          criticalStockEnabled: e.target.checked
-                        })
-                      }
-                      className="w-5 h-5 accent-indigo-600"
-                    />
-                  </label>
-
-                  {editingSource.criticalStockEnabled && (
-                    <div className="pl-4 border-l-2 border-indigo-500">
-                      <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
-                        Kritik Stok Miktarı
-                      </label>
-                      <input
-                        type="number"
-                        value={editingSource.criticalStockAmount}
-                        onChange={(e) =>
-                          setEditingSource({
-                            ...editingSource,
-                            criticalStockAmount: Number(e.target.value)
-                          })
-                        }
-                        className="w-32 px-3 py-2 rounded-lg border border-slate-300 text-sm"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-3 space-y-3">
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <div>
-                      <div className="font-semibold text-sm text-slate-900">
-                        OTOMATİK ÜRÜN GÖNDERİMİ YAPILSIN
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        Eşitlemeler yapılmış ise seçili satış kanallarına (Trendyol & Hepsiburada) otomatik gönderim yapılır.
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={editingSource.autoPublishEnabled}
-                      onChange={(e) =>
-                        setEditingSource({
-                          ...editingSource,
-                          autoPublishEnabled: e.target.checked
-                        })
-                      }
-                      className="w-5 h-5 accent-indigo-600"
-                    />
-                  </label>
+                <div className="pt-1 font-bold text-orange-600">
+                  IP Adresi : <span className="font-mono">77.92.152.100</span>
                 </div>
               </div>
             </div>
-          )}
 
-          {/* ADIM 3: FİYAT AYARLARI (Sopyo Birebir Fiyat Etiketleri + Pazaryeri Bazlı Kurallar) */}
-          {wizardStep === 2 && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between border-b pb-3">
-                <h2 className="text-lg font-bold text-slate-900">FİYAT AYARLARI</h2>
-                <button
-                  type="button"
-                  onClick={() => handleInspectXmlNodes(editingSource.url)}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 font-semibold hover:bg-indigo-100 cursor-pointer"
-                >
-                  XML Etiketlerini Yeniden Tara
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    Ürünün Satış Fiyatı Etiketi *
-                  </label>
-                  <select
-                    value={editingSource.salePriceTag}
-                    onChange={(e) =>
-                      setEditingSource({ ...editingSource, salePriceTag: e.target.value })
-                    }
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"
-                  >
-                    {detectedNodes.map((n) => (
-                      <option key={n.tag} value={n.tag}>
-                        {n.tag} ({n.count} kayıt)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    Ürünün Alış Fiyat Etiketi
-                  </label>
-                  <select
-                    value={editingSource.buyingPriceTag}
-                    onChange={(e) =>
-                      setEditingSource({ ...editingSource, buyingPriceTag: e.target.value })
-                    }
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"
-                  >
-                    {detectedNodes.map((n) => (
-                      <option key={n.tag} value={n.tag}>
-                        {n.tag} ({n.count} kayıt)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    Ürünün Liste (Üstü Çizili) Fiyat Etiketi
-                  </label>
-                  <select
-                    value={editingSource.marketPriceTag}
-                    onChange={(e) =>
-                      setEditingSource({ ...editingSource, marketPriceTag: e.target.value })
-                    }
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm"
-                  >
-                    {detectedNodes.map((n) => (
-                      <option key={n.tag} value={n.tag}>
-                        {n.tag} ({n.count} kayıt)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Fiyat Yuvarlama */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-                <div className="flex flex-wrap gap-6">
-                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={!editingSource.priceRoundEnabled}
-                      onChange={() =>
-                        setEditingSource({ ...editingSource, priceRoundEnabled: false })
-                      }
-                    />
-                    FİYAT YUVARLAMA UYGULANMASIN
-                  </label>
-                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={editingSource.priceRoundEnabled}
-                      onChange={() =>
-                        setEditingSource({ ...editingSource, priceRoundEnabled: true })
-                      }
-                    />
-                    FİYAT YUVARLAMA UYGULANSIN
-                  </label>
-                </div>
-
-                {editingSource.priceRoundEnabled && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                    <div>
-                      <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                        Fiyat Yuvarlama Şekli
-                      </label>
-                      <select
-                        value={editingSource.priceRoundType}
-                        onChange={(e) =>
-                          setEditingSource({
-                            ...editingSource,
-                            priceRoundType: e.target.value as any
-                          })
-                        }
-                        className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white"
-                      >
-                        <option value="x9">,x9</option>
-                        <option value="99">,99</option>
-                        <option value="x0">,x0</option>
-                        <option value="00">,00</option>
-                        <option value="90">,90</option>
-                      </select>
+            {/* SAĞ PANEL: ADIM İÇERİKLERİ */}
+            <div className="lg:col-span-9 p-6 lg:p-8 flex flex-col justify-between">
+              <div>
+                {/* ADIM 1: TANIMLAMA BİLGİLERİ */}
+                {wizardStep === 0 && (
+                  <div className="space-y-6 max-w-3xl">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                      <h2 className="text-base font-bold text-slate-800 tracking-wide">
+                        TANIMLAMA BİLGİLERİ
+                      </h2>
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
-                        Fiyat Yuvarlama Yönü
-                      </label>
-                      <select
-                        value={editingSource.priceRoundWay}
-                        onChange={(e) =>
-                          setEditingSource({
-                            ...editingSource,
-                            priceRoundWay: e.target.value as any
-                          })
-                        }
-                        className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white"
-                      >
-                        <option value="round">En Yakına</option>
-                        <option value="roundDown">Aşağı</option>
-                        <option value="roundUp">Yukarı</option>
-                      </select>
+
+                    <div className="space-y-5">
+                      <div>
+                        <label className="block text-xs font-bold uppercase text-slate-700 mb-2">
+                          XML KAYNAK ADI <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={editingSource.name}
+                          onChange={(e) =>
+                            setEditingSource({ ...editingSource, name: e.target.value })
+                          }
+                          placeholder="ariasclosetx"
+                          className="w-full px-4 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-800"
+                        />
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          Entegrasyonu yapılacak olan XML kaynağınızın adı (Ürün listesinde bu ad ile ürünlerinizi görebilir aynı zamanda filtre uygulayabilirsiniz.)
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase text-slate-700 mb-2">
+                          XML KAYNAK LINKI <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="url"
+                            value={editingSource.url}
+                            onChange={(e) =>
+                              setEditingSource({ ...editingSource, url: e.target.value })
+                            }
+                            placeholder="https://www.ariasclosetx.com/TicimaxXmlV2/CD636DDDFFD142D396880893BBFF5820/"
+                            className="flex-1 px-4 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm font-mono text-slate-800"
+                          />
+                          <button
+                            type="button"
+                            disabled={inspectingNodes || !editingSource.url}
+                            onClick={() => handleInspectXmlNodes(editingSource.url)}
+                            className="px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold shrink-0 cursor-pointer"
+                          >
+                            {inspectingNodes ? 'Taranıyor...' : 'Etiketleri Test Et'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase text-slate-700 mb-2">
+                          XML EKSTRA NOTLAR
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={editingSource.extraNotes}
+                          onChange={(e) =>
+                            setEditingSource({ ...editingSource, extraNotes: e.target.value })
+                          }
+                          placeholder="XML ile alakalı dikkat etmemiz gereken ekstra notları buraya girebilirsiniz."
+                          className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm text-slate-800"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Fiyat Kuralı Seçimi */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                {[
-                  { val: 0, label: 'FİYAT KURALI UYGULANMASIN' },
-                  { val: 1, label: 'SABİT FİYAT KURALI UYGULANSIN' },
-                  { val: 2, label: 'DEĞİŞKEN FİYAT KURALI UYGULANSIN' },
-                  { val: 3, label: 'PAZARYERİ BAZLI FİYAT KURALI UYGULANSIN' }
-                ].map((opt) => (
-                  <label
-                    key={opt.val}
-                    className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 cursor-pointer ${
-                      editingSource.priceRuleType === opt.val
-                        ? 'bg-indigo-50 border-indigo-600 text-indigo-800'
-                        : 'bg-white border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      checked={editingSource.priceRuleType === opt.val}
-                      onChange={() =>
-                        setEditingSource({ ...editingSource, priceRuleType: opt.val as any })
-                      }
-                    />
-                    {opt.label}
-                  </label>
-                ))}
-              </div>
+                {/* ADIM 2: ÜRÜN AYARLARI */}
+                {wizardStep === 1 && (
+                  <div className="space-y-6 max-w-4xl">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                      <h2 className="text-base font-bold text-slate-800 tracking-wide">
+                        ÜRÜN AYARLARI
+                      </h2>
+                    </div>
 
-              {/* Pazaryeri Bazlı Fiyat Kuralları Tablosu (Trendyol & Hepsiburada) */}
-              {editingSource.priceRuleType === 3 && (
-                <div className="border border-slate-200 rounded-2xl overflow-hidden">
-                  <div className="flex bg-slate-100 border-b border-slate-200">
-                    {(['Trendyol', 'Hepsiburada'] as const).map((ch) => (
-                      <button
-                        key={ch}
-                        type="button"
-                        onClick={() => setActivePriceMarketplaceTab(ch)}
-                        className={`px-6 py-3 text-sm font-bold transition cursor-pointer ${
-                          activePriceMarketplaceTab === ch
-                            ? 'bg-white text-indigo-600 border-b-2 border-indigo-600'
-                            : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                      >
-                        {ch} Fiyat Kuralları ({editingSource.marketplacePriceRules[ch]?.length || 0})
-                      </button>
-                    ))}
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-slate-700 mb-2">
+                        ÜRÜN KODU ÖN EKI
+                      </label>
+                      <input
+                        type="text"
+                        value={editingSource.stockCodePrefix}
+                        onChange={(e) =>
+                          setEditingSource({ ...editingSource, stockCodePrefix: e.target.value })
+                        }
+                        placeholder="AX"
+                        className="w-full max-w-xl px-4 py-2.5 rounded-lg border border-slate-300 text-sm font-mono text-slate-800"
+                      />
+                    </div>
+
+                    <div className="space-y-5 divide-y divide-slate-100">
+                      {/* 1. ÜRÜN BARKODLARI YENİDEN OLUŞTURULSUN */}
+                      <div className="flex items-start justify-between gap-6 pt-4">
+                        <div className="max-w-xl">
+                          <div className="font-bold text-xs uppercase text-slate-800">
+                            ÜRÜN BARKODLARI YENİDEN OLUŞTURULSUN
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                            Ürünleriniz Sopyo&apos;ya yüklenirken barkodları benzersiz bir şekilde yeniden eklemek istiyorsanız bu seçeneği aktif etmeniz gerekmektedir.
+                          </p>
+                        </div>
+                        <label className="inline-flex items-center gap-2 cursor-pointer shrink-0 pt-1">
+                          <input
+                            type="checkbox"
+                            checked={editingSource.generateBarcode}
+                            onChange={(e) =>
+                              setEditingSource({
+                                ...editingSource,
+                                generateBarcode: e.target.checked
+                              })
+                            }
+                            className="w-4 h-4 accent-blue-600 rounded"
+                          />
+                          <span className="text-xs font-medium text-slate-600">
+                            {editingSource.generateBarcode ? 'Ayarı Kapat' : 'Ayarı Aç'}
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* 2. ÜRÜN STOK GÜNCELLEMESİ YAPILMASIN */}
+                      <div className="flex items-start justify-between gap-6 pt-4">
+                        <div className="max-w-xl">
+                          <div className="font-bold text-xs uppercase text-slate-800">
+                            ÜRÜN STOK GÜNCELLEMESİ YAPILMASIN
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                            Ürünleriniz Sopyo&apos;ya yüklendikten sonra 3 saatte bir stokları güncellenmemesini istiyorsanız bu seçeneği aktif etmeniz gerekmektedir.
+                          </p>
+                        </div>
+                        <label className="inline-flex items-center gap-2 cursor-pointer shrink-0 pt-1">
+                          <input
+                            type="checkbox"
+                            checked={editingSource.disableStockSync}
+                            onChange={(e) =>
+                              setEditingSource({
+                                ...editingSource,
+                                disableStockSync: e.target.checked
+                              })
+                            }
+                            className="w-4 h-4 accent-blue-600 rounded"
+                          />
+                          <span className="text-xs font-medium text-slate-600">
+                            {editingSource.disableStockSync ? 'Ayarı Kapat' : 'Ayarı Aç'}
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* 3. ÜRÜN FİYAT GÜNCELLEMESİ YAPILMASIN */}
+                      <div className="flex items-start justify-between gap-6 pt-4">
+                        <div className="max-w-xl">
+                          <div className="font-bold text-xs uppercase text-slate-800">
+                            ÜRÜN FİYAT GÜNCELLEMESİ YAPILMASIN
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                            Ürünleriniz Sopyo&apos;ya yüklendikten sonra 3 saatte bir fiyatlarının güncellenmemesini istiyorsanız bu seçeneği aktif etmeniz gerekmektedir.
+                          </p>
+                        </div>
+                        <label className="inline-flex items-center gap-2 cursor-pointer shrink-0 pt-1">
+                          <input
+                            type="checkbox"
+                            checked={editingSource.disablePriceSync}
+                            onChange={(e) =>
+                              setEditingSource({
+                                ...editingSource,
+                                disablePriceSync: e.target.checked
+                              })
+                            }
+                            className="w-4 h-4 accent-blue-600 rounded"
+                          />
+                          <span className="text-xs font-medium text-slate-600">
+                            {editingSource.disablePriceSync ? 'Ayarı Kapat' : 'Ayarı Aç'}
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* 4. SOPYO'DA OLMAYAN ÜRÜNLER EKLENMESİN */}
+                      <div className="flex items-start justify-between gap-6 pt-4">
+                        <div className="max-w-xl">
+                          <div className="font-bold text-xs uppercase text-slate-800">
+                            SOPYO&apos;DA OLMAYAN ÜRÜNLER EKLENMESİN
+                          </div>
+                          <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                            Ürünleriniz Sopyo&apos;ya yüklendikten sonra kontrol edildiğinde Sopyo&apos;da olmayan ürünlerin eklenmemesini istiyorsanız bu seçeneği aktif etmeniz gerekmektedir.
+                          </p>
+                        </div>
+                        <label className="inline-flex items-center gap-2 cursor-pointer shrink-0 pt-1">
+                          <input
+                            type="checkbox"
+                            checked={editingSource.disableNewProducts}
+                            onChange={(e) =>
+                              setEditingSource({
+                                ...editingSource,
+                                disableNewProducts: e.target.checked
+                              })
+                            }
+                            className="w-4 h-4 accent-blue-600 rounded"
+                          />
+                          <span className="text-xs font-medium text-slate-600">
+                            {editingSource.disableNewProducts ? 'Ayarı Kapat' : 'Ayarı Aç'}
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* 5. STOK SIFIRLAMA TANIMI + Kritik Stok Miktarı */}
+                      <div className="pt-4 space-y-4">
+                        <div className="flex items-start justify-between gap-6">
+                          <div className="max-w-xl">
+                            <div className="font-bold text-xs uppercase text-slate-800">
+                              STOK SIFIRLAMA TANIMI
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                              Ürünleriniz Sopyo&apos;ya yüklendikten sonra kontrol edildiğinde XML&apos;de stok miktarları belli bir seviye altına düştüğünde stoklarınızı sıfırlayıp satışa kapatmak istiyorsanız bu seçeneği aktif etmeniz gerekmektedir.
+                            </p>
+                          </div>
+                          <label className="inline-flex items-center gap-2 cursor-pointer shrink-0 pt-1">
+                            <input
+                              type="checkbox"
+                              checked={editingSource.criticalStockEnabled}
+                              onChange={(e) =>
+                                setEditingSource({
+                                  ...editingSource,
+                                  criticalStockEnabled: e.target.checked
+                                })
+                              }
+                              className="w-4 h-4 accent-blue-600 rounded"
+                            />
+                            <span className="text-xs font-medium text-slate-600">
+                              {editingSource.criticalStockEnabled ? 'Ayarı Kapat' : 'Ayarı Aç'}
+                            </span>
+                          </label>
+                        </div>
+
+                        {editingSource.criticalStockEnabled && (
+                          <div className="max-w-xl">
+                            <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
+                              KRİTİK STOK MİKTARI
+                            </label>
+                            <input
+                              type="number"
+                              value={editingSource.criticalStockAmount}
+                              onChange={(e) =>
+                                setEditingSource({
+                                  ...editingSource,
+                                  criticalStockAmount: Number(e.target.value)
+                                })
+                              }
+                              className="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm"
+                            />
+                            <p className="text-[11px] text-slate-400 mt-1">
+                              Girdiğiniz değer ve altında stok miktarı olan ürünlerinizin stokları sıfırlanarak satışa kapatılacaktır.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 6. OTOMATİK ÜRÜN GÖNDERİMİ YAPILSIN + Satış Kanalı Seçiniz */}
+                      <div className="pt-4 space-y-4">
+                        <div className="flex items-start justify-between gap-6">
+                          <div className="max-w-xl">
+                            <div className="font-bold text-xs uppercase text-slate-800">
+                              OTOMATİK ÜRÜN GÖNDERİMİ YAPILSIN
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                              Ürünleriniz Sopyo&apos;ya yüklendikten sonra eşitlemeler yapılmış ise ayarı açık olan satış kanallarına otomatik gönderiminin yapılmasını istiyorsanız bu seçeneği aktif etmeniz gerekmektedir.
+                            </p>
+                          </div>
+                          <label className="inline-flex items-center gap-2 cursor-pointer shrink-0 pt-1">
+                            <input
+                              type="checkbox"
+                              checked={editingSource.autoPublishEnabled}
+                              onChange={(e) =>
+                                setEditingSource({
+                                  ...editingSource,
+                                  autoPublishEnabled: e.target.checked
+                                })
+                              }
+                              className="w-4 h-4 accent-blue-600 rounded"
+                            />
+                            <span className="text-xs font-medium text-slate-600">
+                              {editingSource.autoPublishEnabled ? 'Ayarı Kapat' : 'Ayarı Aç'}
+                            </span>
+                          </label>
+                        </div>
+
+                        {editingSource.autoPublishEnabled && (
+                          <div className="max-w-xl">
+                            <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
+                              SATIŞ KANALI SEÇİNİZ
+                            </label>
+                            <div className="flex flex-wrap gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50">
+                              {(['Hepsiburada', 'Trendyol'] as const).map((ch) => {
+                                const isChecked = (
+                                  editingSource.autoPublishChannels || ['Trendyol', 'Hepsiburada']
+                                ).includes(ch);
+                                return (
+                                  <label
+                                    key={ch}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-white border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        const current = new Set(
+                                          editingSource.autoPublishChannels || [
+                                            'Trendyol',
+                                            'Hepsiburada'
+                                          ]
+                                        );
+                                        if (e.target.checked) current.add(ch);
+                                        else current.delete(ch);
+                                        setEditingSource({
+                                          ...editingSource,
+                                          autoPublishChannels: Array.from(current)
+                                        });
+                                      }}
+                                      className="w-4 h-4 accent-blue-600"
+                                    />
+                                    {ch}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
+                )}
 
-                  <div className="p-4 space-y-4">
-                    <table className="w-full text-left border-collapse text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
-                          <th className="py-2 px-2">FİYAT &gt;=</th>
-                          <th className="py-2 px-2">&lt; FİYAT</th>
-                          <th className="py-2 px-2">KURAL TİPİ</th>
-                          <th className="py-2 px-2">İŞLEM TİPİ</th>
-                          <th className="py-2 px-2">İŞLEM MİKTARI</th>
-                          <th className="py-2 px-2">EK FİYAT (TL)</th>
-                          <th className="py-2 px-2"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {(editingSource.marketplacePriceRules[activePriceMarketplaceTab] || []).map(
-                          (rule, idx) => (
-                            <tr key={idx}>
-                              <td className="py-2 px-2">
-                                <input
-                                  type="number"
-                                  value={rule.ruleMinPrice}
-                                  onChange={(e) =>
-                                    updateMarketplaceRule(
-                                      activePriceMarketplaceTab,
-                                      idx,
-                                      'ruleMinPrice',
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-28 px-2.5 py-1.5 rounded-lg border border-slate-300"
-                                />
-                              </td>
-                              <td className="py-2 px-2">
-                                <input
-                                  type="number"
-                                  value={rule.ruleMaxPrice}
-                                  onChange={(e) =>
-                                    updateMarketplaceRule(
-                                      activePriceMarketplaceTab,
-                                      idx,
-                                      'ruleMaxPrice',
-                                      e.target.value
-                                    )
-                                  }
-                                  className="w-36 px-2.5 py-1.5 rounded-lg border border-slate-300"
-                                />
-                              </td>
+                {/* ADIM 3: FİYAT AYARLARI */}
+                {wizardStep === 2 && (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                      <h2 className="text-base font-bold text-slate-800 tracking-wide">
+                        FİYAT AYARLARI
+                      </h2>
+                    </div>
+
+                    {/* 3 Etiket Seçimi: Satış Fiyatı, Alış Fiyatı, Liste(Üstü Çizili) Fiyatı */}
+                    <div className="space-y-4 max-w-2xl">
+                      <div>
+                        <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
+                          ÜRÜNÜN SATIŞ FİYATI ETİKETİ <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={editingSource.salePriceTag || 'SatisFiyati'}
+                          onChange={(e) =>
+                            setEditingSource({ ...editingSource, salePriceTag: e.target.value })
+                          }
+                          className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"
+                        >
+                          <option value="">----------</option>
+                          {detectedNodes.map((n) => (
+                            <option key={n.tag} value={n.tag}>
+                              {n.tag}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
+                          ÜRÜNÜN ALIŞ FİYAT ETİKETİ
+                        </label>
+                        <select
+                          value={editingSource.buyingPriceTag || 'SatisFiyati'}
+                          onChange={(e) =>
+                            setEditingSource({ ...editingSource, buyingPriceTag: e.target.value })
+                          }
+                          className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"
+                        >
+                          <option value="">----------</option>
+                          {detectedNodes.map((n) => (
+                            <option key={n.tag} value={n.tag}>
+                              {n.tag}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
+                          ÜRÜNÜN LİSTE(ÜSTÜ ÇİZİLİ) FİYAT ETİKETİ
+                        </label>
+                        <select
+                          value={editingSource.marketPriceTag || ''}
+                          onChange={(e) =>
+                            setEditingSource({ ...editingSource, marketPriceTag: e.target.value })
+                          }
+                          className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"
+                        >
+                          <option value="">----------</option>
+                          {detectedNodes.map((n) => (
+                            <option key={n.tag} value={n.tag}>
+                              {n.tag}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* KDV Seçimi (3 Kutulu Radyo: FİYATLARA KDV DAHİL | XML KDV ETİKETİNİ KULLAN | MANUEL KDV ORANI KULLAN) */}
+                    <div className="space-y-3 max-w-2xl">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {[
+                          { val: 0, label: 'FİYATLARA KDV DAHİL' },
+                          { val: 1, label: 'XML KDV ETİKETİNİ KULLAN' },
+                          { val: 2, label: 'MANUEL KDV ORANI KULLAN' }
+                        ].map((kdvOpt) => (
+                          <label
+                            key={kdvOpt.val}
+                            className={`p-3.5 rounded-lg border text-xs font-bold flex items-center gap-2.5 cursor-pointer transition ${
+                              (editingSource.taxIncludedMode ?? 0) === kdvOpt.val
+                                ? 'bg-blue-50/70 border-blue-500 text-blue-700'
+                                : 'bg-white border-slate-200 text-slate-600'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              checked={(editingSource.taxIncludedMode ?? 0) === kdvOpt.val}
+                              onChange={() =>
+                                setEditingSource({
+                                  ...editingSource,
+                                  taxIncludedMode: kdvOpt.val as 0 | 1 | 2
+                                })
+                              }
+                              className="w-4 h-4 accent-blue-600"
+                            />
+                            {kdvOpt.label}
+                          </label>
+                        ))}
+                      </div>
+
+                      {editingSource.taxIncludedMode === 1 && (
+                        <div>
+                          <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                            XML KDV ETİKETİNİ KULLAN
+                          </label>
+                          <select
+                            value={editingSource.customTagMapping?.vatRate || 'KdvOrani'}
+                            onChange={(e) =>
+                              setEditingSource({
+                                ...editingSource,
+                                customTagMapping: {
+                                  ...editingSource.customTagMapping,
+                                  vatRate: e.target.value
+                                }
+                              })
+                            }
+                            className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm"
+                          >
+                            <option value="">----------</option>
+                            {detectedNodes.map((n) => (
+                              <option key={n.tag} value={n.tag}>
+                                {n.tag}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {editingSource.taxIncludedMode === 2 && (
+                        <div>
+                          <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
+                            MANUEL KDV ORANI KULLAN
+                          </label>
+                          <select
+                            value={editingSource.fixedTaxRate || 20}
+                            onChange={(e) =>
+                              setEditingSource({
+                                ...editingSource,
+                                fixedTaxRate: Number(e.target.value)
+                              })
+                            }
+                            className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm"
+                          >
+                            <option value={20}>20</option>
+                            <option value={18}>18</option>
+                            <option value={10}>10</option>
+                            <option value={8}>8</option>
+                            <option value={1}>1</option>
+                            <option value={0}>0</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Fiyat Yuvarlama (2 Kutulu Radyo: FİYAT YUVARLAMA UYGULANMASIN | FİYAT YUVARLAMA UYGULANSIN) */}
+                    <div className="space-y-3 max-w-2xl">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <label
+                          className={`p-3.5 rounded-lg border text-xs font-bold flex items-center gap-2.5 cursor-pointer transition ${
+                            !editingSource.priceRoundEnabled
+                              ? 'bg-blue-50/70 border-blue-500 text-blue-700'
+                              : 'bg-white border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            checked={!editingSource.priceRoundEnabled}
+                            onChange={() =>
+                              setEditingSource({ ...editingSource, priceRoundEnabled: false })
+                            }
+                            className="w-4 h-4 accent-blue-600"
+                          />
+                          FİYAT YUVARLAMA UYGULANMASIN
+                        </label>
+                        <label
+                          className={`p-3.5 rounded-lg border text-xs font-bold flex items-center gap-2.5 cursor-pointer transition ${
+                            editingSource.priceRoundEnabled
+                              ? 'bg-blue-50/70 border-blue-500 text-blue-700'
+                              : 'bg-white border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            checked={editingSource.priceRoundEnabled}
+                            onChange={() =>
+                              setEditingSource({ ...editingSource, priceRoundEnabled: true })
+                            }
+                            className="w-4 h-4 accent-blue-600"
+                          />
+                          FİYAT YUVARLAMA UYGULANSIN
+                        </label>
+                      </div>
+
+                      {editingSource.priceRoundEnabled && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                          <div>
+                            <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                              FİYAT YUVARLAMA ŞEKLİ
+                            </label>
+                            <select
+                              value={editingSource.priceRoundType}
+                              onChange={(e) =>
+                                setEditingSource({
+                                  ...editingSource,
+                                  priceRoundType: e.target.value as any
+                                })
+                              }
+                              className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white"
+                            >
+                              <option value="x9">,x9</option>
+                              <option value="99">,99</option>
+                              <option value="x0">,x0</option>
+                              <option value="00">,00</option>
+                              <option value="90">,90</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                              FİYAT YUVARLAMA YÖNÜ
+                            </label>
+                            <select
+                              value={editingSource.priceRoundWay}
+                              onChange={(e) =>
+                                setEditingSource({
+                                  ...editingSource,
+                                  priceRoundWay: e.target.value as any
+                                })
+                              }
+                              className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white"
+                            >
+                              <option value="round">En Yakına</option>
+                              <option value="roundDown">Aşağı</option>
+                              <option value="roundUp">Yukarı</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Fiyat Kuralı Seçimi (4 Kutulu Radyo) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 max-w-2xl">
+                      {[
+                        { val: 0, label: 'FİYAT KURALI UYGULANMASIN' },
+                        { val: 1, label: 'SABİT FİYAT KURALI UYGULANSIN' },
+                        { val: 2, label: 'DEĞİŞKEN FİYAT KURALI UYGULANSIN' },
+                        { val: 3, label: 'PAZARYERİ BAZLI FİYAT KURALI UYGULANSIN' }
+                      ].map((opt) => (
+                        <label
+                          key={opt.val}
+                          className={`p-3.5 rounded-lg border text-xs font-bold flex items-center gap-2.5 cursor-pointer transition ${
+                            editingSource.priceRuleType === opt.val
+                              ? 'bg-blue-50/70 border-blue-500 text-blue-700'
+                              : 'bg-white border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            checked={editingSource.priceRuleType === opt.val}
+                            onChange={() =>
+                              setEditingSource({ ...editingSource, priceRuleType: opt.val as any })
+                            }
+                            className="w-4 h-4 accent-blue-600 shrink-0"
+                          />
+                          <span className="leading-snug">{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Sabit Fiyat Kuralı Tablosu (priceRuleType === 1) */}
+                    {editingSource.priceRuleType === 1 && (
+                      <div className="border border-slate-200 rounded-xl p-4">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-200 uppercase text-slate-500">
+                              <th className="py-2 px-2">KURAL TİPİ</th>
+                              <th className="py-2 px-2">İŞLEM TİPİ</th>
+                              <th className="py-2 px-2">İŞLEM MİKTARI</th>
+                              <th className="py-2 px-2">EK FİYAT (TL)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
                               <td className="py-2 px-2">
                                 <select
-                                  value={rule.ruleType}
+                                  value={editingSource.fixedPriceRule.ruleType}
                                   onChange={(e) =>
-                                    updateMarketplaceRule(
-                                      activePriceMarketplaceTab,
-                                      idx,
-                                      'ruleType',
-                                      e.target.value
-                                    )
+                                    setEditingSource({
+                                      ...editingSource,
+                                      fixedPriceRule: {
+                                        ...editingSource.fixedPriceRule,
+                                        ruleType: e.target.value as any
+                                      }
+                                    })
                                   }
-                                  className="px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                  className="px-3 py-2 rounded-lg border border-slate-300"
                                 >
                                   <option value="increase">Fiyat Artışı</option>
                                   <option value="discount">İndirim</option>
@@ -1045,172 +1225,471 @@ export default function XmlView({
                               </td>
                               <td className="py-2 px-2">
                                 <select
-                                  value={rule.ruleOperationType}
+                                  value={editingSource.fixedPriceRule.ruleOperationType}
                                   onChange={(e) =>
-                                    updateMarketplaceRule(
-                                      activePriceMarketplaceTab,
-                                      idx,
-                                      'ruleOperationType',
-                                      e.target.value
-                                    )
+                                    setEditingSource({
+                                      ...editingSource,
+                                      fixedPriceRule: {
+                                        ...editingSource.fixedPriceRule,
+                                        ruleOperationType: e.target.value as any
+                                      }
+                                    })
                                   }
-                                  className="px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                  className="px-3 py-2 rounded-lg border border-slate-300"
                                 >
                                   <option value="percent">Yüzdelik(%)</option>
-                                  <option value="price">Fiyat (TL)</option>
+                                  <option value="price">Fiyat</option>
                                 </select>
                               </td>
                               <td className="py-2 px-2">
                                 <input
                                   type="number"
-                                  value={rule.ruleAmount}
+                                  value={editingSource.fixedPriceRule.ruleAmount}
                                   onChange={(e) =>
-                                    updateMarketplaceRule(
-                                      activePriceMarketplaceTab,
-                                      idx,
-                                      'ruleAmount',
-                                      e.target.value
-                                    )
+                                    setEditingSource({
+                                      ...editingSource,
+                                      fixedPriceRule: {
+                                        ...editingSource.fixedPriceRule,
+                                        ruleAmount: Number(e.target.value)
+                                      }
+                                    })
                                   }
-                                  className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold"
+                                  className="w-28 px-3 py-2 rounded-lg border border-slate-300"
                                 />
                               </td>
                               <td className="py-2 px-2">
                                 <input
                                   type="number"
-                                  value={rule.ruleExtraPrice}
+                                  value={editingSource.fixedPriceRule.ruleExtraPrice}
                                   onChange={(e) =>
-                                    updateMarketplaceRule(
-                                      activePriceMarketplaceTab,
-                                      idx,
-                                      'ruleExtraPrice',
-                                      e.target.value
-                                    )
+                                    setEditingSource({
+                                      ...editingSource,
+                                      fixedPriceRule: {
+                                        ...editingSource.fixedPriceRule,
+                                        ruleExtraPrice: Number(e.target.value)
+                                      }
+                                    })
                                   }
-                                  className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold"
+                                  className="w-28 px-3 py-2 rounded-lg border border-slate-300"
                                 />
                               </td>
-                              <td className="py-2 px-2">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    removeMarketplaceRuleRow(activePriceMarketplaceTab, idx)
-                                  }
-                                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </td>
                             </tr>
-                          )
-                        )}
-                      </tbody>
-                    </table>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
 
-                    <button
-                      type="button"
-                      onClick={() => addMarketplaceRuleRow(activePriceMarketplaceTab)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100 cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" /> Yeni Fiyat Aralığı Satırı Ekle
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+                    {/* Pazaryeri Bazlı Fiyat Kuralları Tablosu (Hepsiburada & Trendyol) */}
+                    {editingSource.priceRuleType === 3 && (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="flex bg-slate-50 border-b border-slate-200">
+                          {(['Hepsiburada', 'Trendyol'] as const).map((ch) => (
+                            <button
+                              key={ch}
+                              type="button"
+                              onClick={() => setActivePriceMarketplaceTab(ch)}
+                              className={`px-6 py-3 text-xs font-bold transition cursor-pointer ${
+                                activePriceMarketplaceTab === ch
+                                  ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              {ch}
+                            </button>
+                          ))}
+                        </div>
 
-          {/* ADIM 4: ONAY */}
-          {wizardStep === 3 && (
-            <div className="space-y-5 max-w-3xl">
-              <h2 className="text-lg font-bold text-slate-900 border-b pb-3">
-                XML DEĞİŞİKLİK İŞLEM ONAYI
-              </h2>
+                        <div className="p-4 space-y-4">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200 uppercase text-slate-500">
+                                <th className="py-2 px-2">FİYAT &gt;=</th>
+                                <th className="py-2 px-2">&lt; FİYAT</th>
+                                <th className="py-2 px-2">KURAL TİPİ</th>
+                                <th className="py-2 px-2">İŞLEM TİPİ</th>
+                                <th className="py-2 px-2">İŞLEM MİKTARI</th>
+                                <th className="py-2 px-2">EK FİYAT (TL)</th>
+                                <th className="py-2 px-2"></th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {(
+                                editingSource.marketplacePriceRules[activePriceMarketplaceTab] || []
+                              ).map((rule, idx) => (
+                                <tr key={idx}>
+                                  <td className="py-2 px-2">
+                                    <input
+                                      type="number"
+                                      value={rule.ruleMinPrice}
+                                      onChange={(e) =>
+                                        updateMarketplaceRule(
+                                          activePriceMarketplaceTab,
+                                          idx,
+                                          'ruleMinPrice',
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <input
+                                      type="number"
+                                      value={rule.ruleMaxPrice}
+                                      onChange={(e) =>
+                                        updateMarketplaceRule(
+                                          activePriceMarketplaceTab,
+                                          idx,
+                                          'ruleMaxPrice',
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-36 px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <select
+                                      value={rule.ruleType}
+                                      onChange={(e) =>
+                                        updateMarketplaceRule(
+                                          activePriceMarketplaceTab,
+                                          idx,
+                                          'ruleType',
+                                          e.target.value
+                                        )
+                                      }
+                                      className="px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                    >
+                                      <option value="increase">Fiyat Artışı</option>
+                                      <option value="discount">İndirim</option>
+                                    </select>
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <select
+                                      value={rule.ruleOperationType}
+                                      onChange={(e) =>
+                                        updateMarketplaceRule(
+                                          activePriceMarketplaceTab,
+                                          idx,
+                                          'ruleOperationType',
+                                          e.target.value
+                                        )
+                                      }
+                                      className="px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                    >
+                                      <option value="percent">Yüzdelik(%)</option>
+                                      <option value="price">Fiyat</option>
+                                    </select>
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <input
+                                      type="number"
+                                      value={rule.ruleAmount}
+                                      onChange={(e) =>
+                                        updateMarketplaceRule(
+                                          activePriceMarketplaceTab,
+                                          idx,
+                                          'ruleAmount',
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <input
+                                      type="number"
+                                      value={rule.ruleExtraPrice}
+                                      onChange={(e) =>
+                                        updateMarketplaceRule(
+                                          activePriceMarketplaceTab,
+                                          idx,
+                                          'ruleExtraPrice',
+                                          e.target.value
+                                        )
+                                      }
+                                      className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        removeMarketplaceRuleRow(activePriceMarketplaceTab, idx)
+                                      }
+                                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                  <div className="font-bold text-slate-900">Tanımlama & Ürün Ayarları</div>
-                  <div>
-                    <strong>XML Adı:</strong> {editingSource.name}
+                          <button
+                            type="button"
+                            onClick={() => addMarketplaceRuleRow(activePriceMarketplaceTab)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" /> YENİ SATIR EKLE
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="break-all">
-                    <strong>XML Linki:</strong> {editingSource.url}
-                  </div>
-                  <div>
-                    <strong>Stok Kodu Ön Eki:</strong> {editingSource.stockCodePrefix || 'Yok'}
-                  </div>
-                  <div>
-                    <strong>Barkod Üretimi:</strong>{' '}
-                    {editingSource.generateBarcode ? 'Açık (Benzersiz EAN-13)' : 'Kapalı'}
-                  </div>
-                  <div>
-                    <strong>Kritik Stok Sıfırlama:</strong>{' '}
-                    {editingSource.criticalStockEnabled
-                      ? `Açık (<=${editingSource.criticalStockAmount} ise 0 gönder)`
-                      : 'Kapalı'}
-                  </div>
-                </div>
+                )}
 
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                  <div className="font-bold text-slate-900">Pazaryeri Fiyat Kuralları Özeti</div>
-                  <div>
-                    <strong>Baz Fiyat Etiketi:</strong> {editingSource.salePriceTag}
+                {/* ADIM 4: ONAY (Sopyo Birebir Önizleme + Ürün Ayar Seçimleri + XML Fiyat Ayar Seçimleri + Tablo) */}
+                {wizardStep === 3 && (
+                  <div className="space-y-6">
+                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
+                      <h2 className="text-base font-bold text-slate-800">
+                        KAYNAK ADI: <span className="text-slate-900">{editingSource.name}</span>
+                      </h2>
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500 text-white text-xs font-bold">
+                        ? Kalan Ürün Limitiniz : Sınırsız ({editingSource.totalProductCount || 1647} Ürün)
+                      </span>
+                    </div>
+
+                    {/* 1. ÖRNEK ÜRÜN DEĞİŞİKLİK ÖNİZLEMESİ */}
+                    <div className="border-b border-slate-200 pb-6 space-y-4">
+                      <h3 className="text-xs font-bold uppercase text-slate-700 tracking-wide">
+                        ÖRNEK ÜRÜN DEĞİŞİKLİK ÖNİZLEMESİ
+                      </h3>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-8 pl-2">
+                        <div className="w-24 h-24 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-3xl shrink-0">
+                          🥿
+                        </div>
+                        <div className="space-y-3">
+                          <div>
+                            <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                              <span className="text-blue-500">▣</span> ÜRÜN KODU
+                            </div>
+                            <div className="text-base font-bold text-slate-800 mt-0.5 font-mono">
+                              KET000123 <span className="text-blue-600 mx-1">➔</span>{' '}
+                              <span className="underline decoration-blue-600 text-blue-700">
+                                {editingSource.stockCodePrefix || 'AX'}
+                              </span>
+                              KET000123
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                              <span className="text-blue-500">||||||||</span> ÜRÜN BARKODU
+                            </div>
+                            <div className="text-base font-bold text-slate-800 mt-0.5 font-mono">
+                              869000203134 <span className="text-blue-600 mx-1">➔</span>{' '}
+                              {editingSource.generateBarcode ? '869000123246' : '869000203134'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. ÜRÜN AYAR SEÇİMLERİ */}
+                    <div className="border-b border-slate-200 pb-6 space-y-4">
+                      <h3 className="text-xs font-bold uppercase text-slate-700 tracking-wide">
+                        ÜRÜN AYAR SEÇİMLERİ
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase">
+                            <span className="text-blue-500">?</span> ÜRÜN BARKODLARI YENİDEN
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 mt-1">
+                            {editingSource.generateBarcode ? 'OLUŞTURULSUN' : 'OLUŞTURULMASIN'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase">
+                            <span className="text-blue-500">?</span> STOK GÜNCELLEMESİ
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 mt-1">
+                            {editingSource.disableStockSync ? 'YAPILMASIN' : 'YAPILSIN'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase">
+                            <span className="text-blue-500">?</span> FİYAT GÜNCELLEMESİ
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 mt-1">
+                            {editingSource.disablePriceSync ? 'YAPILMASIN' : 'YAPILSIN'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase">
+                            <span className="text-blue-500">?</span> SOPYO&apos;DA OLMAYAN ÜRÜNLER
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 mt-1">
+                            {editingSource.disableNewProducts ? 'EKLENMESİN' : 'EKLENSİN'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. XML FİYAT AYAR SEÇİMLERİ */}
+                    <div className="border-b border-slate-200 pb-6 space-y-4">
+                      <h3 className="text-xs font-bold uppercase text-slate-700 tracking-wide">
+                        XML FİYAT AYAR SEÇİMLERİ
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase">
+                            <span className="text-blue-500">?</span> XML SATIŞ FİYATI ETİKETİ
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 mt-1">
+                            {editingSource.salePriceTag || 'SatisFiyati'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase">
+                            <span className="text-blue-500">?</span> XML ALIŞ FİYATI ETİKETİ
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 mt-1">
+                            {editingSource.buyingPriceTag || 'SatisFiyati'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase">
+                            <span className="text-blue-500">?</span> XML LİSTE(ÜSTÜ ÇİZİLİ) FİYATI ETİKETİ
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 mt-1">
+                            {editingSource.marketPriceTag ? editingSource.marketPriceTag : 'KULLANILMASIN'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase">
+                            <span className="text-blue-500">?</span> KRİTİK STOK MİKTARI
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 mt-1">
+                            {editingSource.criticalStockEnabled ? editingSource.criticalStockAmount : 'Yok'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase">
+                            <span className="text-blue-500">?</span> FİYAT KURALI
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 mt-1">
+                            {editingSource.priceRuleType === 3
+                              ? 'PAZARYERİ BAZLI FİYAT KURALI UYGULANSIN'
+                              : editingSource.priceRuleType === 2
+                              ? 'DEĞİŞKEN FİYAT KURALI UYGULANSIN'
+                              : editingSource.priceRuleType === 1
+                              ? 'SABİT FİYAT KURALI UYGULANSIN'
+                              : 'FİYAT KURALI UYGULANMASIN'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-bold text-slate-500 uppercase">
+                            <span className="text-blue-500">?</span> KDV BİLGİSİ
+                          </div>
+                          <div className="text-sm font-bold text-slate-800 mt-1">
+                            {(editingSource.taxIncludedMode ?? 0) === 0
+                              ? 'FİYATLARA KDV DAHİL'
+                              : editingSource.taxIncludedMode === 1
+                              ? 'XML KDV ETİKETİNİ KULLAN'
+                              : `MANUEL KDV ORANI (%${editingSource.fixedTaxRate || 20})`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 4. PAZARYERİ FİYAT KURALLARI ÖZET TABLOSU (Hepsiburada | Trendyol) */}
+                    {editingSource.priceRuleType === 3 && (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="flex bg-slate-50 border-b border-slate-200">
+                          {(['Hepsiburada', 'Trendyol'] as const).map((ch) => (
+                            <button
+                              key={ch}
+                              type="button"
+                              onClick={() => setActivePriceMarketplaceTab(ch)}
+                              className={`px-6 py-2.5 text-xs font-bold transition cursor-pointer ${
+                                activePriceMarketplaceTab === ch
+                                  ? 'bg-white text-blue-600 border-b-2 border-blue-600'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              {ch}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="p-4">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200 uppercase text-slate-500">
+                                <th className="py-2 px-2">FİYAT &gt;=</th>
+                                <th className="py-2 px-2">&lt; FİYAT</th>
+                                <th className="py-2 px-2">KURAL TİPİ</th>
+                                <th className="py-2 px-2">İŞLEM TİPİ</th>
+                                <th className="py-2 px-2">İŞLEM MİKTARI</th>
+                                <th className="py-2 px-2">EK FİYAT (TL)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {(
+                                editingSource.marketplacePriceRules[activePriceMarketplaceTab] || []
+                              ).map((r, i) => (
+                                <tr key={i} className="text-slate-800 font-medium">
+                                  <td className="py-2.5 px-2">{r.ruleMinPrice}</td>
+                                  <td className="py-2.5 px-2">
+                                    {r.ruleMaxPrice > 999999 ? '9999999999999999' : r.ruleMaxPrice}
+                                  </td>
+                                  <td className="py-2.5 px-2">
+                                    {r.ruleType === 'increase' ? 'Fiyat Artışı' : 'İndirim'}
+                                  </td>
+                                  <td className="py-2.5 px-2">
+                                    {r.ruleOperationType === 'percent' ? 'Yüzdelik(%)' : 'Fiyat'}
+                                  </td>
+                                  <td className="py-2.5 px-2">{r.ruleAmount}</td>
+                                  <td className="py-2.5 px-2">{r.ruleExtraPrice || 0}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <strong>Trendyol Kuralları:</strong>
-                    <ul className="list-disc list-inside text-xs text-slate-600 mt-1">
-                      {editingSource.marketplacePriceRules.Trendyol.map((r, i) => (
-                        <li key={i}>
-                          {r.ruleMinPrice} TL - {r.ruleMaxPrice > 999999 ? 'Üzeri' : `${r.ruleMaxPrice} TL`}: +%
-                          {r.ruleAmount} + {r.ruleExtraPrice || 0} TL
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <strong>Hepsiburada Kuralları:</strong>
-                    <ul className="list-disc list-inside text-xs text-slate-600 mt-1">
-                      {editingSource.marketplacePriceRules.Hepsiburada.map((r, i) => (
-                        <li key={i}>
-                          {r.ruleMinPrice} TL - {r.ruleMaxPrice > 999999 ? 'Üzeri' : `${r.ruleMaxPrice} TL`}: +%
-                          {r.ruleAmount} + {r.ruleExtraPrice || 0} TL
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
+                )}
+              </div>
+
+              {/* Alt İleri / Önceki Adım / Onayla ve Bitir Barı */}
+              <div className="flex items-center justify-between pt-6 mt-8 border-t border-slate-200">
+                {wizardStep > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep((s) => Math.max(0, s - 1))}
+                    className="px-6 py-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold cursor-pointer"
+                  >
+                    ← ÖNCEKİ ADIM
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                {wizardStep < 3 ? (
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep((s) => Math.min(3, s + 1))}
+                    className="px-7 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs cursor-pointer"
+                  >
+                    DEVAM ET →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleSaveWizard}
+                    className="px-7 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs cursor-pointer"
+                  >
+                    ONAYLA VE BİTİR →
+                  </button>
+                )}
               </div>
             </div>
-          )}
-
-          {/* Alt İleri/Geri Butonları */}
-          <div className="flex items-center justify-between pt-6 mt-6 border-t border-slate-200">
-            <button
-              type="button"
-              disabled={wizardStep === 0}
-              onClick={() => setWizardStep((s) => Math.max(0, s - 1))}
-              className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700 text-sm font-semibold cursor-pointer"
-            >
-              ← GERİ DÖN
-            </button>
-
-            {wizardStep < 3 ? (
-              <button
-                type="button"
-                onClick={() => setWizardStep((s) => Math.min(3, s + 1))}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold cursor-pointer"
-              >
-                DEVAM ET <ChevronRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSaveWizard}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-md shadow-emerald-600/20 cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" /> ONAYLA VE KAYDET
-              </button>
-            )}
           </div>
         </div>
       </div>
