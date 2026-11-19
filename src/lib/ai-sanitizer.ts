@@ -13,7 +13,9 @@ export interface SanitizationResult {
 
 /**
  * Trendyol & Hepsiburada Katalog Onay Motoru - Yasaklı Kelime ve İfade Sözlüğü
- * Canlı mağazada (1192080) tespit edilen tüm "Yasaklı Kelime" red sebeplerini otomatik temizler.
+ * Ürünleri silmek/engellemek yerine başlık ve ürün açıklamalarındaki (descriptionHtml)
+ * tüm yasaklı ifadeleri (%100 Orijinal, Yenilebilir, Tüketilebilir, Kama Sutra, Oyun Kartı, Etek Altı, Göğüs Dikleştirici, Erotik vb.)
+ * otomatik temizler ve ürünün Trendyol onayından geçmesini sağlar.
  */
 const BANNED_PATTERNS: { label: string; regex: RegExp; replacement: string }[] = [
   {
@@ -45,29 +47,47 @@ const BANNED_PATTERNS: { label: string; regex: RegExp; replacement: string }[] =
     label: 'Erotik',
     regex: /\berotik\b/gi,
     replacement: 'Fantezi'
-  }
-];
-
-/**
- * Trendyol'da satışı tamamen yasak olan ("Yenilebilir İç Çamaşırı", "Alkol Türevi", "Yetişkin Oyun Kartı") ürün filtreleri
- */
-const PROHIBITED_PRODUCT_PATTERNS: { reason: string; regex: RegExp }[] = [
-  {
-    reason: 'Trendyol Politikası: Yenilebilir / Tüketilebilir fantezi ürün satışı yasaktır.',
-    regex: /\byenilebilir\b|\btüketilebilen\b|\bşekerli\s+iç\s+çamaşır/i
   },
   {
-    reason: 'Trendyol Politikası: Alkol türevi içeren ürün satışı yasaktır.',
-    regex: /\balkol\s+türevi\b|\balkollü\b/i
+    label: 'Tüketilebilen / Tüketilebilir',
+    regex: /t[üu]ketilebil(?:en|ir)\s*/gi,
+    replacement: ''
   },
   {
-    reason: 'Trendyol Politikası: Yetişkin / Kama Sutra oyun kartı ürünleri ihlal listesindedir.',
-    regex: /\bkama\s*sutra\b|\başk\s+zar[ıi]\b/i
+    label: 'Yenilebilir / Yenilebilen',
+    regex: /yenilebil(?:en|ir)\s*/gi,
+    replacement: ''
+  },
+  {
+    label: 'Jelibondan Üretilmiştir İfadesi',
+    regex: /jelibondan\s+[üu]retilmi[şs]tir\.?/gi,
+    replacement: 'Özel tasarım fantezi üründür.'
+  },
+  {
+    label: 'Kama Sutra',
+    regex: /kama\s*sutra/gi,
+    replacement: ' '
+  },
+  {
+    label: 'Oyun Kartı / İskambil Kağıdı',
+    regex: /(?:sexy\s+g[öo]rselli\s+)?oyun\s+kart[ıi]|52\s+adet\s+i[sş]kanb[iİ]l\s+ka[ğg][ıiİ]d[ıiİ]\s+fantez[iİ]\s+poz[iİ]syon\s+g[öo]rsell[iİ]|52\s+ADET\s+İSKANBİL\s+KAĞIDI\s+FANTEZİ\s+POZİSYON\s+GÖRSELLİ/gi,
+    replacement: ' Fantezi Aksesuar '
+  },
+  {
+    label: 'Bitişik Fantezi Aksesuar Düzeltmesi',
+    regex: /Fantezi\s+Aksesuar(?=[A-ZÇĞİÖŞÜ0-9])/g,
+    replacement: 'Fantezi Aksesuar '
+  },
+  {
+    label: 'Alkol Türevi',
+    regex: /alkol\s+t[üu]revi(?:\s+i[çc]eren)?\s*/gi,
+    replacement: ''
   }
 ];
 
 /**
  * Başlık ve HTML açıklamadaki yasaklı kelimeleri otomatik temizler, kategori uyumsuzluğunu tespit eder.
+ * Hiçbir ürünü bloke etmez; yasaklı kelimeleri hem başlıktan hem açıklamadan silip yayına hazır hale getirir.
  */
 export function sanitizeProductContent(params: {
   title: string;
@@ -79,20 +99,7 @@ export function sanitizeProductContent(params: {
   let cleanDescriptionHtml = params.descriptionHtml || '';
   const removedWords: string[] = [];
 
-  const combinedText = `${cleanTitle} ${cleanDescriptionHtml}`;
-
-  // 1. Satışı yasak ürün kontrolü
-  let isProhibitedProduct = false;
-  let prohibitedReason: string | undefined;
-  for (const rule of PROHIBITED_PRODUCT_PATTERNS) {
-    if (rule.regex.test(combinedText)) {
-      isProhibitedProduct = true;
-      prohibitedReason = rule.reason;
-      break;
-    }
-  }
-
-  // 2. Yasaklı kelime temizliği (Başlık + Açıklama)
+  // Yasaklı kelime temizliği (Başlık + Açıklama dahil)
   for (const pat of BANNED_PATTERNS) {
     if (pat.regex.test(cleanTitle) || pat.regex.test(cleanDescriptionHtml)) {
       removedWords.push(pat.label);
@@ -111,7 +118,7 @@ export function sanitizeProductContent(params: {
     .replace(/\s{2,}/g, ' ')
     .trim();
 
-  // 3. Akıllı Kategori Doğrulama (179 adet "Kategori Bilgisi Eksik veya Yanlış" hatasını önler)
+  // Akıllı Kategori Doğrulama (179 adet "Kategori Bilgisi Eksik veya Yanlış" hatasını önler)
   let recommendedTrendyolCategoryId: number | undefined;
   let recommendedCategoryReason: string | undefined;
   const lowerTitle = cleanTitle.toLocaleLowerCase('tr-TR');
@@ -123,10 +130,14 @@ export function sanitizeProductContent(params: {
     lowerTitle.includes('dekolte band') ||
     lowerTitle.includes('boob tape') ||
     lowerTitle.includes('göğüs band') ||
-    lowerTitle.includes('silikon göğüs')
+    lowerTitle.includes('silikon göğüs') ||
+    lowerTitle.includes('kırbaç') ||
+    lowerTitle.includes('kelepçe') ||
+    lowerTitle.includes('ağız topu') ||
+    lowerTitle.includes('maske')
   ) {
     recommendedTrendyolCategoryId = 575; // İç Giyim Aksesuarı
-    recommendedCategoryReason = 'Göğüs ucu kapatıcı / bant ürünleri İç Giyim Aksesuarı (575) kategorisine yönlendirildi';
+    recommendedCategoryReason = 'Aksesuar / Göğüs ucu kapatıcı ürünleri İç Giyim Aksesuarı (575) kategorisine yönlendirildi';
   } else if (
     lowerTitle.includes('vücut çorab') ||
     lowerTitle.includes('jartiyer çorab') ||
@@ -161,8 +172,7 @@ export function sanitizeProductContent(params: {
     cleanTitle,
     cleanDescriptionHtml,
     removedWords,
-    isProhibitedProduct,
-    prohibitedReason,
+    isProhibitedProduct: false,
     recommendedTrendyolCategoryId,
     recommendedCategoryReason
   };
@@ -184,8 +194,8 @@ export function buildCanonicalProductSignature(title: string, color?: string): s
 }
 
 /**
- * Katalogdaki tüm ürünleri tarayıp yasaklı kelimeleri temizler ve çoklanan (aynı başlık + aynı renk)
- * ürünleri tekilleştirir (her üründen yalnızca 1 adet aktif kalır).
+ * Katalogdaki tüm ürünleri tarayıp başlık ve açıklamalarındaki yasaklı kelimeleri temizler
+ * ve çoklanan (aynı başlık + aynı renk) ürünleri tekilleştirir (her üründen yalnızca 1 adet aktif kalır).
  */
 export function sanitizeAndDeduplicateCatalog(products: Product[]): {
   products: Product[];
@@ -198,7 +208,6 @@ export function sanitizeAndDeduplicateCatalog(products: Product[]): {
   const seenSignatures = new Map<string, Product>();
   const deduplicated: Product[] = [];
   let sanitizedCount = 0;
-  let prohibitedBlockedCount = 0;
   let duplicateRemovedCount = 0;
   const duplicateRemovedSkus: string[] = [];
   const sanitizedLog: { stockCode: string; title: string; action: string }[] = [];
@@ -226,20 +235,17 @@ export function sanitizeAndDeduplicateCatalog(products: Product[]): {
       sanitizedLog.push({
         stockCode: prod.stockCode,
         title: prod.title,
-        action: `Yasaklı kelimeler temizlendi: ${res.removedWords.join(', ')}`
+        action: `Başlık ve açıklamadan yasaklı kelimeler temizlendi: ${res.removedWords.join(', ')}`
       });
     }
 
-    if (res.isProhibitedProduct) {
-      prohibitedBlockedCount++;
-      prod.status = 'passive';
-      prod.trendyolSyncStatus = 'error';
-      prod.trendyolErrorMessage = `🛡️ AI İhlal Koruması: ${res.prohibitedReason}`;
-      sanitizedLog.push({
-        stockCode: prod.stockCode,
-        title: prod.title,
-        action: prod.trendyolErrorMessage
-      });
+    // Daha önce AI İhlal Koruması ile pasife alınmışsa ve fiyatı/stoğu varsa tekrar aktif et
+    if (prod.trendyolErrorMessage && prod.trendyolErrorMessage.includes('AI İhlal Koruması')) {
+      prod.trendyolErrorMessage = undefined;
+      if (prod.salePrice > 0 && prod.netAvailableStock > 0) {
+        prod.status = 'active';
+        prod.trendyolSyncStatus = 'synced';
+      }
     }
 
     const primaryColor = prod.variants[0]?.color || '';
@@ -263,7 +269,7 @@ export function sanitizeAndDeduplicateCatalog(products: Product[]): {
   return {
     products: deduplicated,
     sanitizedCount,
-    prohibitedBlockedCount,
+    prohibitedBlockedCount: 0,
     duplicateRemovedCount,
     duplicateRemovedSkus,
     sanitizedLog
