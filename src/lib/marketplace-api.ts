@@ -12,6 +12,7 @@ import {
   resolveTrendyolBedenValueId,
   resolveTrendyolBrandId
 } from '@/lib/category-matcher';
+import { sanitizeProductContent } from '@/lib/ai-sanitizer';
 
 function getTrendyolAuthHeaders(account: MarketplaceAccount) {
   const token = Buffer.from(`${account.apiKey}:${account.apiSecret}`).toString('base64');
@@ -242,8 +243,29 @@ export async function publishProductsToMarketplace(params: {
       continue;
     }
 
-    // Gerçek yaprak (leaf) Trendyol kategori ID çözümlemesi
-    const rawCatId = cat?.trendyolCategoryId;
+    // AI Katalog & İhlal Koruması: Gönderim öncesi yasaklı kelime, satışı yasak ürün ve kategori doğrulaması
+    const aiCheck = sanitizeProductContent({
+      title: prod.title,
+      descriptionHtml: prod.descriptionHtml,
+      categoryName: prod.categoryName,
+      categoryTree: prod.categoryTree
+    });
+
+    if (aiCheck.isProhibitedProduct) {
+      errors.push({
+        stockCode: prod.stockCode,
+        title: prod.title,
+        marketplace: marketplaceLabel,
+        message: `🛡️ AI İhlal Koruması: ${aiCheck.prohibitedReason}`
+      });
+      continue;
+    }
+
+    const sanitizedTitle = aiCheck.cleanTitle || prod.title;
+    const sanitizedDesc = aiCheck.cleanDescriptionHtml || prod.descriptionHtml || sanitizedTitle;
+
+    // Gerçek yaprak (leaf) Trendyol kategori ID çözümlemesi (AI kategori önerisi varsa önceliklendir)
+    const rawCatId = aiCheck.recommendedTrendyolCategoryId || cat?.trendyolCategoryId;
     const leafCategoryId =
       rawCatId && TRENDYOL_CATEGORY_REQUIRED_ATTRS[rawCatId]
         ? rawCatId
@@ -301,14 +323,14 @@ export async function publishProductsToMarketplace(params: {
 
       validItems.push({
         barcode: String(v.barcode).trim(),
-        title: prod.title.slice(0, 100),
+        title: sanitizedTitle.slice(0, 100),
         productMainId,
         brandId: resolvedBrandId,
         categoryId: leafCategoryId,
         quantity: prod.status === 'active' ? Math.min(19999, Math.max(0, Number(v.netStock ?? 0))) : 0,
         stockCode: v.sku || `${prod.stockCode}-${vIdx + 1}`,
         dimensionalWeight: Math.max(1, Number(prod.desi || 1)),
-        description: `${account.descriptionPrefixHtml || ''}${prod.descriptionHtml || prod.title}${account.descriptionSuffixHtml || ''}`,
+        description: `${account.descriptionPrefixHtml || ''}${sanitizedDesc}${account.descriptionSuffixHtml || ''}`,
         currencyType: 'TRY',
         listPrice: resolvedListPrice,
         salePrice: resolvedSalePrice,

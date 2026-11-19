@@ -36,6 +36,29 @@ export default function XmlView({
   const [activePriceMarketplaceTab, setActivePriceMarketplaceTab] = useState<'Trendyol' | 'Hepsiburada'>('Trendyol');
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncLimit, setSyncLimit] = useState<number>(0);
+  const [runningAiGuard, setRunningAiGuard] = useState(false);
+
+  async function handleRunAiComplianceGuard() {
+    setRunningAiGuard(true);
+    try {
+      const res = await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'run_ai_compliance_scan' })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        notify(data.message, 'success');
+        await onRefreshState();
+      } else {
+        notify(data.message || 'AI Katalog taraması başarısız', 'error');
+      }
+    } catch (e: any) {
+      notify(e?.message || 'AI tarama hatası', 'error');
+    } finally {
+      setRunningAiGuard(false);
+    }
+  }
   const [inspectingNodes, setInspectingNodes] = useState(false);
   const [detectedNodes, setDetectedNodes] = useState<{ tag: string; count: number }[]>([
     { tag: 'UrunKartiID', count: 1648 },
@@ -1249,28 +1272,41 @@ export default function XmlView({
             <li className="flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>
-                <strong>Sınırsız XML & Ürün:</strong> Sopyo&apos;daki 100 ürün deneme sınırı ve 10.000 ürün limiti yoktur; tüm ürünleri ve varyantları aktarabilirsiniz.
+                <strong>3 Saatte Bir Otomatik XML Senkronizasyonu:</strong> Her 3 saatte bir (<code>0 */3 * * *</code>) XML kaynağınız otomatik çekilir, stok ve fiyatlar Trendyol &amp; Hepsiburada&apos;da güncellenir.
               </span>
             </li>
             <li className="flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>
-                <strong>Anlık & Otomatik Güncelleme:</strong> 12-24 saat beklemek yerine dilediğiniz an tek tıkla veya 2 saatte bir Cron ile otomatik güncellenir.
+                <strong>🛡️ AI Yasaklı Kelime &amp; İhlal Koruması:</strong> Her XML güncellemesinde <em>&quot;%100 Orijinal&quot;, &quot;Etek altı&quot;, &quot;Göğüs dikleştirici&quot;, &quot;Erotik&quot;</em> gibi Trendyol red sebebi kelimeler otomatik temizlenir; satışı yasak ürünler (Yenilebilir ürün vb.) otomatik engellenir.
               </span>
             </li>
             <li className="flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>
-                <strong>Rezerve Stok Koruması:</strong> Açık siparişleriniz XML stoğundan otomatik düşülür, satılan ürün tekrar stokta görünmez.
+                <strong>Çoklanan Ürün Önleyici (Tekilleştirme):</strong> Tedarikçi XML&apos;inde farklı stok kodlarıyla açılmış aynı <em>(Ürün Başlığı + Renk)</em> kartları her güncellemede otomatik tekilleştirilir; her üründen yalnızca 1 adet gönderilir.
               </span>
             </li>
             <li className="flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <span>
-                <strong>Akıllı Renk & Beden Normalizasyonu:</strong> XML&apos;deki &quot;Görsel&quot; gibi geçersiz renk değerleri ürün başlığından otomatik çözümlenir.
+                <strong>0,00 TL Fiyat &amp; Akıllı Kategori Koruması:</strong> XML satış fiyatı 0 TL olan ürünler pazaryerine gönderilmez ve yanlış kategorili ürünler (Göğüs ucu kapatıcı vb.) doğru yaprak kategoriye yönlendirilir.
               </span>
             </li>
           </ul>
+
+          <div className="pt-2 border-t border-slate-100">
+            <button
+              onClick={handleRunAiComplianceGuard}
+              disabled={runningAiGuard}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold shadow-xs cursor-pointer"
+            >
+              <RefreshCw className={`w-4 h-4 ${runningAiGuard ? 'animate-spin' : ''}`} />
+              {runningAiGuard
+                ? 'AI Katalog & İhlal Taraması Çalışıyor...'
+                : '🛡️ AI Yasaklı Kelime & Çoklanan Ürün Taramasını Şimdi Çalıştır'}
+            </button>
+          </div>
         </div>
 
         {/* Sağ: Aktif XML Kaynaklarınız Tablosu */}

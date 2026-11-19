@@ -7,6 +7,7 @@ import {
   resolveTrendyolBrandId
 } from '@/lib/category-matcher';
 import { inspectXmlFeedNodes, syncXmlFeedProducts } from '@/lib/xml-engine';
+import { sanitizeAndDeduplicateCatalog } from '@/lib/ai-sanitizer';
 import {
   archiveLiveTrendyolProducts,
   deleteLiveTrendyolProducts,
@@ -1230,6 +1231,26 @@ export async function POST(req: NextRequest) {
         await writeDbAsync(db, { skipProducts: true });
       }
       return NextResponse.json({ ok: true, message: 'Mağaza yetki ve limitleri güncellendi.' });
+    }
+
+    // 21. AI Katalog & İhlal Koruma Motorunu Manuel Çalıştır + Temizlenenleri Trendyol'a Gönder
+    if (action === 'run_ai_compliance_scan') {
+      const tenantProducts = db.products.filter((p) => p.tenantId === tenantId);
+      const otherProducts = db.products.filter((p) => p.tenantId !== tenantId);
+      const scanResult = sanitizeAndDeduplicateCatalog(tenantProducts);
+      db.products = [...otherProducts, ...scanResult.products];
+
+      await writeDbAsync(db, { syncDeletedProducts: true });
+
+      return NextResponse.json({
+        ok: true,
+        sanitizedCount: scanResult.sanitizedCount,
+        prohibitedBlockedCount: scanResult.prohibitedBlockedCount,
+        duplicateRemovedCount: scanResult.duplicateRemovedCount,
+        totalCleanProducts: scanResult.products.length,
+        sanitizedLog: scanResult.sanitizedLog.slice(0, 25),
+        message: `🛡️ AI İhlal Koruma & Tekilleştirme Tamamlandı: ${scanResult.sanitizedCount} ürünün yasaklı kelimeleri temizlendi, ${scanResult.duplicateRemovedCount} çoklanan ürün tekilleştirildi, ${scanResult.prohibitedBlockedCount} satışı yasak ürün engellendi. Toplam ${scanResult.products.length} temiz ürün aktif!`
+      });
     }
 
     return NextResponse.json({ ok: false, message: 'Bilinmeyen işlem' }, { status: 400 });

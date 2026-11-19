@@ -1,0 +1,16 @@
+name: 3-Hour XML Sync & AI Compliance Guard
+
+on:
+  schedule:
+    # Her 3 saatte bir otomatik çalışır (00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 UTC)
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+jobs:
+  trigger-xml-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Production 3-Hour XML & AI Compliance Sync
+        run: |
+          echo "Triggering 3-hour automatic XML sync on https://xml-entegrasyon-orcin.vercel.app/api/cron/sync ..."
+          curl -s -S -L --max-time 60 "https://xml-entegrasyon-orcin.vercel.app/api/cron/sync" || true

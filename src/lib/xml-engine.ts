@@ -2,6 +2,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { Product, ProductVariant, XmlSource, XmlSyncReport } from '@/types/sopyo';
 import { calculateChannelPrices } from '@/lib/pricing-engine';
 import { normalizeColorValue, normalizeSizeValue } from '@/lib/category-matcher';
+import { sanitizeAndDeduplicateCatalog, sanitizeProductContent } from '@/lib/ai-sanitizer';
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -137,12 +138,22 @@ export async function syncXmlFeedProducts(params: {
   for (let prodIdx = 0; prodIdx < sliceToProcess.length; prodIdx++) {
     const rawProd = sliceToProcess[prodIdx];
     const externalId = String(rawProd.UrunKartiID || rawProd.id || `${prodIdx + 1}`);
-    const title = String(rawProd.UrunAdi || rawProd.name || 'İsimsiz Ürün');
-    const descriptionHtml = String(rawProd.Aciklama || rawProd.OnYazi || '');
+    const rawTitle = String(rawProd.UrunAdi || rawProd.name || 'İsimsiz Ürün');
+    const rawDescriptionHtml = String(rawProd.Aciklama || rawProd.OnYazi || '');
     const brandName = String(rawProd.Marka || "Aria's Closet");
     const categoryName = String(rawProd.Kategori || 'Genel');
     const categoryTree = String(rawProd.KategoriTree || categoryName);
     const productUrl = String(rawProd.UrunUrl || '');
+
+    // AI Katalog & İhlal Koruması: Yasaklı kelimeleri her XML güncellemesinde otomatik temizle
+    const aiSanitized = sanitizeProductContent({
+      title: rawTitle,
+      descriptionHtml: rawDescriptionHtml,
+      categoryName,
+      categoryTree
+    });
+    const title = aiSanitized.cleanTitle;
+    const descriptionHtml = aiSanitized.cleanDescriptionHtml;
 
     const rawImages = asArray<string>(rawProd?.Resimler?.Resim).map(String).filter(Boolean);
     const rawVariants = asArray<Record<string, any>>(rawProd?.UrunSecenek?.Secenek);
@@ -284,10 +295,10 @@ export async function syncXmlFeedProducts(params: {
       stockCode,
       supplierStockCode: rawBaseSku,
       barcode: primaryVar.barcode,
-      title: existingProd?.title || title,
+      title,
       subtitle: existingProd?.subtitle || '',
       invoiceTitle: existingProd?.invoiceTitle || '',
-      descriptionHtml: existingProd?.descriptionHtml || descriptionHtml,
+      descriptionHtml,
       brandName,
       categoryName,
       categoryTree,
@@ -300,7 +311,7 @@ export async function syncXmlFeedProducts(params: {
       stockDeductionPerSale: existingProd?.stockDeductionPerSale || 1,
       maxPurchaseQty: existingProd?.maxPurchaseQty || 0,
       xmlPriceLock: existingProd?.xmlPriceLock || false,
-      status: !isAllZeroPrice && netAvailableStock > 0 ? 'active' : 'passive',
+      status: !aiSanitized.isProhibitedProduct && !isAllZeroPrice && netAvailableStock > 0 ? 'active' : 'passive',
       buyingPrice: isAllZeroPrice ? 0 : primaryVar.buyingPrice,
       marketPrice: isAllZeroPrice ? 0 : primaryVar.marketPrice,
       salePrice: isAllZeroPrice ? 0 : primaryVar.salePrice,
@@ -323,15 +334,21 @@ export async function syncXmlFeedProducts(params: {
       reservedOrderStock,
       netAvailableStock,
       trendyolSyncStatus:
-        isAllZeroPrice || hasZeroPriceVariant
+        aiSanitized.isProhibitedProduct || isAllZeroPrice || hasZeroPriceVariant
           ? 'error'
           : existingProd?.trendyolSyncStatus || (xmlSource.autoPublishEnabled ? 'synced' : 'not_sent'),
-      trendyolErrorMessage: zeroPriceWarningMsg || existingProd?.trendyolErrorMessage,
+      trendyolErrorMessage:
+        (aiSanitized.isProhibitedProduct ? `🛡️ AI İhlal Koruması: ${aiSanitized.prohibitedReason}` : undefined) ||
+        zeroPriceWarningMsg ||
+        existingProd?.trendyolErrorMessage,
       hepsiburadaSyncStatus:
-        isAllZeroPrice || hasZeroPriceVariant
+        aiSanitized.isProhibitedProduct || isAllZeroPrice || hasZeroPriceVariant
           ? 'error'
           : existingProd?.hepsiburadaSyncStatus || (xmlSource.autoPublishEnabled ? 'synced' : 'not_sent'),
-      hepsiburadaErrorMessage: zeroPriceWarningMsg || existingProd?.hepsiburadaErrorMessage,
+      hepsiburadaErrorMessage:
+        (aiSanitized.isProhibitedProduct ? `🛡️ AI İhlal Koruması: ${aiSanitized.prohibitedReason}` : undefined) ||
+        zeroPriceWarningMsg ||
+        existingProd?.hepsiburadaErrorMessage,
       tags: existingProd?.tags || [],
       productUrl,
       variants,
@@ -339,9 +356,16 @@ export async function syncXmlFeedProducts(params: {
     });
   }
 
-  const deletedSkus = existingProducts
-    .filter((ep) => ep.xmlSourceId === xmlSource.id && !seenStockCodes.has(ep.stockCode))
-    .map((ep) => ep.stockCode);
+  // Çoklanan Ürün Koruması: Her XML güncellemesinde aynı (Başlık + Renk) kombinasyonuna sahip mükerrer kartları tekilleştir
+  const dedupResult = sanitizeAndDeduplicateCatalog(syncedProducts);
+  const finalProducts = dedupResult.products;
+
+  const deletedSkus = [
+    ...existingProducts
+      .filter((ep) => ep.xmlSourceId === xmlSource.id && !seenStockCodes.has(ep.stockCode))
+      .map((ep) => ep.stockCode),
+    ...dedupResult.duplicateRemovedSkus
+  ];
 
   const report: XmlSyncReport = {
     id: `rep-${Date.now()}`,
@@ -364,7 +388,7 @@ export async function syncXmlFeedProducts(params: {
   };
 
   return {
-    products: syncedProducts,
+    products: finalProducts,
     report,
     totalInXml: rawProducts.length,
     totalVariantsInXml
