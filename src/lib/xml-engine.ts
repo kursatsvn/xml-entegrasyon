@@ -336,7 +336,7 @@ export async function syncXmlFeedProducts(params: {
       trendyolSyncStatus:
         aiSanitized.isProhibitedProduct || isAllZeroPrice || hasZeroPriceVariant
           ? 'error'
-          : existingProd?.trendyolSyncStatus || (xmlSource.autoPublishEnabled ? 'synced' : 'not_sent'),
+          : existingProd?.trendyolSyncStatus || 'not_sent',
       trendyolErrorMessage:
         (aiSanitized.isProhibitedProduct ? `🛡️ AI İhlal Koruması: ${aiSanitized.prohibitedReason}` : undefined) ||
         zeroPriceWarningMsg ||
@@ -344,7 +344,7 @@ export async function syncXmlFeedProducts(params: {
       hepsiburadaSyncStatus:
         aiSanitized.isProhibitedProduct || isAllZeroPrice || hasZeroPriceVariant
           ? 'error'
-          : existingProd?.hepsiburadaSyncStatus || (xmlSource.autoPublishEnabled ? 'synced' : 'not_sent'),
+          : existingProd?.hepsiburadaSyncStatus || 'not_sent',
       hepsiburadaErrorMessage:
         (aiSanitized.isProhibitedProduct ? `🛡️ AI İhlal Koruması: ${aiSanitized.prohibitedReason}` : undefined) ||
         zeroPriceWarningMsg ||

@@ -57,12 +57,24 @@ export async function GET() {
           (acc.marketplace === 'hepsiburada' && p.hepsiburadaSyncStatus === 'not_sent')
       );
       if (newUnsent.length > 0) {
-        await publishProductsToMarketplace({
+        const pubRes = await publishProductsToMarketplace({
           account: acc,
           products: newUnsent,
           categories: tenantCats,
           brands: tenantBrands
         });
+        const syncedSet = new Set(pubRes.syncedProductIds);
+        for (const p of db.products) {
+          if (syncedSet.has(p.id)) {
+            if (acc.marketplace === 'trendyol') {
+              p.trendyolSyncStatus = 'synced';
+              p.trendyolErrorMessage = undefined;
+            } else {
+              p.hepsiburadaSyncStatus = 'synced';
+              p.hepsiburadaErrorMessage = undefined;
+            }
+          }
+        }
       }
     }
 

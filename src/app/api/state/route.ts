@@ -481,12 +481,58 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Eğer XML kaynağında Otomatik Yayınla / Güncelle açıksa, Trendyol & Hepsiburada'ya otomatik stok/fiyat ve yeni ürünleri gönder
+      let trendyolAutoMsg = '';
+      if (xmlSource.autoPublishEnabled) {
+        const accounts = db.marketplaceAccounts.filter((m) => m.tenantId === tenantId && m.isActive);
+        const validProducts = syncedProducts.filter((p) => p.status === 'active' && p.salePrice > 0);
+        const tenantCats = db.categories.filter((c) => c.tenantId === tenantId);
+        const tenantBrands = db.brands.filter((b) => b.tenantId === tenantId);
+
+        for (const acc of accounts) {
+          // 1. Mevcut ürünlerin stok ve fiyatlarını güncelle
+          await syncPriceAndInventoryToMarketplace({ account: acc, products: validProducts });
+
+          // 2. Yeni eklenen / henüz gönderilmemiş ürünleri otomatik Trendyol'a gönder
+          const unsent = validProducts.filter(
+            (p) =>
+              (acc.marketplace === 'trendyol' && p.trendyolSyncStatus === 'not_sent') ||
+              (acc.marketplace === 'hepsiburada' && p.hepsiburadaSyncStatus === 'not_sent')
+          );
+          if (unsent.length > 0) {
+            const pubRes = await publishProductsToMarketplace({
+              account: acc,
+              products: unsent,
+              categories: tenantCats,
+              brands: tenantBrands
+            });
+            const syncedSet = new Set(pubRes.syncedProductIds);
+            for (const prod of syncedProducts) {
+              if (syncedSet.has(prod.id)) {
+                if (acc.marketplace === 'trendyol') {
+                  prod.trendyolSyncStatus = 'synced';
+                  prod.trendyolErrorMessage = undefined;
+                } else {
+                  prod.hepsiburadaSyncStatus = 'synced';
+                  prod.hepsiburadaErrorMessage = undefined;
+                }
+              }
+            }
+            if (acc.marketplace === 'trendyol') {
+              trendyolAutoMsg = ` | Trendyol'a ${pubRes.successCount} yeni ürün ve ${validProducts.length} ürün stok/fiyatı otomatik gönderildi.`;
+            }
+          } else if (acc.marketplace === 'trendyol') {
+            trendyolAutoMsg = ` | Trendyol'da ${validProducts.length} ürünün stok ve fiyatları otomatik güncellendi.`;
+          }
+        }
+      }
+
       db.operationLogs.unshift({
         id: `op-${Date.now()}`,
         tenantId,
         type: 'xml_sync',
         channel: xmlSource.name,
-        summary: `Canlı XML Çekildi: ${syncedProducts.length} ürün (${totalInXml} toplam kaynak ürün, ${totalVariantsInXml} varyant)`,
+        summary: `Canlı XML Çekildi: ${syncedProducts.length} tekil & temiz ürün (${totalInXml} kaynak ürün, ${totalVariantsInXml} varyant)${trendyolAutoMsg}`,
         status: 'success',
         details: `Yeni eklenen: ${report.newlyAddedCount}, Stoğu güncellenen: ${report.stockUpdatedCount}, Fiyatı güncellenen: ${report.priceUpdatedCount}`,
         createdAt: new Date().toISOString()
@@ -495,7 +541,7 @@ export async function POST(req: NextRequest) {
       await writeDbAsync(db, { syncDeletedProducts: true });
       return NextResponse.json({
         ok: true,
-        message: `${xmlSource.name} kaynağından ${syncedProducts.length} ürün (Toplam XML: ${totalInXml} ürün / ${totalVariantsInXml} varyant) başarıyla çekildi ve fiyat kuralları uygulandı!`,
+        message: `${xmlSource.name} kaynağından ${syncedProducts.length} tekil ürün başarıyla çekildi, yasaklı kelimeler temizlendi, Ürün Listesi güncellendi${trendyolAutoMsg}!`,
         report
       });
     }
