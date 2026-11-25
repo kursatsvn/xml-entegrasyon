@@ -9,6 +9,91 @@ export interface PriceRuleItem {
   ruleExtraPrice: number;
 }
 
+export interface TenantGeneralSettings {
+  // 1. Firma Ayarları (filter-personel)
+  customerLogo: string;
+  customerSlogan: string;
+  userMail: string;
+
+  // 2. Fatura Ayarları (filter-invoices)
+  customerInvoiceCheck: boolean;
+  customerInvoiceLastNumber: string;
+  customerTaxRate: string; // '20' | '18' | '10' | '8' | '2' | '1' | '0' | ''
+  customerAutoInvoice: boolean;
+  customerInvoiceMaskStatus: boolean;
+  customerInvoiceMaskStockCode: string;
+  customerInvoiceMaskProductName: string;
+  customerInDateFaturaStatus: boolean;
+
+  // 3. Ürün Listesi Ayarları (filter-productlist)
+  productListSortType:
+    | ''
+    | 'sortName-asc'
+    | 'sortName-desc'
+    | 'sortPrice-asc'
+    | 'sortPrice-desc'
+    | 'sortStok-asc'
+    | 'sortStok-desc';
+  productListPerPage: 20 | 50 | 100;
+  productListBarcodeNoStatus: boolean;
+  productListAddedDateStatus: boolean;
+
+  // 4. Pazaryeri Ayarları (filter-marketplace)
+  customerUseMinPrice: boolean;
+  customerAutoN11Confirm: boolean;
+  customerHBWaitingOrderStatus: boolean;
+  customerAutoAkakceConfirm: boolean;
+  customerAutoPazaramaConfirm: boolean;
+  customerUseMarketDesc: boolean;
+  customerGGAutoReList: boolean;
+  autoIdefixConfirm: boolean;
+
+  // 5. Kargo Etiket Ayarları (filter-cargotag)
+  customerUseAdvancedCargoLabel: boolean;
+  customerShowStockCargoReceipt: boolean;
+  customerShowProductCargoReceipt: boolean;
+  customerShowPriceCargoReceipt: boolean;
+  customerCargoReceiptBillingInfoShow: boolean;
+  showDetailOrderReceipt: boolean;
+  customerCargoReceiptTemplateType: '0' | '1' | '2' | '3' | '4';
+  customerCargoReceiptStockCodeShow: boolean;
+  customerCargoReceiptCompanyAdressShow: boolean;
+  customerCargoReceiptPhoneShow: boolean;
+  customerCargoReceiptMailShow: boolean;
+  customerOrderPaymentShow: boolean;
+  customerOrderDescShow: boolean;
+  customerCargoReceiptFontSize: string;
+
+  // 6. Fatura Açıklama Alanı Tanımları (filter-invoicesdesc)
+  customerN11InvoiceDesc: string;
+  customerGGInvoiceDesc: string;
+  customerHBInvoiceDesc: string;
+  customerTrendyolInvoiceDesc: string;
+  customerAkakceInvoiceDesc: string;
+  customerCiceksepetiInvoiceDesc: string;
+  customerPttavmInvoiceDesc: string;
+  customerMorhipoInvoiceDesc: string;
+  customerAmazonInvoiceDesc: string;
+  customerPazaramaInvoiceDesc: string;
+  customerIdefixInvoiceDesc: string;
+  customerCargoReceiptDesc: string;
+
+  // 7. Bildirim Ayarları (filter-notification)
+  notificationAlertStatus: boolean;
+  notificationMailStatus: boolean;
+  featureAlertStatus: boolean;
+  packageAlertStatus: boolean;
+  getProductAlertStatus: boolean;
+  bulkPublishProductAlertStatus: boolean;
+  bulkUpdateProductAlertStatus: boolean;
+  xmlCheckAlertStatus: boolean;
+  claimAlertStatus: boolean;
+  aiHubReportAlertStatus: boolean;
+
+  // 8. Ürün Ayarları (filter-productSettings)
+  combineProductCommonPrice: boolean;
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -33,6 +118,7 @@ export interface Tenant {
   cargoLabelFontSize: number;
   trendyolInvoiceNote: string;
   hepsiburadaInvoiceNote: string;
+  generalSettings?: TenantGeneralSettings;
   createdAt: string;
 }
 
@@ -201,6 +287,11 @@ export interface Product {
   buyingPrice: number;
   marketPrice: number;
   salePrice: number;
+  minPrice?: number;
+  marketplaceDescriptions?: {
+    trendyol?: string;
+    hepsiburada?: string;
+  };
   trendyolListPrice: number;
   trendyolSalePrice: number;
   hepsiburadaSalePrice: number;

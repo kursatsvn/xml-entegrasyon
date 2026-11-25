@@ -18,6 +18,7 @@ import {
   XmlSyncReport
 } from '@/types/sopyo';
 import { createSupabaseServerClient, getSupabaseEnv, isSupabaseConfigured } from '@/lib/supabase';
+import { createDefaultGeneralSettings, mergeTenantGeneralSettings } from '@/lib/general-settings';
 
 export interface DatabaseState {
   tenants: Tenant[];
@@ -58,10 +59,10 @@ function createInitialSeedData(): DatabaseState {
     companyEmail: 'zekihamdicinarr@gmail.com',
     companyAddress: 'Enver Özdemir caddesi no 15, Merkez Mah.',
     companyWebsite: 'https://www.lunerose.com',
-    defaultVatRate: 10,
-    maskInvoiceProductNames: true,
-    defaultMaskedProductName: 'Tekstil & Ev Giyim Ürünü',
-    cargoLabelTemplate: 'single',
+    defaultVatRate: 20,
+    maskInvoiceProductNames: false,
+    defaultMaskedProductName: '',
+    cargoLabelTemplate: 'quad',
     cargoLabelShowStock: false,
     cargoLabelShowProducts: true,
     cargoLabelShowPrice: true,
@@ -71,6 +72,18 @@ function createInitialSeedData(): DatabaseState {
       'İş bu fatura tutarı DSM Grup Danışmanlık İletişim ve Satış Tic.A.Ş hesabına devredilmiştir.',
     hepsiburadaInvoiceNote:
       'İş bu fatura tutarı D-Market Elektronik Hiz. ve Tic. A.Ş. hesabına devredilmiştir.',
+    generalSettings: createDefaultGeneralSettings({
+      companyEmail: 'zekihamdicinarr@gmail.com',
+      defaultVatRate: 20,
+      maskInvoiceProductNames: false,
+      defaultMaskedProductName: '',
+      cargoLabelTemplate: 'quad',
+      cargoLabelShowStock: false,
+      cargoLabelShowProducts: true,
+      cargoLabelShowPrice: true,
+      cargoLabelShowSku: true,
+      cargoLabelFontSize: 7.7
+    }),
     createdAt: '2026-01-15T10:00:00Z'
   };
 
@@ -1318,7 +1331,11 @@ export async function writeDbAsync(
 
 export function getTenantData(tenantId: string, sourceDb?: DatabaseState) {
   const db = sourceDb || readDb();
-  const tenant = db.tenants.find((t) => t.id === tenantId) || db.tenants[0];
+  const rawTenant = db.tenants.find((t) => t.id === tenantId) || db.tenants[0];
+  const tenant: Tenant = {
+    ...rawTenant,
+    generalSettings: mergeTenantGeneralSettings(rawTenant)
+  };
   const effectiveTenantId = tenant.id;
 
   return {

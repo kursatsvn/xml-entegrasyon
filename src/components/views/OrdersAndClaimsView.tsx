@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ClaimItem, Order, Tenant } from '@/types/sopyo';
+import { mergeTenantGeneralSettings } from '@/lib/general-settings';
 import {
   ShoppingBag,
   RotateCcw,
@@ -33,20 +34,26 @@ export default function OrdersAndClaimsView({
   onRefresh,
   notify
 }: OrdersAndClaimsViewProps) {
+  const gs = useMemo(() => mergeTenantGeneralSettings(tenant), [tenant]);
   const [section, setSection] = useState<'orders' | 'claims' | 'reports'>(initialSection);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
   const [labelTemplate, setLabelTemplate] = useState<Tenant['cargoLabelTemplate']>(
-    tenant.cargoLabelTemplate || 'single'
+    tenant.cargoLabelTemplate || 'quad'
   );
   const [useMaskedTitleOnLabel, setUseMaskedTitleOnLabel] = useState<boolean>(
-    tenant.maskInvoiceProductNames
+    gs.customerInvoiceMaskStatus
   );
 
   React.useEffect(() => {
     setSection(initialSection);
   }, [initialSection]);
+
+  React.useEffect(() => {
+    setLabelTemplate(tenant.cargoLabelTemplate || 'quad');
+    setUseMaskedTitleOnLabel(gs.customerInvoiceMaskStatus);
+  }, [tenant.cargoLabelTemplate, gs.customerInvoiceMaskStatus]);
 
   const handlePullOrders = async (simulateNewOrder = false, marketplace: 'trendyol' | 'hepsiburada' = 'trendyol') => {
     setLoading(true);
@@ -321,6 +328,15 @@ export default function OrdersAndClaimsView({
                             <Printer className="w-3.5 h-3.5" />
                             Kargo Fiși
                           </button>
+                          {gs.showDetailOrderReceipt && (
+                            <button
+                              onClick={() => setPrintingOrder(ord)}
+                              className="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold inline-flex items-center gap-1"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              Sipariş Fişi
+                            </button>
+                          )}
                           <button
                             onClick={() =>
                               handleUpdateOrder(ord.id, { invoiceStatus: 'issued' })
@@ -444,7 +460,7 @@ export default function OrdersAndClaimsView({
                   Sopyo Kargo Etiketi & Barkod Fiși Yazdır (#{printingOrder.orderNumber})
                 </h3>
                 <p className="text-xs text-slate-300">
-                  Şablon: {labelTemplate.toUpperCase()} | Gizli Paketleme:{' '}
+                  Şablon: {labelTemplate.toUpperCase()} | Yazı Boyutu: {gs.customerCargoReceiptFontSize || '7.7'} pt | Gizli Paketleme:{' '}
                   {useMaskedTitleOnLabel ? 'Aktif' : 'Kapalı'}
                 </p>
               </div>
@@ -462,11 +478,11 @@ export default function OrdersAndClaimsView({
                     onChange={(e) => setLabelTemplate(e.target.value as any)}
                     className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white font-semibold"
                   >
-                    <option value="single">A4 Tekli Şablon</option>
-                    <option value="double">A4 2&apos;li Şablon</option>
-                    <option value="quad">A4 4&apos;lü Şablon</option>
-                    <option value="barcode">Termal Barkod Yazıcı (10x10)</option>
-                    <option value="argox">Argox Özel Barkod</option>
+                    <option value="single">Tek Kargo Fişi</option>
+                    <option value="double">2&apos;li Kargo Fişi</option>
+                    <option value="quad">4&apos;lü Kargo Fişi</option>
+                    <option value="barcode">Barkod Yazıcısı</option>
+                    <option value="argox">Argox Barkod Yazıcısı</option>
                   </select>
                 </div>
                 <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 cursor-pointer">
@@ -480,15 +496,36 @@ export default function OrdersAndClaimsView({
                 </label>
               </div>
 
-              {/* Kargo Etiketi Önizleme Kutusu */}
-              <div className="border-2 border-dashed border-slate-800 rounded-xl p-6 bg-white space-y-4">
+              {/* Kargo Etiketi Önizleme Kutusu (Genel Ayarlar -> Kargo Etiket Ayarlarına Bağlı) */}
+              <div
+                className="border-2 border-dashed border-slate-800 rounded-xl p-6 bg-white space-y-4"
+                style={{
+                  fontSize: `${Math.max(10, Number(String(gs.customerCargoReceiptFontSize || '7.7').replace(',', '.')) * 1.45)}px`
+                }}
+              >
                 <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
-                  <div>
+                  <div className="space-y-0.5">
+                    {gs.customerLogo && (
+                      <img
+                        src={gs.customerLogo}
+                        alt={tenant.name}
+                        className="h-8 w-auto object-contain mb-1"
+                      />
+                    )}
                     <div className="text-xs font-bold uppercase text-slate-500">GÖNDERİCİ MAĞAZA</div>
                     <div className="text-lg font-black text-slate-900">{tenant.name}</div>
+                    {gs.customerSlogan && (
+                      <div className="text-[11px] italic text-slate-500">{gs.customerSlogan}</div>
+                    )}
                     <div className="text-xs text-slate-600">
                       Pazaryeri: {printingOrder.marketplace.toUpperCase()}
                     </div>
+                    {gs.customerCargoReceiptCompanyAdressShow && tenant.companyAddress && (
+                      <div className="text-[11px] text-slate-600">Adres: {tenant.companyAddress}</div>
+                    )}
+                    {gs.customerCargoReceiptPhoneShow && tenant.companyPhone && (
+                      <div className="text-[11px] text-slate-600">Tel: {tenant.companyPhone}</div>
+                    )}
                   </div>
                   <div className="text-right">
                     <div className="text-xs font-bold text-slate-500">KARGO FİRMASI</div>
@@ -498,6 +535,11 @@ export default function OrdersAndClaimsView({
                     <div className="font-mono text-xs text-slate-600">
                       Sipariş No: #{printingOrder.orderNumber}
                     </div>
+                    {gs.customerOrderPaymentShow && (
+                      <div className="text-[11px] font-bold text-emerald-700 mt-1">
+                        Ödeme: Pazaryeri Online (Ödendi)
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -519,6 +561,9 @@ export default function OrdersAndClaimsView({
                       {printingOrder.customerName}
                     </div>
                     <div className="text-slate-600 mt-0.5">{printingOrder.customerPhone}</div>
+                    {gs.customerCargoReceiptMailShow && printingOrder.customerEmail && (
+                      <div className="text-slate-500 mt-0.5">{printingOrder.customerEmail}</div>
+                    )}
                   </div>
                   <div>
                     <div className="font-bold text-slate-500 uppercase">TESLİMAT ADRESİ</div>
@@ -532,25 +577,70 @@ export default function OrdersAndClaimsView({
                 </div>
 
                 {/* Paket İçeriği */}
-                <div>
-                  <div className="text-xs font-bold text-slate-500 uppercase mb-2">
-                    PAKET İÇERİĞİ ({useMaskedTitleOnLabel ? 'GİZLİ PAKETLEME MODU' : 'STANDART MOD'})
-                  </div>
-                  {printingOrder.items.map((it, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between text-xs py-1.5 border-b border-slate-100"
-                    >
-                      <span className="font-semibold text-slate-900">
-                        {it.quantity} Adet -{' '}
-                        {useMaskedTitleOnLabel
-                          ? it.maskedTitle || `${tenant.defaultMaskedProductName} (${it.sku})`
-                          : `${it.title} (${it.sku})`}
-                      </span>
-                      <span className="font-mono text-slate-600">Barkod: {it.barcode}</span>
+                {gs.customerShowProductCargoReceipt && (
+                  <div>
+                    <div className="text-xs font-bold text-slate-500 uppercase mb-2">
+                      PAKET İÇERİĞİ ({useMaskedTitleOnLabel ? 'GİZLİ PAKETLEME MODU' : 'STANDART MOD'})
                     </div>
-                  ))}
-                </div>
+                    {printingOrder.items.map((it, idx) => {
+                      const effectiveSku =
+                        useMaskedTitleOnLabel && gs.customerInvoiceMaskStockCode
+                          ? gs.customerInvoiceMaskStockCode
+                          : it.sku;
+                      const effectiveTitle = useMaskedTitleOnLabel
+                        ? gs.customerInvoiceMaskProductName ||
+                          it.maskedTitle ||
+                          tenant.defaultMaskedProductName ||
+                          'Tekstil Ürünü'
+                        : it.title;
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between gap-3 text-xs py-1.5 border-b border-slate-100"
+                        >
+                          <span className="font-semibold text-slate-900">
+                            {it.quantity} Adet - {effectiveTitle}
+                            {gs.customerCargoReceiptStockCodeShow && effectiveSku ? ` (${effectiveSku})` : ''}
+                          </span>
+                          <div className="flex items-center gap-3 shrink-0">
+                            {gs.customerShowPriceCargoReceipt && (
+                              <span className="font-bold text-slate-800">
+                                {Number(it.unitPrice || 0).toFixed(2)} TL
+                              </span>
+                            )}
+                            <span className="font-mono text-slate-600">Barkod: {it.barcode}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Fatura Bilgisi / Sipariş Açıklaması / Kargo Etiketi Özel Açıklaması */}
+                {(gs.customerCargoReceiptBillingInfoShow ||
+                  gs.customerOrderDescShow ||
+                  gs.customerCargoReceiptDesc) && (
+                  <div className="pt-2 border-t border-slate-200 space-y-1.5 text-[11px] text-slate-600">
+                    {gs.customerCargoReceiptBillingInfoShow && (
+                      <div>
+                        <strong>Fatura Açıklaması:</strong>{' '}
+                        {printingOrder.marketplace === 'trendyol'
+                          ? gs.customerTrendyolInvoiceDesc
+                          : gs.customerHBInvoiceDesc}
+                      </div>
+                    )}
+                    {gs.customerOrderDescShow && printingOrder.crossSyncLog && (
+                      <div>
+                        <strong>Sipariş Notu:</strong> {printingOrder.crossSyncLog}
+                      </div>
+                    )}
+                    {gs.customerCargoReceiptDesc && (
+                      <div className="font-semibold text-slate-800">
+                        {gs.customerCargoReceiptDesc}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

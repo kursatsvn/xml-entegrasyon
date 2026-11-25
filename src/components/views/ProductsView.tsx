@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Calculator,
   CheckCircle2,
@@ -13,12 +13,14 @@ import {
   Unlock,
   X
 } from 'lucide-react';
-import { CategoryMapping, Product } from '@/types/sopyo';
+import { CategoryMapping, Product, Tenant } from '@/types/sopyo';
 import { calculateDesi, calculateProfitBreakdown } from '@/lib/pricing-engine';
+import { mergeTenantGeneralSettings } from '@/lib/general-settings';
 
 interface ProductsViewProps {
   products: Product[];
   categories: CategoryMapping[];
+  tenant?: Tenant;
   onRefreshState: () => Promise<void>;
   notify: (msg: string, type?: 'success' | 'error') => void;
 }
@@ -26,17 +28,25 @@ interface ProductsViewProps {
 export default function ProductsView({
   products,
   categories,
+  tenant,
   onRefreshState,
   notify
 }: ProductsViewProps) {
+  const gs = useMemo(() => mergeTenantGeneralSettings(tenant || {}), [tenant]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [brandFilter, setBrandFilter] = useState<string>('all');
   const [priceLockFilter, setPriceLockFilter] = useState<string>('all');
-  const [pageSize, setPageSize] = useState<number>(20);
+  const [pageSize, setPageSize] = useState<number>(gs.productListPerPage || 20);
   const [currentPage, setCurrentPage] = useState<number>(1);
+
+  useEffect(() => {
+    setPageSize(gs.productListPerPage || 20);
+    setCurrentPage(1);
+  }, [gs.productListPerPage]);
 
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showProfitModal, setShowProfitModal] = useState(false);
@@ -66,7 +76,7 @@ export default function ProductsView({
   );
 
   const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
+    const filtered = products.filter((p) => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLocaleLowerCase('tr-TR');
         const matchesMain =
@@ -101,6 +111,22 @@ export default function ProductsView({
 
       return true;
     });
+
+    // Genel Ayarlar -> Ürün Listesi Ayarları -> Sıralama kuralını uygula
+    const sortType = gs.productListSortType || '';
+    return [...filtered].sort((a, b) => {
+      if (sortType === 'sortName-asc') return a.title.localeCompare(b.title, 'tr-TR');
+      if (sortType === 'sortName-desc') return b.title.localeCompare(a.title, 'tr-TR');
+      if (sortType === 'sortPrice-asc') {
+        return (a.trendyolSalePrice || a.salePrice || 0) - (b.trendyolSalePrice || b.salePrice || 0);
+      }
+      if (sortType === 'sortPrice-desc') {
+        return (b.trendyolSalePrice || b.salePrice || 0) - (a.trendyolSalePrice || a.salePrice || 0);
+      }
+      if (sortType === 'sortStok-asc') return (a.netAvailableStock || 0) - (b.netAvailableStock || 0);
+      if (sortType === 'sortStok-desc') return (b.netAvailableStock || 0) - (a.netAvailableStock || 0);
+      return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+    });
   }, [
     products,
     searchQuery,
@@ -108,7 +134,8 @@ export default function ProductsView({
     statusFilter,
     categoryFilter,
     brandFilter,
-    priceLockFilter
+    priceLockFilter,
+    gs.productListSortType
   ]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
@@ -367,12 +394,19 @@ export default function ProductsView({
                         <span className="inline-block px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-mono text-xs font-bold">
                           {p.stockCode}
                         </span>
-                        <div className="text-[11px] text-slate-400 font-mono mt-1">
-                          {p.barcode}
-                        </div>
+                        {gs.productListBarcodeNoStatus && (
+                          <div className="text-[11px] text-slate-500 font-mono mt-1">
+                            Barkod: {p.barcode}
+                          </div>
+                        )}
                         <div className="text-[11px] text-slate-500 mt-0.5">
                           Kaynak: <strong>{p.sourceName}</strong>
                         </div>
+                        {gs.productListAddedDateStatus && p.updatedAt && (
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            Tarih: {new Date(p.updatedAt).toLocaleDateString('tr-TR')}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -643,7 +677,7 @@ export default function ProductsView({
 
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
-                    Ürün الفatura Başlığı (Maskeleme)
+                    Ürün Fatura Başlığı (Maskeleme)
                   </label>
                   <input
                     type="text"
@@ -918,6 +952,73 @@ export default function ProductsView({
                     />
                   </div>
                 </div>
+
+                {/* Genel Ayarlar -> Pazaryeri Ayarları: Minimum Fiyat Alanı Kullanılsın mı? */}
+                {gs.customerUseMinPrice && (
+                  <div className="pt-2 border-t border-slate-200 max-w-xs">
+                    <label className="block text-xs font-bold uppercase text-emerald-700 mb-1">
+                      Minimum Satış Fiyatı (₺)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editingProduct.minPrice ?? 0}
+                      onChange={(e) =>
+                        setEditingProduct({
+                          ...editingProduct,
+                          minPrice: Number(e.target.value)
+                        })
+                      }
+                      className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-white text-sm font-bold text-emerald-800"
+                    />
+                  </div>
+                )}
+
+                {/* Genel Ayarlar -> Pazaryeri Ayarları: Her Pazaryeri İçin Farklı Ürün Açıklaması */}
+                {gs.customerUseMarketDesc && (
+                  <div className="pt-3 border-t border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-orange-700 mb-1">
+                        Trendyol Özel Ürün Açıklaması
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={editingProduct.marketplaceDescriptions?.trendyol || ''}
+                        onChange={(e) =>
+                          setEditingProduct({
+                            ...editingProduct,
+                            marketplaceDescriptions: {
+                              ...(editingProduct.marketplaceDescriptions || {}),
+                              trendyol: e.target.value
+                            }
+                          })
+                        }
+                        placeholder="Trendyol'a özel açıklama girin (boşsa genel açıklama kullanılır)"
+                        className="w-full px-3 py-2 rounded-xl border border-orange-200 bg-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-amber-700 mb-1">
+                        Hepsiburada Özel Ürün Açıklaması
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={editingProduct.marketplaceDescriptions?.hepsiburada || ''}
+                        onChange={(e) =>
+                          setEditingProduct({
+                            ...editingProduct,
+                            marketplaceDescriptions: {
+                              ...(editingProduct.marketplaceDescriptions || {}),
+                              hepsiburada: e.target.value
+                            }
+                          })
+                        }
+                        placeholder="Hepsiburada'ya özel açıklama girin (boşsa genel açıklama kullanılır)"
+                        className="w-full px-3 py-2 rounded-xl border border-amber-200 bg-white text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Varyant / Seçenek Tablosu */}

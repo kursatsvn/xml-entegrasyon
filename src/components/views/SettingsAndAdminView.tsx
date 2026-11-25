@@ -14,11 +14,11 @@ import {
   ShieldCheck,
   CheckCircle2,
   Save,
-  EyeOff,
   Users,
   Building2,
   ArrowRightLeft
 } from 'lucide-react';
+import GeneralSettingsPanel from '@/components/views/GeneralSettingsPanel';
 
 interface SettingsAndAdminViewProps {
   initialTab?: 'integrations' | 'settings' | 'operations' | 'admin';
@@ -447,116 +447,14 @@ export default function SettingsAndAdminView({
         </div>
       )}
 
-      {/* 2. GENEL AYARLAR & GİZLİ PAKETLEME */}
+      {/* 2. GENEL AYARLAR (Sopyo /settings/company/edit 9 Sekme & 65 Alan) */}
       {tab === 'settings' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Mağaza, Gizli Paketleme (Fatura Maskeleme) ve Kargo Şablonu Ayarları
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Sopyo Genel Ayarlar (`/settings`) ekranındaki tüm özellikler
-              </p>
-            </div>
-            <button
-              onClick={handleSaveTenantSettings}
-              disabled={loading}
-              className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2"
-            >
-              <Save className="w-4 h-4" />
-              Ayarları Kaydet
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-            <div className="space-y-4">
-              <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">
-                Firma & İletişim Bilgileri
-              </h4>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Mağaza Adı</label>
-                <input
-                  type="text"
-                  value={tenantForm.name}
-                  onChange={(e) => setTenantForm({ ...tenantForm, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">E-Posta</label>
-                <input
-                  type="text"
-                  value={tenantForm.companyEmail}
-                  onChange={(e) => setTenantForm({ ...tenantForm, companyEmail: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">Telefon</label>
-                <input
-                  type="text"
-                  value={tenantForm.companyPhone}
-                  onChange={(e) => setTenantForm({ ...tenantForm, companyPhone: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="font-bold text-purple-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                <EyeOff className="w-4 h-4 text-purple-700" />
-                Gizli Paketleme / Fatura Ürün Adı Maskeleme
-              </h4>
-              <label className="flex items-center gap-2.5 p-3 rounded-xl bg-purple-50 border border-purple-200 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={tenantForm.maskInvoiceProductNames}
-                  onChange={(e) =>
-                    setTenantForm({ ...tenantForm, maskInvoiceProductNames: e.target.checked })
-                  }
-                  className="rounded border-purple-300"
-                />
-                <span className="text-xs font-semibold text-purple-950">
-                  Fatura ve Kargo Etiketlerinde Ürün Başlığını Gizle (Maskele)
-                </span>
-              </label>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Varsayılan Maskeli Ürün Başlığı
-                </label>
-                <input
-                  type="text"
-                  value={tenantForm.defaultMaskedProductName}
-                  onChange={(e) =>
-                    setTenantForm({ ...tenantForm, defaultMaskedProductName: e.target.value })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  Varsayılan Kargo Etiketi Şablonu
-                </label>
-                <select
-                  value={tenantForm.cargoLabelTemplate}
-                  onChange={(e) =>
-                    setTenantForm({ ...tenantForm, cargoLabelTemplate: e.target.value as any })
-                  }
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
-                >
-                  <option value="single">A4 Tekli Kargo Etiketi</option>
-                  <option value="double">A4 2&apos;li Kargo Etiketi</option>
-                  <option value="quad">A4 4&apos;lü Kargo Etiketi</option>
-                  <option value="barcode">Termal Barkod Yazıcı (10x10)</option>
-                  <option value="argox">Argox Barkod Yazıcı</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
+        <GeneralSettingsPanel
+          tenantForm={tenantForm}
+          setTenantForm={setTenantForm}
+          onSave={handleSaveTenantSettings}
+          loading={loading}
+        />
       )}
 
       {/* 3. İŞLEM MERKEZİ */}

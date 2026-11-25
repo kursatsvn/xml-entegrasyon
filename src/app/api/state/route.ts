@@ -8,6 +8,7 @@ import {
 } from '@/lib/category-matcher';
 import { inspectXmlFeedNodes, syncXmlFeedProducts } from '@/lib/xml-engine';
 import { sanitizeAndDeduplicateCatalog } from '@/lib/ai-sanitizer';
+import { mergeTenantGeneralSettings, syncLegacyTenantFields } from '@/lib/general-settings';
 import {
   archiveLiveTrendyolProducts,
   deleteLiveTrendyolProducts,
@@ -1059,12 +1060,21 @@ export async function POST(req: NextRequest) {
     if (action === 'update_order') {
       const { orderId, status, invoiceStatus, labelPrinted } = body;
       const ord = db.orders.find((o) => o.id === orderId && o.tenantId === tenantId);
+      const tenant = db.tenants.find((t) => t.id === tenantId);
       if (ord) {
         if (status) ord.status = status;
         if (invoiceStatus) {
           ord.invoiceStatus = invoiceStatus;
           if (invoiceStatus === 'issued' && !ord.invoiceNumber) {
-            ord.invoiceNumber = `FTR2026${Math.floor(100000 + Math.random() * 900000)}`;
+            const gs = tenant ? mergeTenantGeneralSettings(tenant) : null;
+            if (tenant && gs?.customerInvoiceCheck) {
+              const nextNum = (Number(gs.customerInvoiceLastNumber || '0') || 0) + 1;
+              gs.customerInvoiceLastNumber = String(nextNum);
+              tenant.generalSettings = gs;
+              ord.invoiceNumber = `FTR-${String(nextNum).padStart(6, '0')}`;
+            } else {
+              ord.invoiceNumber = `FTR2026${Math.floor(100000 + Math.random() * 900000)}`;
+            }
           }
         }
         if (typeof labelPrinted === 'boolean') ord.labelPrinted = labelPrinted;
@@ -1073,19 +1083,48 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, message: 'Sipariş güncellendi.' });
     }
 
-    // 15. Firma & Genel Ayarları Kaydet
+    // 15. Firma & Genel Ayarları Kaydet (Sopyo 9 Sekme / 65 Alan)
     if (action === 'update_tenant_settings') {
       const idx = db.tenants.findIndex((t) => t.id === tenantId);
       if (idx >= 0) {
-        db.tenants[idx] = {
+        const incoming = body.settings || {};
+        const mergedTenant = {
           ...db.tenants[idx],
-          ...body.settings
+          ...incoming
         };
+        const mergedGs = mergeTenantGeneralSettings({
+          ...mergedTenant,
+          generalSettings: {
+            ...mergeTenantGeneralSettings(db.tenants[idx]),
+            ...(incoming.generalSettings || {})
+          }
+        });
+        db.tenants[idx] = syncLegacyTenantFields(mergedTenant, mergedGs);
+
+        // Kullanıcı giriş e-postası güncellendiyse aktif kullanıcı profilini de senkronize et
+        if (mergedGs.userMail) {
+          const ownerUser = db.users.find((u) => u.tenantId === tenantId);
+          if (ownerUser) {
+            ownerUser.email = mergedGs.userMail;
+          }
+        }
+
+        db.operationLogs.unshift({
+          id: `op-settings-${Date.now()}`,
+          tenantId,
+          type: 'xml_sync',
+          channel: 'Genel Ayarlar',
+          summary: 'Firma, fatura, ürün listesi, kargo etiketi ve bildirim ayarları güncellendi',
+          status: 'success',
+          details: `KDV: %${db.tenants[idx].defaultVatRate} | Kargo Şablonu: ${db.tenants[idx].cargoLabelTemplate} | Liste Sıralama: ${mergedGs.productListSortType || 'En Son Eklenen'} (${mergedGs.productListPerPage}/sayfa)`,
+          createdAt: new Date().toISOString()
+        });
+
         await writeDbAsync(db, { skipProducts: true });
       }
       return NextResponse.json({
         ok: true,
-        message: 'Firma, fatura maskeleme ve kargo etiketi ayarları kaydedildi.'
+        message: 'Tüm genel ayarlar (Firma, Fatura, Ürün Listesi, Pazaryeri, Kargo Etiketi ve Bildirim) başarıyla kaydedildi!'
       });
     }
 

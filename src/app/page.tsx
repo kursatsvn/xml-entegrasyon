@@ -634,6 +634,7 @@ export default function SopyoCloneApp() {
             <ProductsView
               products={data.products}
               categories={data.categories}
+              tenant={data.tenant}
               onRefreshState={fetchState}
               notify={notify}
             />
