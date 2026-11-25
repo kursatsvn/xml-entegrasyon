@@ -46,10 +46,10 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-slate-950 text-white">
-      {/* Sol Tanıtım Alanı (Sopyo Giriş Ekranı Birebir Tasarımı) */}
-      <div className="lg:col-span-5 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-8 lg:p-12 flex flex-col justify-between border-r border-slate-800">
+      {/* Sol Tanıtım Alanı (Mobilde Formun Altında, Masaüstünde Solda) */}
+      <div className="order-2 lg:order-1 lg:col-span-5 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-6 sm:p-8 lg:p-12 flex flex-col justify-between border-t lg:border-t-0 lg:border-r border-slate-800">
         <div>
-          <div className="flex items-center gap-3 mb-10">
+          <div className="hidden lg:flex items-center gap-3 mb-10">
             <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-xl shadow-lg shadow-indigo-600/30">
               S
             </div>
@@ -61,16 +61,16 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-medium mb-4 lg:mb-6">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             Sınırsız XML & Anlık Çapraz Stok Senkronizasyonu
           </div>
 
-          <h2 className="text-3xl font-bold leading-tight mb-6">
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold leading-tight mb-5 lg:mb-6">
             XML Kaynaklarını Trendyol ve Hepsiburada ile Tek Merkezden Eşitle.
           </h2>
 
-          <ul className="space-y-4 text-slate-300 text-sm">
+          <ul className="space-y-3.5 lg:space-y-4 text-slate-300 text-sm">
             <li className="flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
               <span>
@@ -92,28 +92,43 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        <div className="pt-8 border-t border-slate-800/80">
+        <div className="pt-6 mt-6 lg:pt-8 border-t border-slate-800/80">
           <p className="text-xs uppercase tracking-wider text-slate-400 mb-3">
             Aktif Resmi Pazaryeri Entegrasyonları
           </p>
-          <div className="flex flex-wrap gap-3">
-            <div className="px-4 py-2 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-300 font-semibold text-sm">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
+            <div className="px-3.5 py-2 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-300 font-semibold text-xs sm:text-sm">
               Trendyol Partner API
             </div>
-            <div className="px-4 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-semibold text-sm">
+            <div className="px-3.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-semibold text-xs sm:text-sm">
               Hepsiburada Merchant API
             </div>
-            <div className="px-4 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 font-semibold text-sm">
+            <div className="px-3.5 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 font-semibold text-xs sm:text-sm">
               Ticimax & Genel XML
             </div>
           </div>
         </div>
       </div>
 
-      {/* Sağ Form Alanı */}
-      <div className="lg:col-span-7 bg-white text-slate-900 flex items-center justify-center p-6 sm:p-12">
+      {/* Sağ Form Alanı (Mobilde İlk Sırada Görünür) */}
+      <div className="order-1 lg:order-2 lg:col-span-7 bg-white text-slate-900 flex flex-col items-center justify-center p-5 sm:p-10 lg:p-12">
         <div className="w-full max-w-md">
-          <div className="flex items-center justify-between mb-8">
+          {/* Mobil Üst Marka Şeridi */}
+          <div className="flex lg:hidden items-center gap-2.5 mb-6 pb-4 border-b border-slate-100">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-lg shadow">
+              S
+            </div>
+            <div>
+              <div className="font-extrabold text-slate-900 text-base leading-none">
+                SOPYO <span className="text-blue-600 text-xs">PRO</span>
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">
+                Trendyol & Hepsiburada XML Paneli
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mb-6 sm:mb-8">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">
                 {mode === 'login' ? 'Tekrar hoş geldin' : 'Yeni Mağaza Hesabı Oluştur'}

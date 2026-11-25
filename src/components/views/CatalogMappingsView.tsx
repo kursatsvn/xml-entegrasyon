@@ -181,52 +181,52 @@ export default function CatalogMappingsView({
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Üst Sekme Seçici */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-sm">
+        <div className="flex overflow-x-auto no-scrollbar items-center gap-2 pb-0.5">
           <button
             onClick={() => setSection('categories')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               section === 'categories'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <Layers className="w-4 h-4" />
+            <Layers className="w-4 h-4 shrink-0" />
             Kategoriler ({categories.length})
           </button>
           <button
             onClick={() => setSection('brands')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               section === 'brands'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <Award className="w-4 h-4" />
+            <Award className="w-4 h-4 shrink-0" />
             Markalar ({brands.length})
           </button>
           <button
             onClick={() => setSection('variants')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               section === 'variants'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <Sliders className="w-4 h-4" />
-            Seçenekler / Varyantlar ({variantGroups.length})
+            <Sliders className="w-4 h-4 shrink-0" />
+            Varyantlar ({variantGroups.length})
           </button>
           <button
             onClick={() => setSection('tags')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               section === 'tags'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <Tag className="w-4 h-4" />
+            <Tag className="w-4 h-4 shrink-0" />
             Etiketler ({tags.length})
           </button>
         </div>
@@ -235,10 +235,10 @@ export default function CatalogMappingsView({
           <button
             onClick={handleAutoMatchCategories}
             disabled={loading}
-            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold flex items-center gap-2 shadow-sm disabled:opacity-50"
+            className="w-full lg:w-auto min-h-[44px] px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer shrink-0"
           >
-            <Sparkles className="w-4 h-4" />
-            Tüm Kategorileri Otomatik Eşitle (Trendyol + Hepsiburada)
+            <Sparkles className="w-4 h-4 shrink-0" />
+            Tüm Kategorileri Otomatik Eşitle
           </button>
         )}
       </div>
@@ -246,22 +246,22 @@ export default function CatalogMappingsView({
       {/* 1. KATEGORİLER BÖLÜMÜ */}
       {section === 'categories' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
-            <div className="relative flex-1 min-w-[260px]">
+          <div className="p-3 sm:p-4 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+            <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Kategori adı veya XML kategori yolu ara (Örn: Babydoll, Gecelik, Jartiyer)..."
-                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-300 text-sm"
+                placeholder="Kategori adı veya XML yolu ara..."
+                className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white"
+                className="w-full sm:w-auto px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white"
               >
                 <option value="all">Tüm Durumlar ({categories.length})</option>
                 <option value="mapped">Tam Eşitlenenler</option>
@@ -270,7 +270,51 @@ export default function CatalogMappingsView({
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Mobil Kategori Kartları */}
+          <div className="md:hidden divide-y divide-slate-200">
+            {filteredCategories.map((cat) => (
+              <div key={`mcat-${cat.id}`} className="p-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-bold text-slate-900 text-sm">{cat.name}</div>
+                    <div className="text-[11px] font-mono text-slate-500 mt-0.5 break-words">
+                      {cat.xmlCategoryTree}
+                    </div>
+                  </div>
+                  <span className="shrink-0 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[11px] font-semibold">
+                    {cat.productCount} ürün
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {renderStatusBadge('Trendyol', cat.trendyolStatus)}
+                  {renderStatusBadge('Hepsiburada', cat.hepsiburadaStatus)}
+                </div>
+                {(cat.trendyolCategoryName || cat.hepsiburadaCategoryName) && (
+                  <div className="text-[11px] text-slate-500 space-y-0.5 bg-slate-50 p-2 rounded-lg">
+                    {cat.trendyolCategoryName && (
+                      <div>
+                        <strong className="text-orange-600">TY:</strong> {cat.trendyolCategoryName}
+                      </div>
+                    )}
+                    {cat.hepsiburadaCategoryName && (
+                      <div>
+                        <strong className="text-amber-700">HB:</strong>{' '}
+                        {cat.hepsiburadaCategoryName}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <button
+                  onClick={() => setEditingCat({ ...cat })}
+                  className="w-full min-h-[42px] px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
+                >
+                  Kategoriyi Eşitle
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
@@ -334,83 +378,124 @@ export default function CatalogMappingsView({
       {/* 2. MARKALAR BÖLÜMÜ */}
       {section === 'brands' && (
         <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h3 className="text-sm font-bold text-blue-950">
-                Sabit Marka & Toplu Marka Eşitleme (Trendyol + Hepsiburada)
+                Sabit Marka &amp; Toplu Marka Eşitleme (Trendyol + Hepsiburada)
               </h3>
               <p className="text-xs text-blue-800 mt-0.5">
                 XML kaynağındaki markaları tek tıkla mağaza markanızla (Örn: Aria&apos;s Closet veya
                 LuneRose) eşitleyebilirsiniz.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
               <input
                 type="text"
                 value={defaultBrandInput}
                 onChange={(e) => setDefaultBrandInput(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-blue-300 text-sm bg-white"
+                className="w-full sm:w-52 px-3 py-2.5 rounded-lg border border-blue-300 text-sm bg-white"
                 placeholder="Varsayılan Pazaryeri Markası"
               />
               <button
                 onClick={handleAutoMatchBrands}
                 disabled={loading}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center gap-2"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer shrink-0"
               >
-                <Sparkles className="w-4 h-4" />
+                <Sparkles className="w-4 h-4 shrink-0" />
                 Tüm Markaları Eşitle
               </button>
             </div>
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
-                  <th className="py-3.5 px-4">XML MARKA ADI</th>
-                  <th className="py-3.5 px-4">ÜRÜN SAYISI</th>
-                  <th className="py-3.5 px-4">TRENDYOL MARKA KARŞILIĞI</th>
-                  <th className="py-3.5 px-4">HEPSİBURADA MARKA KARŞILIĞI</th>
-                  <th className="py-3.5 px-4">DURUM</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 text-sm">
-                {brands.map((b) => (
-                  <tr key={b.id} className="hover:bg-slate-50">
-                    <td className="py-3.5 px-4 font-semibold text-slate-900">{b.name}</td>
-                    <td className="py-3.5 px-4 text-slate-600">{b.productCount} ürün</td>
-                    <td className="py-3.5 px-4">
-                      {b.trendyolBrandName ? (
-                        <span className="font-medium text-slate-800">
-                          {b.trendyolBrandName}{' '}
-                          <span className="text-xs text-slate-400">(#{b.trendyolBrandId})</span>
-                        </span>
-                      ) : (
-                        <span className="text-xs text-rose-600 font-medium">Eşitlenmedi</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {b.hepsiburadaBrandName ? (
-                        <span className="font-medium text-slate-800">{b.hepsiburadaBrandName}</span>
-                      ) : (
-                        <span className="text-xs text-rose-600 font-medium">Eşitlenmedi</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {b.isMapped ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Eşitlendi
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-semibold">
-                          <XCircle className="w-3.5 h-3.5" /> Bekliyor
-                        </span>
-                      )}
-                    </td>
+            {/* Mobil Marka Kartları */}
+            <div className="md:hidden divide-y divide-slate-200">
+              {brands.map((b) => (
+                <div key={`mbrand-${b.id}`} className="p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-slate-900 text-sm">{b.name}</div>
+                      <div className="text-xs text-slate-500">{b.productCount} ürün</div>
+                    </div>
+                    {b.isMapped ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Eşitlendi
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-semibold">
+                        <XCircle className="w-3.5 h-3.5" /> Bekliyor
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg">
+                    <div>
+                      <div className="text-[10px] font-bold text-orange-600">TRENDYOL</div>
+                      <div className="font-medium text-slate-800">
+                        {b.trendyolBrandName || 'Eşitlenmedi'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold text-amber-700">HEPSİBURADA</div>
+                      <div className="font-medium text-slate-800">
+                        {b.hepsiburadaBrandName || 'Eşitlenmedi'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
+                    <th className="py-3.5 px-4">XML MARKA ADI</th>
+                    <th className="py-3.5 px-4">ÜRÜN SAYISI</th>
+                    <th className="py-3.5 px-4">TRENDYOL MARKA KARŞILIĞI</th>
+                    <th className="py-3.5 px-4">HEPSİBURADA MARKA KARŞILIĞI</th>
+                    <th className="py-3.5 px-4">DURUM</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-sm">
+                  {brands.map((b) => (
+                    <tr key={b.id} className="hover:bg-slate-50">
+                      <td className="py-3.5 px-4 font-semibold text-slate-900">{b.name}</td>
+                      <td className="py-3.5 px-4 text-slate-600">{b.productCount} ürün</td>
+                      <td className="py-3.5 px-4">
+                        {b.trendyolBrandName ? (
+                          <span className="font-medium text-slate-800">
+                            {b.trendyolBrandName}{' '}
+                            <span className="text-xs text-slate-400">(#{b.trendyolBrandId})</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-rose-600 font-medium">Eşitlenmedi</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {b.hepsiburadaBrandName ? (
+                          <span className="font-medium text-slate-800">
+                            {b.hepsiburadaBrandName}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-rose-600 font-medium">Eşitlenmedi</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {b.isMapped ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Eşitlendi
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 text-xs font-semibold">
+                            <XCircle className="w-3.5 h-3.5" /> Bekliyor
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -524,24 +609,24 @@ export default function CatalogMappingsView({
 
       {/* Tekil Kategori Eşitleme Modalı */}
       {editingCat && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden max-h-[92dvh] flex flex-col">
+            <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-bold truncate">
                   Kategori Eşitleme: {editingCat.name}
                 </h3>
-                <p className="text-xs text-slate-300 mt-0.5">{editingCat.xmlCategoryTree}</p>
+                <p className="text-xs text-slate-300 mt-0.5 truncate">{editingCat.xmlCategoryTree}</p>
               </div>
               <button
                 onClick={() => setEditingCat(null)}
-                className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300"
+                className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-2">
                   Hazır Pazaryeri Kategori Şablonu Seçin (Trendyol + Hepsiburada)
@@ -614,17 +699,17 @@ export default function CatalogMappingsView({
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0 pb-safe">
               <button
                 onClick={() => setEditingCat(null)}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium cursor-pointer"
               >
                 Vazgeç
               </button>
               <button
                 onClick={handleSaveSingleCategory}
                 disabled={loading}
-                className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center gap-2"
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Save className="w-4 h-4" />
                 Eşleştirmeyi Kaydet

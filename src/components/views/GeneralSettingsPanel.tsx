@@ -280,31 +280,31 @@ export default function GeneralSettingsPanel({
   return (
     <div className="space-y-4">
       {/* Üst Başlık ve Arama Barı (#SopyoSearch) */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h2 className="text-lg font-extrabold text-slate-900">Genel Ayarlar</h2>
+          <h2 className="text-base sm:text-lg font-extrabold text-slate-900">Genel Ayarlar</h2>
           <p className="text-xs text-slate-500 mt-0.5">
             Sopyo Firma, Fatura, Ürün Listesi, Pazaryeri, Kargo Etiketi, Bildirim ve Ürün Ayarları (9 Sekme / 65 Ayar)
           </p>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-72">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
+          <div className="relative flex-1 sm:w-64 lg:w-72">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             <input
               id="SopyoSearch"
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Ara..."
-              className="w-full pl-9 pr-4 py-2 rounded-xl border border-slate-300 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              placeholder="Ayarlarda ara..."
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-300 text-sm bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
             />
           </div>
           <button
             type="button"
             onClick={onSave}
             disabled={loading}
-            className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-xs font-extrabold flex items-center gap-2 shadow-sm shrink-0 cursor-pointer"
+            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm shrink-0 cursor-pointer"
           >
             <Save className="w-4 h-4" />
             {loading ? 'Kaydediliyor...' : 'AYARLARI KAYDET →'}
@@ -312,23 +312,23 @@ export default function GeneralSettingsPanel({
         </div>
       </div>
 
-      {/* Sopyo 2 Kolonlu Düzen: Sol 9 Sekme + Sağ Ayarlar Listesi */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      {/* Sopyo 2 Kolonlu Düzen: Mobilde Yatay Sekme Şeridi, Masaüstünde Sol 9 Sekme + Sağ Ayarlar Listesi */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
         {/* SOL KATEGORİ MENÜSÜ */}
-        <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-3 shadow-sm sticky top-20">
-          <ul className="space-y-1">
+        <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-2 sm:p-3 shadow-sm lg:sticky lg:top-20">
+          <ul className="flex lg:block overflow-x-auto no-scrollbar gap-1.5 lg:space-y-1 pb-0.5 lg:pb-0">
             {SIDEBAR_ITEMS.map((item) => {
               const Icon = item.icon;
               const isActive = activeFilter === item.id;
               return (
-                <li key={item.id}>
+                <li key={item.id} className="shrink-0 lg:shrink">
                   <button
                     type="button"
                     onClick={() => setActiveFilter(item.id)}
-                    className={`w-full px-3.5 py-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-2.5 transition cursor-pointer ${
+                    className={`lg:w-full min-h-[40px] px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-2 sm:gap-2.5 whitespace-nowrap lg:whitespace-normal transition cursor-pointer ${
                       isActive
                         ? 'bg-blue-600 text-white shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 bg-slate-50 lg:bg-transparent'
                     }`}
                   >
                     <Icon className="w-4 h-4 shrink-0" />
@@ -1063,16 +1063,16 @@ export default function GeneralSettingsPanel({
           </ul>
 
           {/* Alt Sabit Kaydet Çubuğu */}
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+          <div className="px-4 sm:px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="text-xs text-slate-500 flex items-center gap-1.5">
-              <Check className="w-4 h-4 text-emerald-600" />
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
               Kaydedilen ayarlar Ürünler, Siparişler ve Kargo Etiketlerine anında yansır.
             </div>
             <button
               type="button"
               onClick={onSave}
               disabled={loading}
-              className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-xs font-extrabold flex items-center gap-2 shadow-sm cursor-pointer"
+              className="w-full sm:w-auto min-h-[44px] px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm cursor-pointer shrink-0"
             >
               <Save className="w-4 h-4" />
               {loading ? 'Kaydediliyor...' : 'AYARLARI KAYDET →'}

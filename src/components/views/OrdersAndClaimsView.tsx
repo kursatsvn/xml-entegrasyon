@@ -115,61 +115,61 @@ export default function OrdersAndClaimsView({
 
   return (
     <div className="space-y-6">
-      {/* Üst Sekme Seçici */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Üst Sekme Seçici (Mobilde yatay kaydırılabilir) */}
+      <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-sm no-print">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
           <button
             onClick={() => setSection('orders')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition shrink-0 min-h-[40px] ${
               section === 'orders'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <ShoppingBag className="w-4 h-4" />
-            Siparişler ve Faturalar ({orders.length})
+            <ShoppingBag className="w-4 h-4 shrink-0" />
+            Siparişler ({orders.length})
           </button>
           <button
             onClick={() => setSection('claims')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition shrink-0 min-h-[40px] ${
               section === 'claims'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-4 h-4 shrink-0" />
             İade Yönetimi ({claims.length})
           </button>
           <button
             onClick={() => setSection('reports')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition shrink-0 min-h-[40px] ${
               section === 'reports'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <BarChart3 className="w-4 h-4" />
-            Finans & Satış Raporları
+            <BarChart3 className="w-4 h-4 shrink-0" />
+            Finans Raporları
           </button>
         </div>
 
         {section === 'orders' && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex items-center gap-2">
             <button
               onClick={() => handlePullOrders(false)}
               disabled={loading}
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+              className="px-3.5 py-2.5 lg:py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm min-h-[40px]"
             >
-              <DownloadCloud className="w-4 h-4" />
+              <DownloadCloud className="w-4 h-4 shrink-0" />
               Hızlı Sipariş Getir (Canlı API)
             </button>
             <button
               onClick={() => handlePullOrders(true, 'trendyol')}
               disabled={loading}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+              className="px-3.5 py-2.5 lg:py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm min-h-[40px]"
             >
-              <Zap className="w-4 h-4" />
-              Test Siparişi & Çapraz Stoktan Düşme Simülasyonu
+              <Zap className="w-4 h-4 shrink-0" />
+              Test Siparişi Simülasyonu
             </button>
           </div>
         )}
@@ -195,8 +195,8 @@ export default function OrdersAndClaimsView({
             </div>
           </div>
 
-          {/* Durum Sekmeleri */}
-          <div className="flex flex-wrap gap-2">
+          {/* Durum Sekmeleri (Mobilde Yatay Kaydırılabilir) */}
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 no-print">
             {[
               { id: 'all', label: `Tümü (${orders.length})` },
               {
@@ -219,7 +219,7 @@ export default function OrdersAndClaimsView({
               <button
                 key={st.id}
                 onClick={() => setStatusFilter(st.id)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                className={`px-3.5 py-2 rounded-lg text-xs font-semibold border transition shrink-0 ${
                   statusFilter === st.id
                     ? 'bg-slate-900 text-white border-slate-900'
                     : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
@@ -230,9 +230,105 @@ export default function OrdersAndClaimsView({
             ))}
           </div>
 
-          {/* Sipariş Tablosu */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+          {/* Sipariş Listesi: Mobilde Kartlar + Masaüstünde Tablo */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden no-print">
+            {/* MOBİL SİPARİŞ KARTLARI */}
+            <div className="md:hidden divide-y divide-slate-200">
+              {filteredOrders.map((ord) => (
+                <div key={`m-ord-${ord.id}`} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-900 text-sm">
+                          #{ord.orderNumber}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            ord.marketplace === 'trendyol'
+                              ? 'bg-orange-100 text-orange-800'
+                              : 'bg-amber-100 text-amber-900'
+                          }`}
+                        >
+                          {ord.marketplace}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {new Date(ord.orderDate).toLocaleString('tr-TR')}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-extrabold text-slate-900 text-sm">
+                        {ord.totalAmount.toFixed(2)} TL
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        Komisyon: {ord.commissionAmount.toFixed(2)} TL
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div className="font-bold text-slate-900">{ord.customerName}</div>
+                    <div className="text-slate-500 mt-0.5">
+                      {ord.shippingDistrict} / {ord.shippingCity} • {ord.cargoCompany}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {ord.items.map((it, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <div className="text-xs font-semibold text-slate-800">
+                          {it.quantity}x {it.title} ({it.sku})
+                        </div>
+                        <div className="text-[11px] px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 inline-flex items-center gap-1">
+                          <EyeOff className="w-3 h-3" />
+                          Fatura/Etiket: {it.maskedTitle || tenant.defaultMaskedProductName}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    <select
+                      value={ord.status}
+                      onChange={(e) =>
+                        handleUpdateOrder(ord.id, { status: e.target.value as Order['status'] })
+                      }
+                      className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white"
+                    >
+                      <option value="ready_to_ship">Gönderime Hazır</option>
+                      <option value="shipped">Kargolandı</option>
+                      <option value="delivered">Teslim Edildi</option>
+                      <option value="cancelled">İptal Edildi</option>
+                    </select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setPrintingOrder(ord)}
+                        className="px-3 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 min-h-[42px]"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Kargo Fişi
+                      </button>
+                      <button
+                        onClick={() => handleUpdateOrder(ord.id, { invoiceStatus: 'issued' })}
+                        className={`px-3 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border min-h-[42px] ${
+                          ord.invoiceStatus === 'issued'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                        }`}
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        {ord.invoiceStatus === 'issued'
+                          ? ord.invoiceNumber || 'Faturalandı'
+                          : 'Fatura Kes'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* MASAÜSTÜ SİPARİŞ TABLOSU */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
@@ -450,27 +546,31 @@ export default function OrdersAndClaimsView({
         </div>
       )}
 
-      {/* KARGO ETİKETİ YAZDIRMA MODALI (Sopyo Kargo Şablonları) */}
+      {/* KARGO ETİKETİ YAZDIRMA MODALI (Mobil Tam Ekran + Yazdırırken Sadece Etiket) */}
       {printingOrder && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold">
-                  Sopyo Kargo Etiketi & Barkod Fiși Yazdır (#{printingOrder.orderNumber})
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-2xl w-full max-h-[96dvh] sm:max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
+            <div className="sticky top-0 z-10 p-4 bg-slate-900 text-white flex items-center justify-between gap-2 no-print">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold truncate">
+                  Kargo Etiketi & Barkod Fişi (#{printingOrder.orderNumber})
                 </h3>
-                <p className="text-xs text-slate-300">
+                <p className="text-xs text-slate-300 truncate">
                   Şablon: {labelTemplate.toUpperCase()} | Yazı Boyutu: {gs.customerCargoReceiptFontSize || '7.7'} pt | Gizli Paketleme:{' '}
                   {useMaskedTitleOnLabel ? 'Aktif' : 'Kapalı'}
                 </p>
               </div>
-              <button onClick={() => setPrintingOrder(null)}>
+              <button
+                onClick={() => setPrintingOrder(null)}
+                aria-label="Kapat"
+                className="p-2 rounded-lg hover:bg-slate-800 shrink-0"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <div className="p-4 sm:p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 no-print">
                 <div className="flex items-center gap-2">
                   <label className="text-xs font-bold text-slate-700">Etiket Şablonu:</label>
                   <select
@@ -644,10 +744,10 @@ export default function OrdersAndClaimsView({
               </div>
             </div>
 
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+            <div className="sticky bottom-0 p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2 no-print">
               <button
                 onClick={() => setPrintingOrder(null)}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-semibold"
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold min-h-[42px]"
               >
                 Kapat
               </button>
@@ -656,7 +756,7 @@ export default function OrdersAndClaimsView({
                   handleUpdateOrder(printingOrder.id, { labelPrinted: true });
                   window.print();
                 }}
-                className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5"
+                className="flex-1 sm:flex-none px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 min-h-[42px]"
               >
                 <Printer className="w-4 h-4" />
                 Etiketi Yazdır

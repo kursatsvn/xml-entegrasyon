@@ -168,54 +168,54 @@ export default function SettingsAndAdminView({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Üst Sekmeler */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="bg-white rounded-xl border border-slate-200 p-2.5 sm:p-4 shadow-sm">
+        <div className="flex overflow-x-auto no-scrollbar items-center gap-2 pb-0.5">
           <button
             onClick={() => setTab('integrations')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'integrations'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <Plug className="w-4 h-4" />
-            Pazaryeri API Entegrasyonları (Trendyol + Hepsiburada)
+            <Plug className="w-4 h-4 shrink-0" />
+            Pazaryeri API Entegrasyonları
           </button>
           <button
             onClick={() => setTab('settings')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'settings'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <Settings className="w-4 h-4" />
-            Genel Ayarlar & Gizli Paketleme
+            <Settings className="w-4 h-4 shrink-0" />
+            Genel Ayarlar &amp; Gizli Paketleme
           </button>
           <button
             onClick={() => setTab('operations')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'operations'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <Activity className="w-4 h-4" />
+            <Activity className="w-4 h-4 shrink-0" />
             İşlem Merkezi ({operationLogs.length})
           </button>
           {isSuperAdmin && (
             <button
               onClick={() => setTab('admin')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+              className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
                 tab === 'admin'
                   ? 'bg-purple-600 text-white shadow-sm'
                   : 'bg-purple-50 text-purple-800 hover:bg-purple-100 border border-purple-200'
               }`}
             >
-              <ShieldCheck className="w-4 h-4" />
-              Süper Admin (Çoklu Mağaza & Kullanıcı Yönetimi)
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              Süper Admin
             </button>
           )}
         </div>
@@ -223,30 +223,30 @@ export default function SettingsAndAdminView({
 
       {/* 1. PAZARYERİ API ENTEGRASYONLARI */}
       {tab === 'integrations' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* TRENDYOL KARTI */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-5 bg-gradient-to-r from-orange-500 to-orange-600 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-extrabold">Trendyol Mağaza API Ayarları</h3>
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-orange-500 to-orange-600 text-white flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-extrabold">Trendyol Mağaza API Ayarları</h3>
                 <p className="text-xs text-orange-100 mt-0.5">
                   Ürün gönderimi, fiyat/stok eşitleme ve otomatik sipariş çekme
                 </p>
               </div>
-              <span className="px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold flex items-center gap-1">
+              <span className="shrink-0 px-2.5 sm:px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Bağlı
               </span>
             </div>
 
-            <div className="p-6 space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 sm:p-6 space-y-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">Mağaza Adı</label>
                   <input
                     type="text"
                     value={tyForm.storeName}
                     onChange={(e) => setTyForm({ ...tyForm, storeName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300"
                   />
                 </div>
                 <div>
@@ -259,19 +259,19 @@ export default function SettingsAndAdminView({
                     onChange={(e) =>
                       setTyForm({ ...tyForm, supplierOrMerchantId: e.target.value })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">API Key</label>
                   <input
                     type="text"
                     value={tyForm.apiKey}
                     onChange={(e) => setTyForm({ ...tyForm, apiKey: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs"
                   />
                 </div>
                 <div>
@@ -280,12 +280,12 @@ export default function SettingsAndAdminView({
                     type="password"
                     value={tyForm.apiSecret}
                     onChange={(e) => setTyForm({ ...tyForm, apiSecret: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">
                     Kargo Firması
@@ -296,7 +296,7 @@ export default function SettingsAndAdminView({
                     onChange={(e) =>
                       setTyForm({ ...tyForm, shipmentProviderName: e.target.value })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-xs"
                   />
                 </div>
                 <div>
@@ -307,7 +307,7 @@ export default function SettingsAndAdminView({
                     type="text"
                     value={tyForm.shipmentAddressId}
                     onChange={(e) => setTyForm({ ...tyForm, shipmentAddressId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs"
                   />
                 </div>
                 <div>
@@ -318,7 +318,7 @@ export default function SettingsAndAdminView({
                     type="text"
                     value={tyForm.returningAddressId}
                     onChange={(e) => setTyForm({ ...tyForm, returningAddressId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs"
                   />
                 </div>
               </div>
@@ -327,10 +327,10 @@ export default function SettingsAndAdminView({
                 <button
                   onClick={() => handleSaveMarketplace(tyForm)}
                   disabled={loading}
-                  className="px-5 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold flex items-center gap-2 shadow-sm"
+                  className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
-                  <Save className="w-4 h-4" />
-                  Trendyol Ayarlarını Kaydet & Bağlantıyı Test Et
+                  <Save className="w-4 h-4 shrink-0" />
+                  Trendyol Ayarlarını Kaydet &amp; Test Et
                 </button>
               </div>
             </div>
@@ -338,27 +338,27 @@ export default function SettingsAndAdminView({
 
           {/* HEPSİBURADA KARTI */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-5 bg-gradient-to-r from-amber-600 to-amber-700 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-extrabold">Hepsiburada Mağaza API Ayarları</h3>
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-600 to-amber-700 text-white flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-extrabold">Hepsiburada Mağaza API Ayarları</h3>
                 <p className="text-xs text-amber-100 mt-0.5">
                   Merchant ID, Servis Anahtarı ve Katalog/Sipariş entegrasyonu
                 </p>
               </div>
-              <span className="px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold flex items-center gap-1">
+              <span className="shrink-0 px-2.5 sm:px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Bağlı
               </span>
             </div>
 
-            <div className="p-6 space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 sm:p-6 space-y-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">Mağaza Adı</label>
                   <input
                     type="text"
                     value={hbForm.storeName}
                     onChange={(e) => setHbForm({ ...hbForm, storeName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300"
                   />
                 </div>
                 <div>
@@ -371,12 +371,12 @@ export default function SettingsAndAdminView({
                     onChange={(e) =>
                       setHbForm({ ...hbForm, supplierOrMerchantId: e.target.value })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">
                     Entegratör Kullanıcı Adı
@@ -385,7 +385,7 @@ export default function SettingsAndAdminView({
                     type="text"
                     value={hbForm.apiKey}
                     onChange={(e) => setHbForm({ ...hbForm, apiKey: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs"
                   />
                 </div>
                 <div>
@@ -396,12 +396,12 @@ export default function SettingsAndAdminView({
                     type="password"
                     value={hbForm.apiSecret}
                     onChange={(e) => setHbForm({ ...hbForm, apiSecret: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 font-mono text-xs"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">
                     Varsayılan Sevk Süresi (Saat)
@@ -412,7 +412,7 @@ export default function SettingsAndAdminView({
                     onChange={(e) =>
                       setHbForm({ ...hbForm, dispatchTimeHours: Number(e.target.value) })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300"
                   />
                 </div>
                 <div>
@@ -424,7 +424,7 @@ export default function SettingsAndAdminView({
                     onChange={(e) =>
                       setHbForm({ ...hbForm, hbOrderPullStatus: e.target.value as any })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white"
                   >
                     <option value="packageable">Paketlenebilir Siparişler</option>
                     <option value="ready_to_ship">Gönderime Hazır Siparişler</option>
@@ -436,10 +436,10 @@ export default function SettingsAndAdminView({
                 <button
                   onClick={() => handleSaveMarketplace(hbForm)}
                   disabled={loading}
-                  className="px-5 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-2 shadow-sm"
+                  className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
-                  <Save className="w-4 h-4" />
-                  Hepsiburada Ayarlarını Kaydet & Bağlantıyı Test Et
+                  <Save className="w-4 h-4 shrink-0" />
+                  Hepsiburada Ayarlarını Kaydet &amp; Test Et
                 </button>
               </div>
             </div>
@@ -465,17 +465,20 @@ export default function SettingsAndAdminView({
           </div>
           <div className="divide-y divide-slate-200">
             {operationLogs.map((op) => (
-              <div key={op.id} className="p-4 hover:bg-slate-50 flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+              <div
+                key={op.id}
+                className="p-4 hover:bg-slate-50 flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4"
+              >
+                <div className="space-y-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
                       {op.channel}
                     </span>
-                    <span className="font-bold text-slate-900 text-sm">{op.summary}</span>
+                    <span className="font-bold text-slate-900 text-sm break-words">{op.summary}</span>
                   </div>
-                  <div className="text-xs text-slate-600">{op.details}</div>
+                  <div className="text-xs text-slate-600 break-words">{op.details}</div>
                 </div>
-                <div className="text-xs text-slate-400 shrink-0">
+                <div className="text-[11px] sm:text-xs text-slate-400 shrink-0">
                   {new Date(op.createdAt).toLocaleString('tr-TR')}
                 </div>
               </div>
@@ -509,9 +512,12 @@ export default function SettingsAndAdminView({
               </div>
               <div className="divide-y divide-slate-200">
                 {allTenants.map((t) => (
-                  <div key={t.id} className="p-4 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <div
+                    key={t.id}
+                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 text-sm flex flex-wrap items-center gap-2">
                         {t.name}
                         {t.id === tenant.id && (
                           <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[11px] font-bold">
@@ -527,7 +533,7 @@ export default function SettingsAndAdminView({
                     {t.id !== tenant.id && (
                       <button
                         onClick={() => handleSwitchTenant(t.id)}
-                        className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold flex items-center gap-1.5"
+                        className="w-full sm:w-auto min-h-[40px] px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                       >
                         <ArrowRightLeft className="w-3.5 h-3.5" />
                         Mağazaya Geç

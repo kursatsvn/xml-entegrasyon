@@ -42,6 +42,13 @@ export default function ProductsView({
   const [priceLockFilter, setPriceLockFilter] = useState<string>('all');
   const [pageSize, setPageSize] = useState<number>(gs.productListPerPage || 20);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+
+  const activeFilterCount =
+    (platformFilter !== 'all' ? 1 : 0) +
+    (categoryFilter !== 'all' ? 1 : 0) +
+    (brandFilter !== 'all' ? 1 : 0) +
+    (priceLockFilter !== 'all' ? 1 : 0);
 
   useEffect(() => {
     setPageSize(gs.productListPerPage || 20);
@@ -282,10 +289,38 @@ export default function ProductsView({
         </div>
       )}
 
-      {/* Sopyo Gelişmiş Filtre Çubuğu */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-          <div className="md:col-span-2 relative">
+      {/* Sopyo Gelişmiş Filtre Çubuğu (Mobilde Açılır/Kapanır) */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+        <div className="flex items-center gap-2 md:hidden">
+          <div className="flex-1 relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Stok Kodu, Ürün Adı, Barkod..."
+              className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-300 text-sm"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileFiltersOpen((v) => !v)}
+            className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 shrink-0 min-h-[44px] ${
+              mobileFiltersOpen || activeFilterCount > 0
+                ? 'bg-indigo-600 text-white border-indigo-600'
+                : 'bg-slate-50 text-slate-700 border-slate-300'
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            Filtre{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          </button>
+        </div>
+
+        <div className={`${mobileFiltersOpen ? 'grid' : 'hidden'} md:grid grid-cols-1 md:grid-cols-6 gap-2.5 sm:gap-3`}>
+          <div className="hidden md:block md:col-span-2 relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
@@ -305,7 +340,7 @@ export default function ProductsView({
               setPlatformFilter(e.target.value);
               setCurrentPage(1);
             }}
-            className="px-3 py-2 rounded-xl border border-slate-300 text-sm"
+            className="px-3 py-2.5 md:py-2 rounded-xl border border-slate-300 text-sm bg-white"
           >
             <option value="all">Tüm Platform Durumları</option>
             <option value="zero-price">⚠️ XML Fiyatı 0 TL (Fiyat Girilmeli)</option>
@@ -321,7 +356,7 @@ export default function ProductsView({
               setCategoryFilter(e.target.value);
               setCurrentPage(1);
             }}
-            className="px-3 py-2 rounded-xl border border-slate-300 text-sm"
+            className="px-3 py-2.5 md:py-2 rounded-xl border border-slate-300 text-sm bg-white"
           >
             <option value="all">Tüm Kategoriler</option>
             {categories.map((c) => (
@@ -337,7 +372,7 @@ export default function ProductsView({
               setBrandFilter(e.target.value);
               setCurrentPage(1);
             }}
-            className="px-3 py-2 rounded-xl border border-slate-300 text-sm"
+            className="px-3 py-2.5 md:py-2 rounded-xl border border-slate-300 text-sm bg-white"
           >
             <option value="all">Tüm Markalar</option>
             {uniqueBrands.map((b) => (
@@ -353,7 +388,7 @@ export default function ProductsView({
               setPriceLockFilter(e.target.value);
               setCurrentPage(1);
             }}
-            className="px-3 py-2 rounded-xl border border-slate-300 text-sm"
+            className="px-3 py-2.5 md:py-2 rounded-xl border border-slate-300 text-sm bg-white"
           >
             <option value="all">XML Fiyat Kilidi (Tümü)</option>
             <option value="locked">Fiyat Kilidi Açık</option>
@@ -362,9 +397,127 @@ export default function ProductsView({
         </div>
       </div>
 
-      {/* Ürün Tablosu */}
+      {/* Ürün Listesi: Mobilde Kart Görünümü (md:hidden) + Masaüstünde Tablo (hidden md:block) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* MOBİL ÜRÜN KARTLARI */}
+        <div className="md:hidden divide-y divide-slate-200">
+          {paginatedProducts.map((p, idx) => {
+            const hasZero =
+              p.salePrice <= 0 || p.variants.some((v) => !v.salePrice || v.salePrice <= 0);
+            return (
+              <div key={`m-${p.id}-${idx}`} className="p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <img
+                    src={
+                      p.images[0] ||
+                      'https://static.ticimax.cloud/33490/Uploads/UrunResimleri/saten-kapli-dantell-babydoll-e086.jpg'
+                    }
+                    alt={p.title}
+                    className="w-16 h-20 object-cover rounded-xl border border-slate-200 bg-slate-100 shrink-0"
+                  />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 font-mono text-xs font-bold truncate">
+                        {p.stockCode}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[11px] font-bold shrink-0 ${
+                          p.status === 'active' && p.netAvailableStock > 0
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {p.status === 'active' && p.netAvailableStock > 0 ? 'Satışta' : 'Kapalı'}
+                      </span>
+                    </div>
+                    <div className="font-semibold text-slate-900 text-sm leading-snug line-clamp-2">
+                      {p.title}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+                      <span>{p.categoryName}</span>
+                      <span>•</span>
+                      <span>{p.variants.length} Varyant</span>
+                      <span>•</span>
+                      <span>Stok: <strong className="text-slate-900">{p.netAvailableStock}</strong></span>
+                    </div>
+                    {gs.productListBarcodeNoStatus && (
+                      <div className="text-[11px] font-mono text-slate-500">Barkod: {p.barcode}</div>
+                    )}
+                    {gs.productListAddedDateStatus && p.updatedAt && (
+                      <div className="text-[10px] text-slate-400">
+                        Tarih: {new Date(p.updatedAt).toLocaleDateString('tr-TR')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3'lü Fiyat Şeridi */}
+                <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-center text-xs">
+                  <div>
+                    <div className="text-[10px] text-slate-500 font-semibold">XML BAZ</div>
+                    <div className={`font-extrabold mt-0.5 ${p.salePrice <= 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+                      {p.salePrice.toFixed(2)} ₺
+                    </div>
+                  </div>
+                  <div className="border-x border-slate-200">
+                    <div className="text-[10px] text-orange-600 font-semibold">TRENDYOL</div>
+                    <div className="font-extrabold text-orange-700 mt-0.5">
+                      {p.trendyolSalePrice.toFixed(2)} ₺
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-amber-600 font-semibold">HEPSİBURADA</div>
+                    <div className="font-extrabold text-amber-700 mt-0.5">
+                      {p.hepsiburadaSalePrice.toFixed(2)} ₺
+                    </div>
+                  </div>
+                </div>
+
+                {hasZero && (
+                  <div className="px-2.5 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold">
+                    ⚠️ 0,00 TL Fiyatlı — Göndermek için fiyat giriniz
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-2 pt-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`px-2 py-1 rounded-lg text-[11px] font-bold border ${
+                        p.trendyolSyncStatus === 'synced'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : p.trendyolSyncStatus === 'error'
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      TY: {p.trendyolSyncStatus === 'synced' ? 'Aktif' : p.trendyolSyncStatus === 'error' ? 'Hatalı' : 'Bekliyor'}
+                    </span>
+                    <span
+                      className={`px-2 py-1 rounded-lg text-[11px] font-bold border ${
+                        p.hepsiburadaSyncStatus === 'synced'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : p.hepsiburadaSyncStatus === 'error'
+                          ? 'bg-rose-50 text-rose-700 border-rose-200'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      HB: {p.hepsiburadaSyncStatus === 'synced' ? 'Aktif' : p.hepsiburadaSyncStatus === 'error' ? 'Hatalı' : 'Bekliyor'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setEditingProduct(JSON.parse(JSON.stringify(p)))}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold min-h-[40px] cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> DÜZENLE
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* MASAÜSTÜ ÜRÜN TABLOSU */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500">
@@ -564,28 +717,29 @@ export default function ProductsView({
         </div>
       </div>
 
-      {/* ÜRÜN DETAY / DÜZENLEME MODALI (/products/show/[id] Birebir Karşılığı) */}
+      {/* ÜRÜN DETAY / DÜZENLEME MODALI (Mobilde Tam Ekran, Masaüstünde Modal) */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-y-auto">
-            <div className="sticky top-0 z-10 bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  Ürün Bilgileri & Kanal Bazlı Fiyatlandırma ({editingProduct.stockCode})
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl border border-slate-200 shadow-2xl w-full max-w-5xl max-h-[96dvh] sm:max-h-[92vh] overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-white px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+                  Ürün Bilgileri ({editingProduct.stockCode})
                 </h2>
-                <p className="text-xs text-slate-500">
-                  Sopyo Ürün Detay Kartı — Fatura Maskeleme, XML Fiyat Kilidi, Desi ve Varyant Yönetimi
+                <p className="text-[11px] sm:text-xs text-slate-500 truncate">
+                  Fatura Maskeleme, XML Fiyat Kilidi, Desi ve Varyant Yönetimi
                 </p>
               </div>
               <button
                 onClick={() => setEditingProduct(null)}
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                aria-label="Kapat"
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 min-w-[40px] min-h-[40px] flex items-center justify-center shrink-0 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveProduct} className="p-6 space-y-6">
+            <form onSubmit={handleSaveProduct} className="p-4 sm:p-6 space-y-5 sm:space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-xs font-bold uppercase text-slate-700 mb-1">
@@ -1021,12 +1175,32 @@ export default function ProductsView({
                 )}
               </div>
 
-              {/* Varyant / Seçenek Tablosu */}
+              {/* Varyant / Seçenek Tablosu (Mobilde Kartlar, Masaüstünde Tablo) */}
               <div>
                 <h3 className="font-bold text-slate-900 text-sm mb-2">
                   ÜRÜN SEÇENEKLERİ / VARYANTLAR ({editingProduct.variants.length})
                 </h3>
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="sm:hidden space-y-2">
+                  {editingProduct.variants.map((v, idx) => (
+                    <div
+                      key={`mv-${v.id || idx}`}
+                      className="p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-indigo-700">{v.sku}</span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
+                          Net Stok: {v.netStock}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-slate-700">
+                        <span>Renk: <strong>{v.color}</strong></span>
+                        <span>Beden: <strong>{v.size}</strong></span>
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-500">Barkod: {v.barcode}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden sm:block border border-slate-200 rounded-xl overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
@@ -1056,17 +1230,17 @@ export default function ProductsView({
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+              <div className="sticky bottom-0 bg-white flex items-center justify-end gap-2.5 pt-4 pb-2 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setEditingProduct(null)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold cursor-pointer"
+                  className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold min-h-[44px] cursor-pointer"
                 >
                   Vazgeç
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold cursor-pointer"
+                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold min-h-[44px] cursor-pointer"
                 >
                   KAYDET & GÜNCELLE
                 </button>

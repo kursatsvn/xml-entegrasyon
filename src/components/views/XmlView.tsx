@@ -355,25 +355,25 @@ export default function XmlView({
       xmlReports.find((r) => r.xmlSourceId === selectedReportSource.id) || xmlReports[0];
 
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900 truncate">
               #{selectedReportSource.name} - XML Kontrol Raporu
             </h1>
-            <p className="text-sm text-slate-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
               Son Kontrol: {new Date(selectedReportSource.lastCheckedAt).toLocaleString('tr-TR')} tarihli XML kontrol detayları
             </p>
           </div>
           <button
             onClick={() => setSubMode('list')}
-            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium cursor-pointer"
+            className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold cursor-pointer shrink-0"
           >
             ← XML Listesine Dön
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
             <div className="text-xs font-semibold uppercase text-slate-400">
               KAYNAK ÜRÜN SAYISI
@@ -487,15 +487,15 @@ export default function XmlView({
 
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between bg-white px-6 py-4 rounded-2xl border border-slate-200 shadow-xs">
-          <h1 className="text-xl font-bold text-slate-900">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-4 sm:px-6 py-4 rounded-2xl border border-slate-200 shadow-xs">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900">
             {editingSource.id
               ? 'Mevcut XML Ürün Kaynağı Düzenleme'
               : 'Yeni XML Ürün Kaynağı Tanımla'}
           </h1>
           <button
             onClick={() => setSubMode('list')}
-            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+            className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer shrink-0"
           >
             ← XML Ürün Kaynaklarına Dön
           </button>
@@ -503,16 +503,16 @@ export default function XmlView({
 
         {/* Sopyo Sol-Sağ Bölmeli 4 Adımlı Sihirbaz Kartı */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[620px]">
+          <div className="grid grid-cols-1 lg:grid-cols-12 lg:min-h-[620px]">
             {/* SOL PANEL: % İlerleme, 4 Adım, Bilgilendirme Kutusu */}
-            <div className="lg:col-span-3 border-b lg:border-b-0 lg:border-r border-slate-200 p-6 flex flex-col justify-between bg-slate-50/40">
-              <div className="space-y-6">
+            <div className="lg:col-span-3 border-b lg:border-b-0 lg:border-r border-slate-200 p-4 sm:p-6 flex flex-col justify-between bg-slate-50/40">
+              <div className="space-y-4 lg:space-y-6">
                 <div>
                   <div className="flex items-baseline justify-between">
-                    <span className="text-3xl font-extrabold text-slate-900">{progressPct}%</span>
+                    <span className="text-2xl sm:text-3xl font-extrabold text-slate-900">{progressPct}%</span>
                     <span className="text-xs text-slate-400 font-medium">XML tanımlama süreci</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-200 rounded-full mt-3 overflow-hidden">
+                  <div className="w-full h-1.5 bg-slate-200 rounded-full mt-2.5 lg:mt-3 overflow-hidden">
                     <div
                       className="h-full bg-emerald-500 transition-all duration-300"
                       style={{ width: `${progressPct}%` }}
@@ -520,13 +520,13 @@ export default function XmlView({
                   </div>
                 </div>
 
-                {/* Dikey 4 Adım Listesi */}
-                <div className="space-y-1">
+                {/* Mobilde Yatay Kaydırılabilir, Masaüstünde Dikey 4 Adım Listesi */}
+                <div className="flex lg:block overflow-x-auto no-scrollbar gap-2 lg:space-y-1 pb-1 lg:pb-0">
                   {[
-                    { idx: 0, title: 'TANIMLAMA BİLGİLERİ' },
-                    { idx: 1, title: 'ÜRÜN AYARLARI' },
-                    { idx: 2, title: 'FİYAT AYARLARI' },
-                    { idx: 3, title: 'ONAY' }
+                    { idx: 0, title: 'TANIMLAMA BİLGİLERİ', short: '1. Tanımlama' },
+                    { idx: 1, title: 'ÜRÜN AYARLARI', short: '2. Ürün' },
+                    { idx: 2, title: 'FİYAT AYARLARI', short: '3. Fiyat' },
+                    { idx: 3, title: 'ONAY', short: '4. Onay' }
                   ].map((step, i) => {
                     const isCompleted = wizardStep > step.idx;
                     const isCurrent = wizardStep === step.idx;
@@ -535,10 +535,16 @@ export default function XmlView({
                         <button
                           type="button"
                           onClick={() => setWizardStep(step.idx)}
-                          className="w-full flex items-center gap-3 py-2 text-left cursor-pointer group"
+                          className={`shrink-0 lg:w-full flex items-center gap-2 lg:gap-3 px-3 py-2 lg:px-0 rounded-xl lg:rounded-none border lg:border-0 text-left cursor-pointer group transition ${
+                            isCurrent
+                              ? 'bg-blue-50 border-blue-200 lg:bg-transparent'
+                              : isCompleted
+                              ? 'bg-emerald-50/70 border-emerald-200 lg:bg-transparent'
+                              : 'bg-white border-slate-200 lg:bg-transparent'
+                          }`}
                         >
                           <div
-                            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition ${
+                            className={`w-6 h-6 lg:w-7 lg:h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition ${
                               isCompleted
                                 ? 'bg-emerald-500 text-white'
                                 : isCurrent
@@ -549,7 +555,7 @@ export default function XmlView({
                             {isCompleted ? '✓' : step.idx + 1}
                           </div>
                           <span
-                            className={`text-xs font-bold tracking-wide transition ${
+                            className={`text-xs font-bold tracking-wide whitespace-nowrap lg:whitespace-normal transition ${
                               isCompleted
                                 ? 'text-emerald-600'
                                 : isCurrent
@@ -557,18 +563,25 @@ export default function XmlView({
                                 : 'text-slate-400 group-hover:text-slate-600'
                             }`}
                           >
-                            {step.title}
+                            <span className="lg:hidden">{step.short}</span>
+                            <span className="hidden lg:inline">{step.title}</span>
                           </span>
                         </button>
-                        {i < 3 && <div className="ml-3.5 h-4 border-l border-slate-200" />}
+                        {i < 3 && <div className="hidden lg:block ml-3.5 h-4 border-l border-slate-200" />}
                       </React.Fragment>
                     );
                   })}
                 </div>
+
+                {/* Mobil Kompakt IP Bilgisi */}
+                <div className="lg:hidden flex items-center justify-between px-3 py-2 rounded-lg bg-orange-50/80 border border-orange-200/70 text-[11px] text-orange-700">
+                  <span className="font-bold">☆ Sunucu IP:</span>
+                  <span className="font-mono font-bold text-orange-600">77.92.152.100</span>
+                </div>
               </div>
 
-              {/* Sol Alt Bilgilendirme Kutusu (IP Adresi) */}
-              <div className="mt-8 p-4 rounded-xl bg-orange-50/80 border border-orange-200/70 text-xs space-y-1.5">
+              {/* Sol Alt Bilgilendirme Kutusu (Masaüstü) */}
+              <div className="hidden lg:block mt-8 p-4 rounded-xl bg-orange-50/80 border border-orange-200/70 text-xs space-y-1.5">
                 <div className="font-bold text-orange-600 flex items-center gap-1.5">
                   <span>☆</span> BİLGİLENDİRME
                 </div>
@@ -582,7 +595,7 @@ export default function XmlView({
             </div>
 
             {/* SAĞ PANEL: ADIM İÇERİKLERİ */}
-            <div className="lg:col-span-9 p-6 lg:p-8 flex flex-col justify-between">
+            <div className="lg:col-span-9 p-4 sm:p-6 lg:p-8 flex flex-col justify-between">
               <div>
                 {/* ADIM 1: TANIMLAMA BİLGİLERİ */}
                 {wizardStep === 0 && (
@@ -616,7 +629,7 @@ export default function XmlView({
                         <label className="block text-xs font-bold uppercase text-slate-700 mb-2">
                           XML KAYNAK LINKI <span className="text-rose-500">*</span>
                         </label>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
                           <input
                             type="url"
                             value={editingSource.url}
@@ -624,13 +637,13 @@ export default function XmlView({
                               setEditingSource({ ...editingSource, url: e.target.value })
                             }
                             placeholder="https://www.ariasclosetx.com/TicimaxXmlV2/CD636DDDFFD142D396880893BBFF5820/"
-                            className="flex-1 px-4 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm font-mono text-slate-800"
+                            className="flex-1 min-w-0 px-4 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm font-mono text-slate-800"
                           />
                           <button
                             type="button"
                             disabled={inspectingNodes || !editingSource.url}
                             onClick={() => handleInspectXmlNodes(editingSource.url)}
-                            className="px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold shrink-0 cursor-pointer"
+                            className="w-full sm:w-auto min-h-[42px] px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold shrink-0 cursor-pointer"
                           >
                             {inspectingNodes ? 'Taranıyor...' : 'Etiketleri Test Et'}
                           </button>
@@ -1194,88 +1207,88 @@ export default function XmlView({
                     {/* Sabit Fiyat Kuralı Tablosu (priceRuleType === 1) */}
                     {editingSource.priceRuleType === 1 && (
                       <div className="border border-slate-200 rounded-xl p-4">
-                        <table className="w-full text-left border-collapse text-xs">
-                          <thead>
-                            <tr className="border-b border-slate-200 uppercase text-slate-500">
-                              <th className="py-2 px-2">KURAL TİPİ</th>
-                              <th className="py-2 px-2">İŞLEM TİPİ</th>
-                              <th className="py-2 px-2">İŞLEM MİKTARI</th>
-                              <th className="py-2 px-2">EK FİYAT (TL)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr>
-                              <td className="py-2 px-2">
-                                <select
-                                  value={editingSource.fixedPriceRule.ruleType}
-                                  onChange={(e) =>
-                                    setEditingSource({
-                                      ...editingSource,
-                                      fixedPriceRule: {
-                                        ...editingSource.fixedPriceRule,
-                                        ruleType: e.target.value as any
-                                      }
-                                    })
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                          <div>
+                            <label className="block font-bold uppercase text-slate-500 mb-1">
+                              KURAL TİPİ
+                            </label>
+                            <select
+                              value={editingSource.fixedPriceRule.ruleType}
+                              onChange={(e) =>
+                                setEditingSource({
+                                  ...editingSource,
+                                  fixedPriceRule: {
+                                    ...editingSource.fixedPriceRule,
+                                    ruleType: e.target.value as any
                                   }
-                                  className="px-3 py-2 rounded-lg border border-slate-300"
-                                >
-                                  <option value="increase">Fiyat Artışı</option>
-                                  <option value="discount">İndirim</option>
-                                </select>
-                              </td>
-                              <td className="py-2 px-2">
-                                <select
-                                  value={editingSource.fixedPriceRule.ruleOperationType}
-                                  onChange={(e) =>
-                                    setEditingSource({
-                                      ...editingSource,
-                                      fixedPriceRule: {
-                                        ...editingSource.fixedPriceRule,
-                                        ruleOperationType: e.target.value as any
-                                      }
-                                    })
+                                })
+                              }
+                              className="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white"
+                            >
+                              <option value="increase">Fiyat Artışı</option>
+                              <option value="discount">İndirim</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block font-bold uppercase text-slate-500 mb-1">
+                              İŞLEM TİPİ
+                            </label>
+                            <select
+                              value={editingSource.fixedPriceRule.ruleOperationType}
+                              onChange={(e) =>
+                                setEditingSource({
+                                  ...editingSource,
+                                  fixedPriceRule: {
+                                    ...editingSource.fixedPriceRule,
+                                    ruleOperationType: e.target.value as any
                                   }
-                                  className="px-3 py-2 rounded-lg border border-slate-300"
-                                >
-                                  <option value="percent">Yüzdelik(%)</option>
-                                  <option value="price">Fiyat</option>
-                                </select>
-                              </td>
-                              <td className="py-2 px-2">
-                                <input
-                                  type="number"
-                                  value={editingSource.fixedPriceRule.ruleAmount}
-                                  onChange={(e) =>
-                                    setEditingSource({
-                                      ...editingSource,
-                                      fixedPriceRule: {
-                                        ...editingSource.fixedPriceRule,
-                                        ruleAmount: Number(e.target.value)
-                                      }
-                                    })
+                                })
+                              }
+                              className="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white"
+                            >
+                              <option value="percent">Yüzdelik(%)</option>
+                              <option value="price">Fiyat</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block font-bold uppercase text-slate-500 mb-1">
+                              İŞLEM MİKTARI
+                            </label>
+                            <input
+                              type="number"
+                              value={editingSource.fixedPriceRule.ruleAmount}
+                              onChange={(e) =>
+                                setEditingSource({
+                                  ...editingSource,
+                                  fixedPriceRule: {
+                                    ...editingSource.fixedPriceRule,
+                                    ruleAmount: Number(e.target.value)
                                   }
-                                  className="w-28 px-3 py-2 rounded-lg border border-slate-300"
-                                />
-                              </td>
-                              <td className="py-2 px-2">
-                                <input
-                                  type="number"
-                                  value={editingSource.fixedPriceRule.ruleExtraPrice}
-                                  onChange={(e) =>
-                                    setEditingSource({
-                                      ...editingSource,
-                                      fixedPriceRule: {
-                                        ...editingSource.fixedPriceRule,
-                                        ruleExtraPrice: Number(e.target.value)
-                                      }
-                                    })
+                                })
+                              }
+                              className="w-full px-3 py-2.5 rounded-lg border border-slate-300"
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-bold uppercase text-slate-500 mb-1">
+                              EK FİYAT (TL)
+                            </label>
+                            <input
+                              type="number"
+                              value={editingSource.fixedPriceRule.ruleExtraPrice}
+                              onChange={(e) =>
+                                setEditingSource({
+                                  ...editingSource,
+                                  fixedPriceRule: {
+                                    ...editingSource.fixedPriceRule,
+                                    ruleExtraPrice: Number(e.target.value)
                                   }
-                                  className="w-28 px-3 py-2 rounded-lg border border-slate-300"
-                                />
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
+                                })
+                              }
+                              className="w-full px-3 py-2.5 rounded-lg border border-slate-300"
+                            />
+                          </div>
+                        </div>
                       </div>
                     )}
 
@@ -1288,7 +1301,7 @@ export default function XmlView({
                               key={ch}
                               type="button"
                               onClick={() => setActivePriceMarketplaceTab(ch)}
-                              className={`px-6 py-3 text-xs font-bold transition cursor-pointer ${
+                              className={`flex-1 sm:flex-none px-5 sm:px-6 py-3 text-xs font-bold transition cursor-pointer ${
                                 activePriceMarketplaceTab === ch
                                   ? 'bg-white text-blue-600 border-b-2 border-blue-600'
                                   : 'text-slate-600 hover:text-slate-900'
@@ -1299,25 +1312,35 @@ export default function XmlView({
                           ))}
                         </div>
 
-                        <div className="p-4 space-y-4">
-                          <table className="w-full text-left border-collapse text-xs">
-                            <thead>
-                              <tr className="border-b border-slate-200 uppercase text-slate-500">
-                                <th className="py-2 px-2">FİYAT &gt;=</th>
-                                <th className="py-2 px-2">&lt; FİYAT</th>
-                                <th className="py-2 px-2">KURAL TİPİ</th>
-                                <th className="py-2 px-2">İŞLEM TİPİ</th>
-                                <th className="py-2 px-2">İŞLEM MİKTARI</th>
-                                <th className="py-2 px-2">EK FİYAT (TL)</th>
-                                <th className="py-2 px-2"></th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {(
-                                editingSource.marketplacePriceRules[activePriceMarketplaceTab] || []
-                              ).map((rule, idx) => (
-                                <tr key={idx}>
-                                  <td className="py-2 px-2">
+                        <div className="p-3 sm:p-4 space-y-4">
+                          {/* Mobil Kural Kartları */}
+                          <div className="md:hidden space-y-3">
+                            {(
+                              editingSource.marketplacePriceRules[activePriceMarketplaceTab] || []
+                            ).map((rule, idx) => (
+                              <div
+                                key={idx}
+                                className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5 text-xs"
+                              >
+                                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                                  <span className="font-bold text-slate-700">
+                                    {activePriceMarketplaceTab} Kural #{idx + 1}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      removeMarketplaceRuleRow(activePriceMarketplaceTab, idx)
+                                    }
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-600 font-bold cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" /> Sil
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2.5">
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                                      FİYAT &gt;=
+                                    </label>
                                     <input
                                       type="number"
                                       value={rule.ruleMinPrice}
@@ -1329,10 +1352,13 @@ export default function XmlView({
                                           e.target.value
                                         )
                                       }
-                                      className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white"
                                     />
-                                  </td>
-                                  <td className="py-2 px-2">
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                                      &lt; FİYAT
+                                    </label>
                                     <input
                                       type="number"
                                       value={rule.ruleMaxPrice}
@@ -1344,10 +1370,13 @@ export default function XmlView({
                                           e.target.value
                                         )
                                       }
-                                      className="w-36 px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white"
                                     />
-                                  </td>
-                                  <td className="py-2 px-2">
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                                      KURAL TİPİ
+                                    </label>
                                     <select
                                       value={rule.ruleType}
                                       onChange={(e) =>
@@ -1358,13 +1387,16 @@ export default function XmlView({
                                           e.target.value
                                         )
                                       }
-                                      className="px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white"
                                     >
                                       <option value="increase">Fiyat Artışı</option>
                                       <option value="discount">İndirim</option>
                                     </select>
-                                  </td>
-                                  <td className="py-2 px-2">
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                                      İŞLEM TİPİ
+                                    </label>
                                     <select
                                       value={rule.ruleOperationType}
                                       onChange={(e) =>
@@ -1375,13 +1407,16 @@ export default function XmlView({
                                           e.target.value
                                         )
                                       }
-                                      className="px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white"
                                     >
                                       <option value="percent">Yüzdelik(%)</option>
                                       <option value="price">Fiyat</option>
                                     </select>
-                                  </td>
-                                  <td className="py-2 px-2">
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                                      İŞLEM MİKTARI
+                                    </label>
                                     <input
                                       type="number"
                                       value={rule.ruleAmount}
@@ -1393,10 +1428,13 @@ export default function XmlView({
                                           e.target.value
                                         )
                                       }
-                                      className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold"
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white font-bold"
                                     />
-                                  </td>
-                                  <td className="py-2 px-2">
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                                      EK FİYAT (TL)
+                                    </label>
                                     <input
                                       type="number"
                                       value={rule.ruleExtraPrice}
@@ -1408,29 +1446,148 @@ export default function XmlView({
                                           e.target.value
                                         )
                                       }
-                                      className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold"
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white font-bold"
                                     />
-                                  </td>
-                                  <td className="py-2 px-2">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        removeMarketplaceRuleRow(activePriceMarketplaceTab, idx)
-                                      }
-                                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </td>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Masaüstü Tablosu */}
+                          <div className="hidden md:block overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="border-b border-slate-200 uppercase text-slate-500">
+                                  <th className="py-2 px-2">FİYAT &gt;=</th>
+                                  <th className="py-2 px-2">&lt; FİYAT</th>
+                                  <th className="py-2 px-2">KURAL TİPİ</th>
+                                  <th className="py-2 px-2">İŞLEM TİPİ</th>
+                                  <th className="py-2 px-2">İŞLEM MİKTARI</th>
+                                  <th className="py-2 px-2">EK FİYAT (TL)</th>
+                                  <th className="py-2 px-2"></th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {(
+                                  editingSource.marketplacePriceRules[activePriceMarketplaceTab] || []
+                                ).map((rule, idx) => (
+                                  <tr key={idx}>
+                                    <td className="py-2 px-2">
+                                      <input
+                                        type="number"
+                                        value={rule.ruleMinPrice}
+                                        onChange={(e) =>
+                                          updateMarketplaceRule(
+                                            activePriceMarketplaceTab,
+                                            idx,
+                                            'ruleMinPrice',
+                                            e.target.value
+                                          )
+                                        }
+                                        className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                      />
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <input
+                                        type="number"
+                                        value={rule.ruleMaxPrice}
+                                        onChange={(e) =>
+                                          updateMarketplaceRule(
+                                            activePriceMarketplaceTab,
+                                            idx,
+                                            'ruleMaxPrice',
+                                            e.target.value
+                                          )
+                                        }
+                                        className="w-36 px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                      />
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <select
+                                        value={rule.ruleType}
+                                        onChange={(e) =>
+                                          updateMarketplaceRule(
+                                            activePriceMarketplaceTab,
+                                            idx,
+                                            'ruleType',
+                                            e.target.value
+                                          )
+                                        }
+                                        className="px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                      >
+                                        <option value="increase">Fiyat Artışı</option>
+                                        <option value="discount">İndirim</option>
+                                      </select>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <select
+                                        value={rule.ruleOperationType}
+                                        onChange={(e) =>
+                                          updateMarketplaceRule(
+                                            activePriceMarketplaceTab,
+                                            idx,
+                                            'ruleOperationType',
+                                            e.target.value
+                                          )
+                                        }
+                                        className="px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                      >
+                                        <option value="percent">Yüzdelik(%)</option>
+                                        <option value="price">Fiyat</option>
+                                      </select>
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <input
+                                        type="number"
+                                        value={rule.ruleAmount}
+                                        onChange={(e) =>
+                                          updateMarketplaceRule(
+                                            activePriceMarketplaceTab,
+                                            idx,
+                                            'ruleAmount',
+                                            e.target.value
+                                          )
+                                        }
+                                        className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold"
+                                      />
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <input
+                                        type="number"
+                                        value={rule.ruleExtraPrice}
+                                        onChange={(e) =>
+                                          updateMarketplaceRule(
+                                            activePriceMarketplaceTab,
+                                            idx,
+                                            'ruleExtraPrice',
+                                            e.target.value
+                                          )
+                                        }
+                                        className="w-24 px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold"
+                                      />
+                                    </td>
+                                    <td className="py-2 px-2">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          removeMarketplaceRuleRow(activePriceMarketplaceTab, idx)
+                                        }
+                                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
 
                           <button
                             type="button"
                             onClick={() => addMarketplaceRuleRow(activePriceMarketplaceTab)}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 cursor-pointer"
+                            className="w-full sm:w-auto min-h-[42px] inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 cursor-pointer"
                           >
                             <Plus className="w-4 h-4" /> YENİ SATIR EKLE
                           </button>
@@ -1607,7 +1764,7 @@ export default function XmlView({
                               key={ch}
                               type="button"
                               onClick={() => setActivePriceMarketplaceTab(ch)}
-                              className={`px-6 py-2.5 text-xs font-bold transition cursor-pointer ${
+                              className={`flex-1 sm:flex-none px-5 sm:px-6 py-2.5 text-xs font-bold transition cursor-pointer ${
                                 activePriceMarketplaceTab === ch
                                   ? 'bg-white text-blue-600 border-b-2 border-blue-600'
                                   : 'text-slate-600 hover:text-slate-900'
@@ -1617,39 +1774,71 @@ export default function XmlView({
                             </button>
                           ))}
                         </div>
-                        <div className="p-4">
-                          <table className="w-full text-left border-collapse text-xs">
-                            <thead>
-                              <tr className="border-b border-slate-200 uppercase text-slate-500">
-                                <th className="py-2 px-2">FİYAT &gt;=</th>
-                                <th className="py-2 px-2">&lt; FİYAT</th>
-                                <th className="py-2 px-2">KURAL TİPİ</th>
-                                <th className="py-2 px-2">İŞLEM TİPİ</th>
-                                <th className="py-2 px-2">İŞLEM MİKTARI</th>
-                                <th className="py-2 px-2">EK FİYAT (TL)</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {(
-                                editingSource.marketplacePriceRules[activePriceMarketplaceTab] || []
-                              ).map((r, i) => (
-                                <tr key={i} className="text-slate-800 font-medium">
-                                  <td className="py-2.5 px-2">{r.ruleMinPrice}</td>
-                                  <td className="py-2.5 px-2">
-                                    {r.ruleMaxPrice > 999999 ? '9999999999999999' : r.ruleMaxPrice}
-                                  </td>
-                                  <td className="py-2.5 px-2">
-                                    {r.ruleType === 'increase' ? 'Fiyat Artışı' : 'İndirim'}
-                                  </td>
-                                  <td className="py-2.5 px-2">
-                                    {r.ruleOperationType === 'percent' ? 'Yüzdelik(%)' : 'Fiyat'}
-                                  </td>
-                                  <td className="py-2.5 px-2">{r.ruleAmount}</td>
-                                  <td className="py-2.5 px-2">{r.ruleExtraPrice || 0}</td>
+                        <div className="p-3 sm:p-4">
+                          {/* Mobil Özet Kartları */}
+                          <div className="md:hidden space-y-2">
+                            {(
+                              editingSource.marketplacePriceRules[activePriceMarketplaceTab] || []
+                            ).map((r, i) => (
+                              <div
+                                key={i}
+                                className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1"
+                              >
+                                <div className="flex items-center justify-between font-bold text-slate-800">
+                                  <span>
+                                    {r.ruleMinPrice} ₺ –{' '}
+                                    {r.ruleMaxPrice > 999999 ? '∞' : `${r.ruleMaxPrice} ₺`}
+                                  </span>
+                                  <span className="text-blue-600">
+                                    {r.ruleType === 'increase' ? '+' : '-'}
+                                    {r.ruleAmount}
+                                    {r.ruleOperationType === 'percent' ? '%' : ' ₺'}
+                                    {r.ruleExtraPrice ? ` + ${r.ruleExtraPrice} ₺` : ''}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-500">
+                                  {r.ruleType === 'increase' ? 'Fiyat Artışı' : 'İndirim'} •{' '}
+                                  {r.ruleOperationType === 'percent' ? 'Yüzdelik(%)' : 'Fiyat'}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Masaüstü Tablosu */}
+                          <div className="hidden md:block overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="border-b border-slate-200 uppercase text-slate-500">
+                                  <th className="py-2 px-2">FİYAT &gt;=</th>
+                                  <th className="py-2 px-2">&lt; FİYAT</th>
+                                  <th className="py-2 px-2">KURAL TİPİ</th>
+                                  <th className="py-2 px-2">İŞLEM TİPİ</th>
+                                  <th className="py-2 px-2">İŞLEM MİKTARI</th>
+                                  <th className="py-2 px-2">EK FİYAT (TL)</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {(
+                                  editingSource.marketplacePriceRules[activePriceMarketplaceTab] || []
+                                ).map((r, i) => (
+                                  <tr key={i} className="text-slate-800 font-medium">
+                                    <td className="py-2.5 px-2">{r.ruleMinPrice}</td>
+                                    <td className="py-2.5 px-2">
+                                      {r.ruleMaxPrice > 999999 ? '9999999999999999' : r.ruleMaxPrice}
+                                    </td>
+                                    <td className="py-2.5 px-2">
+                                      {r.ruleType === 'increase' ? 'Fiyat Artışı' : 'İndirim'}
+                                    </td>
+                                    <td className="py-2.5 px-2">
+                                      {r.ruleOperationType === 'percent' ? 'Yüzdelik(%)' : 'Fiyat'}
+                                    </td>
+                                    <td className="py-2.5 px-2">{r.ruleAmount}</td>
+                                    <td className="py-2.5 px-2">{r.ruleExtraPrice || 0}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1658,24 +1847,24 @@ export default function XmlView({
               </div>
 
               {/* Alt İleri / Önceki Adım / Onayla ve Bitir Barı */}
-              <div className="flex items-center justify-between pt-6 mt-8 border-t border-slate-200">
+              <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5 pt-5 mt-6 sm:pt-6 sm:mt-8 border-t border-slate-200">
                 {wizardStep > 0 ? (
                   <button
                     type="button"
                     onClick={() => setWizardStep((s) => Math.max(0, s - 1))}
-                    className="px-6 py-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold cursor-pointer"
+                    className="w-full sm:w-auto min-h-[44px] px-6 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold cursor-pointer"
                   >
                     ← ÖNCEKİ ADIM
                   </button>
                 ) : (
-                  <div />
+                  <div className="hidden sm:block" />
                 )}
 
                 {wizardStep < 3 ? (
                   <button
                     type="button"
                     onClick={() => setWizardStep((s) => Math.min(3, s + 1))}
-                    className="px-7 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs cursor-pointer"
+                    className="w-full sm:w-auto min-h-[44px] px-7 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs cursor-pointer"
                   >
                     DEVAM ET →
                   </button>
@@ -1683,7 +1872,7 @@ export default function XmlView({
                   <button
                     type="button"
                     onClick={handleSaveWizard}
-                    className="px-7 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs cursor-pointer"
+                    className="w-full sm:w-auto min-h-[44px] px-7 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs cursor-pointer"
                   >
                     ONAYLA VE BİTİR →
                   </button>
@@ -1697,24 +1886,24 @@ export default function XmlView({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">XML Ürün Kaynakları</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900">XML Ürün Kaynakları</h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Tedarikçi XML kaynaklarınızı tanımlayın, fiyat/kritik stok kurallarını yönetin ve canlı senkronize edin.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl text-xs">
-            <span className="text-slate-600 font-medium">Çekilecek Ürün Limiti:</span>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
+          <div className="flex items-center justify-between sm:justify-start gap-2 bg-slate-100 px-3 py-2 rounded-xl text-xs w-full sm:w-auto">
+            <span className="text-slate-600 font-medium shrink-0">Limit:</span>
             <select
               id="xml-sync-limit"
               name="xmlSyncLimit"
               value={syncLimit}
               onChange={(e) => setSyncLimit(Number(e.target.value))}
-              className="bg-white px-2 py-1 rounded-lg border border-slate-300 font-semibold text-slate-800"
+              className="bg-white px-2.5 py-1.5 rounded-lg border border-slate-300 font-semibold text-slate-800 flex-1 sm:flex-none min-w-0"
             >
               <option value={0}>Tüm Ürünler (1.648+ Tam Çekim)</option>
               <option value={100}>İlk 100 Ürün (Hızlı)</option>
@@ -1725,9 +1914,9 @@ export default function XmlView({
 
           <button
             onClick={openNewXmlWizard}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold shadow-sm cursor-pointer"
+            className="w-full sm:w-auto min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold shadow-sm cursor-pointer shrink-0"
           >
-            <Plus className="w-4 h-4" /> YENİ XML ÜRÜN KAYNAĞI TANIMLA
+            <Plus className="w-4 h-4 shrink-0" /> YENİ XML KAYNAĞI TANIMLA
           </button>
         </div>
       </div>
@@ -1801,18 +1990,18 @@ export default function XmlView({
               {xmlSources.map((src) => (
                 <div
                   key={src.id}
-                  className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/60 transition"
+                  className="p-4 sm:p-6 flex flex-col xl:flex-row xl:items-center justify-between gap-4 hover:bg-slate-50/60 transition"
                 >
                   <div className="space-y-1.5 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       <span className="text-sm font-bold text-slate-900">
                         XML Adı: <span className="text-indigo-600">{src.name}</span>
                       </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">
+                      <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">
                         {src.totalProductCount} Ürün / {src.totalVariantCount} Varyant
                       </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
-                        Ön Ek: {src.stockCodePrefix} | Kritik Stok: &lt;={src.criticalStockAmount}
+                      <span className="text-[11px] sm:text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono">
+                        Ön Ek: {src.stockCodePrefix} | Kritik: &lt;={src.criticalStockAmount}
                       </span>
                     </div>
                     <p className="text-xs font-mono text-slate-500 break-all">{src.url}</p>
@@ -1821,17 +2010,17 @@ export default function XmlView({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <button
                       onClick={() => handleSyncLiveXml(src)}
                       disabled={syncingId === src.id}
                       title="Canlı XML'den Ürünleri Şimdi Çek & Senkronize Et"
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-semibold cursor-pointer"
+                      className="flex-1 sm:flex-none min-h-[42px] inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-xs font-semibold cursor-pointer"
                     >
                       <RefreshCw
                         className={`w-4 h-4 ${syncingId === src.id ? 'animate-spin' : ''}`}
                       />
-                      {syncingId === src.id ? 'XML Çekiliyor...' : 'Canlı XML Çek'}
+                      {syncingId === src.id ? 'Çekiliyor...' : 'Canlı XML Çek'}
                     </button>
 
                     <button
@@ -1841,37 +2030,41 @@ export default function XmlView({
                         setSubMode('wizard');
                       }}
                       title="XML Fiyat Ayarları (% Yüzde + Ekstra TL)"
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer"
+                      className="flex-1 sm:flex-none min-h-[42px] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer"
                     >
                       % + ₺ Fiyat Ayarı
                     </button>
 
-                    <button
-                      onClick={() => openEditWizard(src)}
-                      title="XML Düzenle (Ürün & Fiyat Kuralları)"
-                      className="p-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white cursor-pointer"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <button
+                        onClick={() => openEditWizard(src)}
+                        title="XML Düzenle (Ürün & Fiyat Kuralları)"
+                        className="flex-1 sm:flex-none min-h-[42px] min-w-[42px] inline-flex items-center justify-center gap-1.5 px-3 sm:p-2.5 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-bold cursor-pointer"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        <span className="sm:hidden">Düzenle</span>
+                      </button>
 
-                    <button
-                      onClick={() => {
-                        setSelectedReportSource(src);
-                        setSubMode('report');
-                      }}
-                      title="XML Kontrol Raporu"
-                      className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer"
-                    >
-                      <BarChart3 className="w-4 h-4" />
-                    </button>
+                      <button
+                        onClick={() => {
+                          setSelectedReportSource(src);
+                          setSubMode('report');
+                        }}
+                        title="XML Kontrol Raporu"
+                        className="flex-1 sm:flex-none min-h-[42px] min-w-[42px] inline-flex items-center justify-center gap-1.5 px-3 sm:p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold cursor-pointer"
+                      >
+                        <BarChart3 className="w-4 h-4" />
+                        <span className="sm:hidden">Rapor</span>
+                      </button>
 
-                    <button
-                      onClick={() => handleDeleteXml(src)}
-                      title="XML Sil"
-                      className="p-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <button
+                        onClick={() => handleDeleteXml(src)}
+                        title="XML Sil"
+                        className="min-h-[42px] min-w-[42px] inline-flex items-center justify-center p-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

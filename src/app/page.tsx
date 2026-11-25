@@ -50,7 +50,11 @@ import {
   AlertCircle,
   Sparkles,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Menu,
+  X,
+  Smartphone,
+  Download
 } from 'lucide-react';
 
 type ActiveRoute =
@@ -99,6 +103,61 @@ export default function SopyoCloneApp() {
   const [data, setData] = useState<StatePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [showIosInstallHint, setShowIosInstallHint] = useState(false);
+
+  const navigateTo = useCallback((target: ActiveRoute) => {
+    setRoute(target);
+    setMobileMenuOpen(false);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // PWA kısayol parametresini oku (?tab=orders|products|xml)
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab') as ActiveRoute | null;
+    if (tabParam && ['dashboard', 'orders', 'products', 'xml', 'settings', 'bulk_publish'].includes(tabParam)) {
+      setRoute(tabParam);
+    }
+
+    // Standalone PWA kontrolü
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true;
+    setIsStandalone(standalone);
+
+    // Service Worker kaydı
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
+    // Android / Desktop PWA yükleme istemi
+    const handleBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallPwa = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      if (choice?.outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setIsStandalone(true);
+      }
+    } else {
+      setShowIosInstallHint((prev) => !prev);
+    }
+  };
 
   const notify = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -281,11 +340,11 @@ export default function SopyoCloneApp() {
   const groups = Array.from(new Set(navItems.map((i) => i.group)));
 
   return (
-    <div className="min-h-screen bg-slate-100 flex">
-      {/* Sağ Üst Bildirim Toast */}
+    <div className="min-h-screen bg-slate-100 flex overflow-x-hidden">
+      {/* Sağ Üst Bildirim Toast (Mobil uyumlu) */}
       {toast && (
         <div
-          className={`fixed top-5 right-5 z-50 max-w-md px-4 py-3.5 rounded-xl shadow-2xl border flex items-center gap-3 text-sm font-semibold transition-all ${
+          className={`fixed top-3 inset-x-3 sm:inset-x-auto sm:top-5 sm:right-5 z-[60] sm:max-w-md px-4 py-3.5 rounded-xl shadow-2xl border flex items-center gap-3 text-sm font-semibold transition-all no-print ${
             toast.type === 'success'
               ? 'bg-emerald-950 text-white border-emerald-700'
               : 'bg-rose-950 text-white border-rose-700'
@@ -296,13 +355,25 @@ export default function SopyoCloneApp() {
           ) : (
             <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
           )}
-          <span>{toast.msg}</span>
+          <span className="leading-snug">{toast.msg}</span>
         </div>
       )}
 
-      {/* SOL MENÜ (SOPYO SIDEBAR) */}
-      <aside className="w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 border-r border-slate-800">
-        {/* Logo */}
+      {/* Mobil Sol Menü Arka Plan Karartması */}
+      {mobileMenuOpen && (
+        <div
+          onClick={() => setMobileMenuOpen(false)}
+          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-xs lg:hidden no-print"
+        />
+      )}
+
+      {/* SOL MENÜ (Masaüstünde Sabit, Mobilde Off-Canvas Çekmece) */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 lg:w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 border-r border-slate-800 transform transition-transform duration-200 ease-out lg:static lg:translate-x-0 no-print ${
+          mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+        }`}
+      >
+        {/* Logo + Mobil Kapat Butonu */}
         <div className="h-16 px-5 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-lg shadow">
@@ -317,6 +388,14 @@ export default function SopyoCloneApp() {
               </div>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Menüyü Kapat"
+            className="lg:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 min-w-[40px] min-h-[40px] flex items-center justify-center"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Aktif Mağaza Seçici (Multi-Tenant) */}
@@ -328,7 +407,7 @@ export default function SopyoCloneApp() {
             <select
               value={data.tenant.id}
               onChange={(e) => handleQuickSwitchTenant(e.target.value)}
-              className="w-full px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-bold"
+              className="w-full px-2.5 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-bold"
             >
               {data.allTenants.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -337,7 +416,7 @@ export default function SopyoCloneApp() {
               ))}
             </select>
           ) : (
-            <div className="px-2.5 py-1.5 rounded-lg bg-slate-800/90 text-white text-xs font-bold flex items-center justify-between">
+            <div className="px-2.5 py-2 rounded-lg bg-slate-800/90 text-white text-xs font-bold flex items-center justify-between">
               <span>{data.tenant.name}</span>
               <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[10px]">
                 AKTİF
@@ -362,8 +441,8 @@ export default function SopyoCloneApp() {
                     return (
                       <button
                         key={item.id}
-                        onClick={() => setRoute(item.id)}
-                        className={`w-full px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
+                        onClick={() => navigateTo(item.id)}
+                        className={`w-full px-3 py-2.5 lg:py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition ${
                           active
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
@@ -392,6 +471,26 @@ export default function SopyoCloneApp() {
           ))}
         </nav>
 
+        {/* PWA Uygulamayı Yükle Butonu (Standalone değilse göster) */}
+        {!isStandalone && (
+          <div className="px-3 pb-2">
+            <button
+              type="button"
+              onClick={handleInstallPwa}
+              className="w-full px-3 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              Uygulamayı Telefonuna Yükle
+            </button>
+            {showIosInstallHint && (
+              <div className="mt-2 p-2.5 rounded-lg bg-slate-800 border border-slate-700 text-[11px] text-slate-200 leading-relaxed">
+                <strong>iPhone / Safari:</strong> Alt bardaki <strong>Paylaş (↑)</strong> butonuna basıp{' '}
+                <strong>&quot;Ana Ekrana Ekle&quot;</strong> seçeneğine dokunun.
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Alt Kullanıcı & Çıkış */}
         <div className="p-3.5 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between">
           <div className="truncate pr-2">
@@ -403,7 +502,7 @@ export default function SopyoCloneApp() {
           <button
             onClick={handleLogout}
             title="Çıkış Yap / Kullanıcı Değiştir"
-            className="p-2 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white transition"
+            className="p-2.5 rounded-lg bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white transition"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -412,137 +511,155 @@ export default function SopyoCloneApp() {
 
       {/* SAĞ ANA İÇERİK ALANI */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Üst Bar */}
-        <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between gap-4 sticky top-0 z-30">
-          <div className="flex items-center gap-3">
-            <h1 className="text-base font-extrabold text-slate-900">
+        {/* Üst Bar (Mobil + Masaüstü Duyarlı) */}
+        <header className="h-14 sm:h-16 bg-white border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-30 no-print">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Menüyü Aç"
+              className="lg:hidden p-2 -ml-1 rounded-xl text-slate-700 hover:bg-slate-100 min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <h1 className="text-sm sm:text-base font-extrabold text-slate-900 truncate">
               {navItems.find((n) => n.id === route)?.label || 'Yönetim Paneli'}
             </h1>
-            <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-bold">
+            <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-bold shrink-0">
               Trendyol: #1192080 (Aktif)
             </span>
-            <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
+            <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold shrink-0">
               Hepsiburada: LuneRose (Aktif)
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {!isStandalone && deferredPrompt && (
+              <button
+                type="button"
+                onClick={handleInstallPwa}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Yükle</span>
+              </button>
+            )}
             <button
-              onClick={() => setRoute('xml')}
-              className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold flex items-center gap-1.5"
+              onClick={() => navigateTo('xml')}
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold flex items-center gap-1.5"
             >
-              <FileCode2 className="w-3.5 h-3.5 text-blue-600" />
-              XML: {primaryXml?.name || 'ariasclosetx'} ({primaryXml?.totalProductCount || 1648}{' '}
-              Ürün)
+              <FileCode2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span className="hidden md:inline">
+                XML: {primaryXml?.name || 'ariasclosetx'} ({primaryXml?.totalProductCount || 1648} Ürün)
+              </span>
+              <span className="md:hidden">XML</span>
             </button>
             <button
               onClick={() => router.push('/login')}
-              className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold"
+              className="hidden sm:inline-flex px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold"
             >
               Hesap / Yeni Mağaza Kaydı
             </button>
           </div>
         </header>
 
-        {/* Sayfa İçeriği */}
-        <main className="p-6 flex-1 overflow-y-auto">
+        {/* Sayfa İçeriği (Mobilde alt tab bar için pb-24 boşluk) */}
+        <main className="p-3 sm:p-5 lg:p-6 pb-24 lg:pb-6 flex-1 overflow-y-auto min-w-0">
           {/* YÖNETİM PANELİ (DASHBOARD) */}
           {route === 'dashboard' && (
-            <div className="space-y-6">
-              {/* Üst Özet Kartları */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-                  <div className="text-xs font-bold text-slate-500 uppercase">
-                    XML KAYNAĞI ({primaryXml?.name})
+            <div className="space-y-4 sm:space-y-6">
+              {/* Üst Özet Kartları (Mobilde 2x2) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm">
+                  <div className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase truncate">
+                    XML ({primaryXml?.name})
                   </div>
-                  <div className="text-2xl font-black text-slate-900 mt-2">
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1.5 sm:mt-2">
                     {primaryXml?.totalProductCount || 1648} Ürün
                   </div>
-                  <div className="text-xs text-blue-600 font-semibold mt-1">
+                  <div className="text-[11px] sm:text-xs text-blue-600 font-semibold mt-1 line-clamp-2">
                     {primaryXml?.totalVariantCount || 7283} Varyant • Ön Ek:{' '}
-                    {primaryXml?.stockCodePrefix || 'AX'} • Kritik Stok: &lt;=
-                    {primaryXml?.criticalStockAmount || 3}
+                    {primaryXml?.stockCodePrefix || 'AX'}
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-                  <div className="text-xs font-bold text-slate-500 uppercase">
-                    KATEGORİ & VARYANT EŞİTLEME
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm">
+                  <div className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase truncate">
+                    KATEGORİ EŞİTLEME
                   </div>
-                  <div className="text-2xl font-black text-emerald-600 mt-2">
-                    {mappedCatCount} / {data.categories.length} Kategori
+                  <div className="text-xl sm:text-2xl font-black text-emerald-600 mt-1.5 sm:mt-2">
+                    {mappedCatCount} / {data.categories.length}
                   </div>
-                  <div className="text-xs text-slate-500 mt-1">
-                    Trendyol (+%105) & Hepsiburada (+%120) kuralları tanımlı
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-                  <div className="text-xs font-bold text-slate-500 uppercase">
-                    TOPLAM SİPARİŞ & CİRO
-                  </div>
-                  <div className="text-2xl font-black text-slate-900 mt-2">
-                    {totalRevenue.toFixed(2)} TL
-                  </div>
-                  <div className="text-xs text-emerald-600 font-semibold mt-1">
-                    {data.orders.length} Sipariş • Otomatik Çapraz Stok Düşümü Aktif
+                  <div className="text-[11px] sm:text-xs text-slate-500 mt-1 line-clamp-2">
+                    Trendyol (+%105) & HB (+%120)
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-                  <div className="text-xs font-bold text-slate-500 uppercase">
-                    GİZLİ PAKETLEME & FATURA
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm">
+                  <div className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase truncate">
+                    TOPLAM CİRO
                   </div>
-                  <div className="text-2xl font-black text-purple-700 mt-2">
-                    {data.tenant.maskInvoiceProductNames ? 'Maskeleme Aktif' : 'Standart'}
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1.5 sm:mt-2">
+                    {totalRevenue.toFixed(0)} TL
                   </div>
-                  <div className="text-xs text-slate-500 mt-1 truncate">
-                    Fatura Başlığı: {data.tenant.defaultMaskedProductName}
+                  <div className="text-[11px] sm:text-xs text-emerald-600 font-semibold mt-1 line-clamp-2">
+                    {data.orders.length} Sipariş • Stok Korumalı
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm">
+                  <div className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase truncate">
+                    GİZLİ PAKETLEME
+                  </div>
+                  <div className="text-lg sm:text-2xl font-black text-purple-700 mt-1.5 sm:mt-2">
+                    {data.tenant.maskInvoiceProductNames ? 'Aktif' : 'Standart'}
+                  </div>
+                  <div className="text-[11px] sm:text-xs text-slate-500 mt-1 truncate">
+                    {data.tenant.defaultMaskedProductName || 'Varsayılan Başlık'}
                   </div>
                 </div>
               </div>
 
               {/* Hızlı İşlem Kısayolları */}
-              <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-2xl p-6 text-white shadow-md">
-                <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-2xl p-4 sm:p-6 text-white shadow-md">
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-lg font-extrabold flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-amber-400" />
-                      LuneRose Hızlı Operasyon Merkezi (Sopyo Birebir Klon)
+                    <h2 className="text-base sm:text-lg font-extrabold flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
+                      LuneRose Hızlı Operasyon Merkezi
                     </h2>
                     <p className="text-xs text-slate-300 mt-1">
-                      `ariasclosetx` XML kaynağınız, Trendyol (`1192080`) ve Hepsiburada
-                      (`fea9499f-...`) API bilgileriniz hazır. Tek tıkla işlem başlatabilirsiniz:
+                      `ariasclosetx` XML, Trendyol (`1192080`) ve Hepsiburada API bilgileriniz hazır:
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:flex xl:flex-wrap gap-2">
                     <button
-                      onClick={() => setRoute('xml')}
-                      className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow"
+                      onClick={() => navigateTo('xml')}
+                      className="px-4 py-3 sm:py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center justify-center sm:justify-start gap-1.5 shadow"
                     >
-                      <FileCode2 className="w-4 h-4" />
-                      1. Canlı XML Çek & Fiyat Kuralları
+                      <FileCode2 className="w-4 h-4 shrink-0" />
+                      1. Canlı XML Çek & Kurallar
                     </button>
                     <button
-                      onClick={() => setRoute('categories')}
-                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow"
+                      onClick={() => navigateTo('categories')}
+                      className="px-4 py-3 sm:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center sm:justify-start gap-1.5 shadow"
                     >
-                      <Layers className="w-4 h-4" />
-                      2. Kategorileri Otomatik Eşitle
+                      <Layers className="w-4 h-4 shrink-0" />
+                      2. Kategorileri Eşitle
                     </button>
                     <button
-                      onClick={() => setRoute('bulk_publish')}
-                      className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center gap-1.5 shadow"
+                      onClick={() => navigateTo('bulk_publish')}
+                      className="px-4 py-3 sm:py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold flex items-center justify-center sm:justify-start gap-1.5 shadow"
                     >
-                      <Send className="w-4 h-4" />
-                      3. Trendyol & HB Toplu Ürün Gönder
+                      <Send className="w-4 h-4 shrink-0" />
+                      3. Toplu Ürün Gönder
                     </button>
                     <button
-                      onClick={() => setRoute('orders')}
-                      className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 shadow"
+                      onClick={() => navigateTo('orders')}
+                      className="px-4 py-3 sm:py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center justify-center sm:justify-start gap-1.5 shadow"
                     >
-                      <Zap className="w-4 h-4" />
-                      4. Sipariş Çek & Stoktan Düş
+                      <Zap className="w-4 h-4 shrink-0" />
+                      4. Sipariş & Kargo Fişi
                     </button>
                   </div>
                 </div>
@@ -717,6 +834,57 @@ export default function SopyoCloneApp() {
             />
           )}
         </main>
+
+        {/* MOBİL ALT HIZLI NAVİGASYON BARI (Başparmak Bölgesi - 5 Temel Sekme) */}
+        <nav
+          aria-label="Mobil Alt Menü"
+          className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 pb-safe shadow-[0_-4px_20px_rgba(15,23,42,0.06)] no-print"
+        >
+          <div className="grid grid-cols-5 h-16">
+            {[
+              { id: 'dashboard' as const, label: 'Panel', icon: LayoutDashboard },
+              { id: 'orders' as const, label: 'Sipariş', icon: ShoppingBag, badge: data.orders.length },
+              { id: 'products' as const, label: 'Ürünler', icon: Package },
+              { id: 'xml' as const, label: 'XML', icon: FileCode2 }
+            ].map((item) => {
+              const Icon = item.icon;
+              const active = route === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => navigateTo(item.id)}
+                  className={`flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition relative ${
+                    active ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {active && (
+                    <span className="absolute top-0 inset-x-4 h-0.5 rounded-full bg-blue-600" />
+                  )}
+                  <div className="relative">
+                    <Icon className="w-5 h-5" />
+                    {item.badge !== undefined && item.badge > 0 && (
+                      <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-extrabold flex items-center justify-center">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className={`flex flex-col items-center justify-center gap-1 text-[11px] font-bold transition ${
+                mobileMenuOpen ? 'text-blue-600' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Menu className="w-5 h-5" />
+              <span>Menü</span>
+            </button>
+          </div>
+        </nav>
       </div>
     </div>
   );

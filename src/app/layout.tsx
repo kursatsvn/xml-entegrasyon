@@ -1,12 +1,26 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
+  themeColor: '#0f172a'
+};
 
 export const metadata: Metadata = {
   title: 'Sopyo Enterprise — XML & Pazaryeri Entegrasyon Paneli (Trendyol & Hepsiburada)',
   description:
     'Çok kullanıcılı (Multi-Tenant) XML Ürün Kaynağı, Trendyol ve Hepsiburada Ürün, Fiyat, Stok, Sipariş ve Rekabet Yönetim Sistemi',
-  icons: {
-    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%232563eb'/><text x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='900' font-size='20'>S</text></svg>"
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Sopyo Pro'
+  },
+  formatDetection: {
+    telephone: false
   }
 };
 
@@ -17,7 +31,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="tr">
-      <body className="antialiased selection:bg-indigo-600 selection:text-white">
+      <body className="antialiased selection:bg-indigo-600 selection:text-white overflow-x-hidden">
         {children}
       </body>
     </html>

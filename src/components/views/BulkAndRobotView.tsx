@@ -369,73 +369,73 @@ export default function BulkAndRobotView({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Üst Sekmeler */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="bg-white rounded-xl border border-slate-200 p-2.5 sm:p-4 shadow-sm">
+        <div className="flex overflow-x-auto no-scrollbar items-center gap-2 pb-0.5">
           <button
             onClick={() => setTab('publish')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'publish'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <Send className="w-4 h-4" />
-            Toplu Ürün Gönderimi
+            <Send className="w-4 h-4 shrink-0" />
+            Toplu Gönderim
           </button>
           <button
             onClick={() => setTab('update')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'update'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <RefreshCw className="w-4 h-4" />
-            Toplu Stok & Fiyat Güncelleme
+            <RefreshCw className="w-4 h-4 shrink-0" />
+            Stok &amp; Fiyat Güncelleme
           </button>
           <button
             onClick={() => setTab('diff')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'diff'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <GitCompare className="w-4 h-4" />
-            Ürün Farklılık Kontrolü
+            <GitCompare className="w-4 h-4 shrink-0" />
+            Farklılık Kontrolü
           </button>
           <button
             onClick={() => setTab('robot')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'robot'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <Bot className="w-4 h-4" />
-            Fiyat Rekabet Robotu (Buybox)
+            <Bot className="w-4 h-4 shrink-0" />
+            Fiyat Robotu (Buybox)
           </button>
           <button
             onClick={() => setTab('trendyol_live')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition ${
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'trendyol_live'
                 ? 'bg-orange-600 text-white shadow-sm'
                 : 'bg-orange-50 text-orange-800 border border-orange-200 hover:bg-orange-100'
             }`}
           >
-            <Trash2 className="w-4 h-4" />
-            Trendyol Canlı Ürünler & Silme (API)
+            <Trash2 className="w-4 h-4 shrink-0" />
+            Trendyol Canlı &amp; Silme (API)
           </button>
         </div>
       </div>
 
       {/* 5. TRENDYOL CANLI ÜRÜNLERİ GÖRÜNTÜLE & SİL (1. ADIM ARŞİVLE -> 2. ADIM KALICI SİL) */}
       {tab === 'trendyol_live' && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* Canlı Sayaçlar */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-4">
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
               <div className="text-[11px] font-bold text-slate-500 uppercase">
                 TOPLAM ÜRÜN
@@ -498,78 +498,76 @@ export default function BulkAndRobotView({
           </div>
 
           {/* Filtre & 2 Aşamalı (Önce Arşivle -> Sonra Sil) Butonları */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => setTyFilter('all')}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
-                    tyFilter === 'all'
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white text-slate-700 border-slate-300'
-                  }`}
-                >
-                  Tümü ({tyStats.totalElements.toLocaleString('tr-TR')})
-                </button>
-                <button
-                  onClick={() => setTyFilter('on_sale')}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
-                    tyFilter === 'on_sale'
-                      ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  }`}
-                >
-                  Satıştaki Aktif ({tyStats.onSaleTotal.toLocaleString('tr-TR')})
-                </button>
-                <button
-                  onClick={() => setTyFilter('passive')}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
-                    tyFilter === 'passive'
-                      ? 'bg-rose-600 text-white border-rose-600'
-                      : 'bg-rose-50 text-rose-800 border-rose-200'
-                  }`}
-                >
-                  Pasif Ürünler ({tyStats.passiveTotal.toLocaleString('tr-TR')})
-                </button>
-                <button
-                  onClick={() => setTyFilter('archived')}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
-                    tyFilter === 'archived'
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-indigo-50 text-indigo-800 border-indigo-200'
-                  }`}
-                >
-                  Arşivdeki Ürünler ({tyStats.archivedTotal.toLocaleString('tr-TR')})
-                </button>
-                <button
-                  onClick={() => setTyFilter('blacklisted')}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
-                    tyFilter === 'blacklisted'
-                      ? 'bg-purple-600 text-white border-purple-600'
-                      : 'bg-purple-50 text-purple-800 border-purple-200'
-                  }`}
-                >
-                  Kara Liste ({tyStats.blacklistedTotal.toLocaleString('tr-TR')})
-                </button>
-                <button
-                  onClick={() => setTyFilter('unapproved')}
-                  className={`px-3.5 py-2 rounded-lg text-xs font-bold border transition ${
-                    tyFilter === 'unapproved'
-                      ? 'bg-amber-600 text-white border-amber-600'
-                      : 'bg-amber-50 text-amber-800 border-amber-200'
-                  }`}
-                >
-                  Onay Bekleyenler ({tyStats.unapprovedTotal.toLocaleString('tr-TR')})
-                </button>
-                <button
-                  onClick={() => loadLiveTrendyolProducts(tyPage, tyFilter)}
-                  disabled={tyLoading}
-                  className="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5"
-                >
-                  <CloudDownload className={`w-4 h-4 ${tyLoading ? 'animate-bounce' : ''}`} />
-                  Yenile
-                </button>
-              </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-sm space-y-4">
+            <div className="flex overflow-x-auto no-scrollbar items-center gap-2 pb-1">
+              <button
+                onClick={() => setTyFilter('all')}
+                className={`shrink-0 whitespace-nowrap min-h-[38px] px-3.5 py-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                  tyFilter === 'all'
+                    ? 'bg-slate-900 text-white border-slate-900'
+                    : 'bg-white text-slate-700 border-slate-300'
+                }`}
+              >
+                Tümü ({tyStats.totalElements.toLocaleString('tr-TR')})
+              </button>
+              <button
+                onClick={() => setTyFilter('on_sale')}
+                className={`shrink-0 whitespace-nowrap min-h-[38px] px-3.5 py-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                  tyFilter === 'on_sale'
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                }`}
+              >
+                Satıştaki ({tyStats.onSaleTotal.toLocaleString('tr-TR')})
+              </button>
+              <button
+                onClick={() => setTyFilter('passive')}
+                className={`shrink-0 whitespace-nowrap min-h-[38px] px-3.5 py-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                  tyFilter === 'passive'
+                    ? 'bg-rose-600 text-white border-rose-600'
+                    : 'bg-rose-50 text-rose-800 border-rose-200'
+                }`}
+              >
+                Pasif ({tyStats.passiveTotal.toLocaleString('tr-TR')})
+              </button>
+              <button
+                onClick={() => setTyFilter('archived')}
+                className={`shrink-0 whitespace-nowrap min-h-[38px] px-3.5 py-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                  tyFilter === 'archived'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                }`}
+              >
+                Arşiv ({tyStats.archivedTotal.toLocaleString('tr-TR')})
+              </button>
+              <button
+                onClick={() => setTyFilter('blacklisted')}
+                className={`shrink-0 whitespace-nowrap min-h-[38px] px-3.5 py-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                  tyFilter === 'blacklisted'
+                    ? 'bg-purple-600 text-white border-purple-600'
+                    : 'bg-purple-50 text-purple-800 border-purple-200'
+                }`}
+              >
+                Kara Liste ({tyStats.blacklistedTotal.toLocaleString('tr-TR')})
+              </button>
+              <button
+                onClick={() => setTyFilter('unapproved')}
+                className={`shrink-0 whitespace-nowrap min-h-[38px] px-3.5 py-2 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                  tyFilter === 'unapproved'
+                    ? 'bg-amber-600 text-white border-amber-600'
+                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                }`}
+              >
+                Onay Bekleyen ({tyStats.unapprovedTotal.toLocaleString('tr-TR')})
+              </button>
+              <button
+                onClick={() => loadLiveTrendyolProducts(tyPage, tyFilter)}
+                disabled={tyLoading}
+                className="shrink-0 whitespace-nowrap min-h-[38px] px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <CloudDownload className={`w-4 h-4 ${tyLoading ? 'animate-bounce' : ''}`} />
+                Yenile
+              </button>
             </div>
 
             {/* 2 Aşamalı Akış: 1. Adım Önce Arşivle -> 2. Adım Arşivlendikten Sonra Sil */}
@@ -583,7 +581,7 @@ export default function BulkAndRobotView({
                 unarchivedTotalCount === 0 && tyStats.archivedTotal > 0;
 
               return (
-                <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                <div className="pt-3 border-t border-slate-200 flex flex-col gap-3">
                   <div className="text-xs font-semibold text-slate-700">
                     {unarchivedTotalCount > 0 ? (
                       <span className="text-amber-700">
@@ -600,14 +598,14 @@ export default function BulkAndRobotView({
                     )}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2">
                     {/* SEÇİLİ ÜRÜNLER İÇİN 1. ADIM / 2. ADIM */}
                     {selectedBarcodes.length > 0 && (
                       <>
                         <button
                           onClick={() => handleArchiveTrendyolProducts('selected')}
                           disabled={tyLoading || !hasUnarchivedSelection}
-                          className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                          className="min-h-[42px] px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                         >
                           1. Adım: Seçili ({selectedBarcodes.length}) Ürünü Önce Arşivle
                         </button>
@@ -619,9 +617,9 @@ export default function BulkAndRobotView({
                               ? 'Seçili ürünleri silmek için önce arşivlemelisiniz!'
                               : 'Arşivlenmiş seçili ürünleri kalıcı olarak sil'
                           }
-                          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                          className="min-h-[42px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4 shrink-0" />
                           2. Adım: Seçili ({selectedBarcodes.length}) Arşivli Ürünü Sil
                         </button>
                       </>
@@ -631,7 +629,7 @@ export default function BulkAndRobotView({
                     <button
                       onClick={() => handleArchiveTrendyolProducts('all_unarchived')}
                       disabled={tyLoading || unarchivedTotalCount === 0}
-                      className="px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                      className="min-h-[42px] px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-40 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                     >
                       {unarchivedTotalCount > 0
                         ? `1. Adım: Aktif/Pasif Ürünleri Önce Arşivle (${unarchivedTotalCount})`
@@ -647,9 +645,9 @@ export default function BulkAndRobotView({
                           ? 'Önce 1. Adım ile tüm ürünleri arşivlemelisiniz'
                           : 'Arşivlenmiş tüm ürünleri kalıcı olarak sil'
                       }
-                      className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                      className="min-h-[42px] px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4 shrink-0" />
                       {unarchivedTotalCount > 0
                         ? '2. Adım: Sil (Önce Arşivleyin 🔒)'
                         : `2. Adım: Arşivdekileri Kalıcı Sil (${tyStats.archivedTotal.toLocaleString('tr-TR')})`}
@@ -659,9 +657,9 @@ export default function BulkAndRobotView({
                     <button
                       onClick={() => handleDeleteTrendyolProducts('blacklisted')}
                       disabled={tyLoading || tyStats.blacklistedTotal === 0}
-                      className="px-3.5 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                      className="min-h-[42px] px-3.5 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 disabled:opacity-40 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4 shrink-0" />
                       Kara Listedekileri Sil ({tyStats.blacklistedTotal.toLocaleString('tr-TR')})
                     </button>
                   </div>
@@ -670,9 +668,102 @@ export default function BulkAndRobotView({
             })()}
           </div>
 
-          {/* Canlı Ürün Tablosu */}
+          {/* Canlı Ürün Listesi (Mobil Kartlar + Masaüstü Tablosu) */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Mobil Tümünü Seç Barı & Kartlar */}
+            <div className="md:hidden">
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={tyItems.length > 0 && selectedBarcodes.length === tyItems.length}
+                    onChange={(e) =>
+                      setSelectedBarcodes(
+                        e.target.checked ? tyItems.map((i) => i.barcode) : []
+                      )
+                    }
+                    className="w-4 h-4 rounded border-slate-300 accent-orange-600"
+                  />
+                  Bu Sayfadakilerin Tümünü Seç ({tyItems.length})
+                </label>
+                {selectedBarcodes.length > 0 && (
+                  <span className="text-orange-600">{selectedBarcodes.length} seçili</span>
+                )}
+              </div>
+              <div className="divide-y divide-slate-200">
+                {tyItems.map((it, idx) => (
+                  <div key={`m-${it.barcode}-${idx}`} className="p-4 space-y-2.5">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedBarcodes.includes(it.barcode)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedBarcodes((prev) => [...prev, it.barcode]);
+                          } else {
+                            setSelectedBarcodes((prev) => prev.filter((b) => b !== it.barcode));
+                          }
+                        }}
+                        className="w-4 h-4 mt-1 rounded border-slate-300 accent-orange-600 shrink-0"
+                      />
+                      {it.imageUrl && (
+                        <img
+                          src={it.imageUrl}
+                          alt={it.title}
+                          className="w-12 h-14 object-cover rounded-lg border border-slate-200 shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-slate-900 text-xs line-clamp-2">
+                          {it.title}
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-500 mt-1 break-all">
+                          {it.barcode} • {it.stockCode}
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                          {it.brand} • {it.categoryName}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 text-xs">
+                      <span className="font-extrabold text-orange-600">
+                        {it.salePrice.toFixed(2)} TL
+                      </span>
+                      <span className="font-semibold text-slate-700">Stok: {it.quantity}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {it.onSale ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                          Satışta
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold">
+                          Pasif
+                        </span>
+                      )}
+                      {it.archived && (
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 text-[11px] font-bold">
+                          Arşivde
+                        </span>
+                      )}
+                      {it.blacklisted && (
+                        <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-[11px] font-bold">
+                          Kara Liste
+                        </span>
+                      )}
+                      {!it.approved && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-bold">
+                          Onay Bekliyor
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Masaüstü Tablosu */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
@@ -798,22 +889,22 @@ export default function BulkAndRobotView({
             </div>
 
             {/* Sayfalama */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs">
+            <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
               <span>
-                Sayfa {tyPage + 1} / {tyTotalPages} (Her sayfada 50 varyant gösteriliyor)
+                Sayfa {tyPage + 1} / {tyTotalPages} (50 varyant/sayfa)
               </span>
               <div className="flex gap-2">
                 <button
                   disabled={tyPage <= 0 || tyLoading}
                   onClick={() => loadLiveTrendyolProducts(tyPage - 1, tyFilter)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white disabled:opacity-50 font-semibold"
+                  className="flex-1 sm:flex-none min-h-[40px] px-3.5 py-1.5 rounded-lg border border-slate-300 bg-white disabled:opacity-50 font-semibold cursor-pointer"
                 >
                   ← Önceki
                 </button>
                 <button
                   disabled={tyPage + 1 >= tyTotalPages || tyLoading}
                   onClick={() => loadLiveTrendyolProducts(tyPage + 1, tyFilter)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white disabled:opacity-50 font-semibold"
+                  className="flex-1 sm:flex-none min-h-[40px] px-3.5 py-1.5 rounded-lg border border-slate-300 bg-white disabled:opacity-50 font-semibold cursor-pointer"
                 >
                   Sonraki →
                 </button>
@@ -1006,7 +1097,7 @@ export default function BulkAndRobotView({
             );
           })()}
 
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-slate-900">
                 Pazaryerlerine Toplu Ürün Gönderimi Başlat
@@ -1016,11 +1107,11 @@ export default function BulkAndRobotView({
                 Hepsiburada mağazalarınıza toplu olarak gönderir.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
               <select
                 value={selectedMarketplace}
                 onChange={(e) => setSelectedMarketplace(e.target.value as any)}
-                className="px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white"
+                className="w-full sm:w-auto px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white"
               >
                 <option value="Tümü">Trendyol + Hepsiburada (Tümü)</option>
                 <option value="Trendyol">Sadece Trendyol</option>
@@ -1029,9 +1120,9 @@ export default function BulkAndRobotView({
               <button
                 onClick={handleBulkPublish}
                 disabled={loading}
-                className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center gap-2 shadow-sm disabled:opacity-50"
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
               >
-                <Send className="w-4 h-4" />
+                <Send className="w-4 h-4 shrink-0" />
                 {loading ? 'Gönderiliyor...' : 'Toplu Ürün Gönderimini Başlat'}
               </button>
             </div>
@@ -1041,7 +1132,56 @@ export default function BulkAndRobotView({
             <div className="p-4 bg-slate-50 border-b border-slate-200 font-bold text-slate-800 text-sm">
               Toplu Gönderim Geçmişi (Sopyo Batch Kayıtları)
             </div>
-            <div className="overflow-x-auto">
+
+            {/* Mobil Batch Kartları */}
+            <div className="md:hidden divide-y divide-slate-200">
+              {batches.map((b) => (
+                <div key={`m-${b.id}`} className="p-4 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-bold text-slate-900 text-sm">
+                      #{b.batchNumber}
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-semibold">
+                      {b.marketplace}
+                    </span>
+                  </div>
+                  <div className="text-xs font-medium text-slate-700">{b.operationType}</div>
+                  <div className="flex flex-wrap gap-1.5 text-xs font-semibold">
+                    <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                      Toplam: {b.attemptedCount}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                      Başarılı: {b.successCount}
+                    </span>
+                    {b.errorCount > 0 && (
+                      <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700">
+                        Hata: {b.errorCount}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-slate-400">
+                      {new Date(b.createdAt).toLocaleString('tr-TR')}
+                    </span>
+                    {b.errors && b.errors.length > 0 ? (
+                      <button
+                        onClick={() => setSelectedBatchErrors(b)}
+                        className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <FileWarning className="w-3.5 h-3.5" />
+                        Hata ({b.errors.length})
+                      </button>
+                    ) : (
+                      <span className="text-xs text-emerald-600 font-semibold inline-flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" /> Hatasız
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
@@ -1109,8 +1249,8 @@ export default function BulkAndRobotView({
 
       {/* 2. TOPLU STOK & FİYAT GÜNCELLEME */}
       {tab === 'update' && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-slate-900">
                 Pazaryeri Toplu Stok ve Fiyat Eşitleme
@@ -1121,11 +1261,11 @@ export default function BulkAndRobotView({
                 anında basar.
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
               <select
                 value={selectedMarketplace}
                 onChange={(e) => setSelectedMarketplace(e.target.value as any)}
-                className="px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white"
+                className="w-full sm:w-auto px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white"
               >
                 <option value="Tümü">Trendyol + Hepsiburada (Tümü)</option>
                 <option value="Trendyol">Sadece Trendyol</option>
@@ -1134,10 +1274,10 @@ export default function BulkAndRobotView({
               <button
                 onClick={handleBulkUpdate}
                 disabled={loading}
-                className="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold flex items-center gap-2"
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
               >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                Stok & Fiyatları Şimdi Güncelle
+                <RefreshCw className={`w-4 h-4 shrink-0 ${loading ? 'animate-spin' : ''}`} />
+                Stok &amp; Fiyatları Şimdi Güncelle
               </button>
             </div>
           </div>
@@ -1147,7 +1287,7 @@ export default function BulkAndRobotView({
       {/* 3. ÜRÜN FARKLILIK KONTROLÜ (diffCheck) */}
       {tab === 'diff' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
+          <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-900">
                 Ürün Farklılık Kontrolü (Sopyo diffCheck)
@@ -1160,13 +1300,51 @@ export default function BulkAndRobotView({
             <button
               onClick={handleBulkUpdate}
               disabled={loading}
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-2"
+              className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shrink-0"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="w-4 h-4 shrink-0" />
               Tüm Farklılıkları Pazaryerleriyle Eşitle
             </button>
           </div>
-          <div className="overflow-x-auto">
+
+          {/* Mobil Diff Kartları */}
+          <div className="md:hidden divide-y divide-slate-200">
+            {products.slice(0, 30).map((p, idx) => (
+              <div key={`mdiff-${p.id}-${idx}`} className="p-4 space-y-2">
+                <div className="font-mono font-bold text-xs text-blue-700">{p.stockCode}</div>
+                <div className="font-semibold text-slate-900 text-xs line-clamp-2">{p.title}</div>
+                <div className="flex flex-wrap gap-2 text-[11px]">
+                  <span className="px-2 py-0.5 rounded bg-slate-100 font-semibold text-slate-700">
+                    XML: {p.totalXmlStock}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-amber-50 font-semibold text-amber-700">
+                    Rezerve: {p.reservedOrderStock}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-50 font-bold text-emerald-700">
+                    Net: {p.netAvailableStock}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
+                  <div className="p-2 rounded-lg bg-orange-50/70 border border-orange-100">
+                    <div className="text-[10px] font-bold text-orange-700">TRENDYOL</div>
+                    <div className="font-bold text-orange-600">
+                      {p.trendyolSalePrice.toFixed(2)} TL
+                    </div>
+                    <div className="text-[10px] text-slate-500">{p.trendyolSyncStatus}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-amber-50/70 border border-amber-100">
+                    <div className="text-[10px] font-bold text-amber-800">HEPSİBURADA</div>
+                    <div className="font-bold text-amber-700">
+                      {p.hepsiburadaSalePrice.toFixed(2)} TL
+                    </div>
+                    <div className="text-[10px] text-slate-500">{p.hepsiburadaSyncStatus}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
@@ -1214,10 +1392,10 @@ export default function BulkAndRobotView({
       {/* 4. FİYAT REKABET ROBOTU (BUYBOX) */}
       {tab === 'robot' && (
         <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                Trendyol & Hepsiburada Buybox Fiyat Rekabet Robotu
+                Trendyol &amp; Hepsiburada Buybox Fiyat Rekabet Robotu
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Belirlediğiniz <strong>Dip Fiyat (Min)</strong> altına asla inmeden rakip mağaza
@@ -1225,10 +1403,10 @@ export default function BulkAndRobotView({
                 günceller.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
               <button
                 onClick={() => setShowAddRobotModal(true)}
-                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5"
+                className="min-h-[42px] px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 Robota Ürün Ekle
@@ -1236,7 +1414,7 @@ export default function BulkAndRobotView({
               <button
                 onClick={handleRunPriceRobot}
                 disabled={loading}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5"
+                className="min-h-[42px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Play className="w-4 h-4" />
                 Robotu Şimdi Çalıştır
@@ -1245,102 +1423,158 @@ export default function BulkAndRobotView({
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
-                  <th className="py-3.5 px-4">ÜRÜN / STOK KODU</th>
-                  <th className="py-3.5 px-4">PAZARYERİ</th>
-                  <th className="py-3.5 px-4">MEVCUT FİYATIMIZ</th>
-                  <th className="py-3.5 px-4">BUYBOX FİYATI</th>
-                  <th className="py-3.5 px-4">DİP / TAVAN FİYAT</th>
-                  <th className="py-3.5 px-4">BUYBOX SIRASI</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 text-sm">
-                {priceRobotItems.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50">
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-slate-900">{item.productTitle}</div>
-                      <div className="text-xs font-mono text-slate-500">{item.stockCode}</div>
-                    </td>
-                    <td className="py-3.5 px-4 uppercase font-bold text-xs text-orange-600">
-                      {item.marketplace}
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {item.currentPrice.toFixed(2)} TL
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-blue-600">
-                      {item.buyboxPrice.toFixed(2)} TL
-                      <div className="text-[11px] font-normal text-slate-500">
-                        Rakip: {item.competitorStore}
+            {/* Mobil Robot Kartları */}
+            <div className="md:hidden divide-y divide-slate-200">
+              {priceRobotItems.map((item) => (
+                <div key={`mrobot-${item.id}`} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 text-xs line-clamp-2">
+                        {item.productTitle}
                       </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-xs">
-                      <span className="text-rose-600 font-semibold">
-                        Dip: {item.minFloorPrice.toFixed(2)} TL
-                      </span>
-                      {' / '}
-                      <span className="text-emerald-700 font-semibold">
-                        Tavan: {item.maxCeilingPrice.toFixed(2)} TL
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                          item.buyboxRank === 1
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}
-                      >
-                        {item.buyboxRank}. Sırada
-                      </span>
-                    </td>
+                      <div className="text-[11px] font-mono text-slate-500 mt-0.5">
+                        {item.stockCode} •{' '}
+                        <span className="uppercase font-bold text-orange-600">
+                          {item.marketplace}
+                        </span>
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                        item.buyboxRank === 1
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}
+                    >
+                      {item.buyboxRank}. Sıra
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2 rounded-lg bg-slate-50 border border-slate-200">
+                      <div className="text-[10px] text-slate-500">Fiyatımız</div>
+                      <div className="font-bold text-slate-900">
+                        {item.currentPrice.toFixed(2)} TL
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-blue-50/70 border border-blue-200">
+                      <div className="text-[10px] text-blue-700">
+                        Buybox ({item.competitorStore})
+                      </div>
+                      <div className="font-bold text-blue-700">
+                        {item.buyboxPrice.toFixed(2)} TL
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-rose-600 font-semibold">
+                      Dip: {item.minFloorPrice.toFixed(2)} TL
+                    </span>
+                    <span className="text-emerald-700 font-semibold">
+                      Tavan: {item.maxCeilingPrice.toFixed(2)} TL
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
+                    <th className="py-3.5 px-4">ÜRÜN / STOK KODU</th>
+                    <th className="py-3.5 px-4">PAZARYERİ</th>
+                    <th className="py-3.5 px-4">MEVCUT FİYATIMIZ</th>
+                    <th className="py-3.5 px-4">BUYBOX FİYATI</th>
+                    <th className="py-3.5 px-4">DİP / TAVAN FİYAT</th>
+                    <th className="py-3.5 px-4">BUYBOX SIRASI</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-sm">
+                  {priceRobotItems.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      <td className="py-3.5 px-4">
+                        <div className="font-semibold text-slate-900">{item.productTitle}</div>
+                        <div className="text-xs font-mono text-slate-500">{item.stockCode}</div>
+                      </td>
+                      <td className="py-3.5 px-4 uppercase font-bold text-xs text-orange-600">
+                        {item.marketplace}
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-slate-900">
+                        {item.currentPrice.toFixed(2)} TL
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-blue-600">
+                        {item.buyboxPrice.toFixed(2)} TL
+                        <div className="text-[11px] font-normal text-slate-500">
+                          Rakip: {item.competitorStore}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-xs">
+                        <span className="text-rose-600 font-semibold">
+                          Dip: {item.minFloorPrice.toFixed(2)} TL
+                        </span>
+                        {' / '}
+                        <span className="text-emerald-700 font-semibold">
+                          Tavan: {item.maxCeilingPrice.toFixed(2)} TL
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                            item.buyboxRank === 1
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          {item.buyboxRank}. Sırada
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
       {/* Batch Hata Raporu Modalı */}
       {selectedBatchErrors && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="p-5 bg-rose-900 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden max-h-[90dvh] flex flex-col">
+            <div className="p-4 sm:p-5 bg-rose-900 text-white flex items-center justify-between shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-bold truncate">
                   Batch #{selectedBatchErrors.batchNumber} Hata Raporu
                 </h3>
-                <p className="text-xs text-rose-200 mt-0.5">
+                <p className="text-xs text-rose-200 mt-0.5 truncate">
                   Pazaryeri: {selectedBatchErrors.marketplace} | Remote ID:{' '}
                   {selectedBatchErrors.remoteBatchId}
                 </p>
               </div>
               <button
                 onClick={() => setSelectedBatchErrors(null)}
-                className="p-1.5 rounded-lg hover:bg-rose-800 text-rose-200"
+                className="p-2 rounded-lg hover:bg-rose-800 text-rose-200 cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-5 max-h-[65vh] overflow-y-auto space-y-3">
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1 pb-safe">
               {selectedBatchErrors.errors.map((err, i) => (
                 <div
                   key={i}
                   className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs space-y-1"
                 >
-                  <div className="flex items-center justify-between font-bold text-rose-900">
-                    <span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 font-bold text-rose-900">
+                    <span className="break-words">
                       {err.stockCode} - {err.title}
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-900">
+                    <span className="px-2 py-0.5 rounded bg-rose-200 text-rose-900 shrink-0">
                       {err.marketplace}
                     </span>
                   </div>
-                  <div className="text-rose-700 flex items-center gap-1.5">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    {err.message}
+                  <div className="text-rose-700 flex items-start gap-1.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{err.message}</span>
                   </div>
                 </div>
               ))}
@@ -1351,21 +1585,24 @@ export default function BulkAndRobotView({
 
       {/* Robota Ürün Ekle Modalı */}
       {showAddRobotModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
             <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
               <h3 className="text-sm font-bold">Rekabet Robotuna Ürün Ekle</h3>
-              <button onClick={() => setShowAddRobotModal(false)}>
+              <button
+                onClick={() => setShowAddRobotModal(false)}
+                className="p-1.5 rounded-lg hover:bg-slate-800 cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-5 space-y-4 text-sm">
+            <div className="p-4 sm:p-5 space-y-4 text-sm">
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">Ürün Seçin</label>
                 <select
                   value={newRobotProductId}
                   onChange={(e) => setNewRobotProductId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white"
                 >
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -1379,13 +1616,13 @@ export default function BulkAndRobotView({
                 <select
                   value={newRobotMarketplace}
                   onChange={(e) => setNewRobotMarketplace(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300"
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white"
                 >
                   <option value="trendyol">Trendyol</option>
                   <option value="hepsiburada">Hepsiburada</option>
                 </select>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">
                     Dip Fiyat (TL)
@@ -1421,16 +1658,16 @@ export default function BulkAndRobotView({
                 </div>
               </div>
             </div>
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row justify-end gap-2 pb-safe">
               <button
                 onClick={() => setShowAddRobotModal(false)}
-                className="px-4 py-2 rounded-lg border border-slate-300 text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-lg border border-slate-300 text-xs font-semibold cursor-pointer"
               >
                 İptal
               </button>
               <button
                 onClick={handleAddRobotItem}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold"
+                className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold cursor-pointer"
               >
                 Robota Ekle
               </button>
