@@ -719,8 +719,8 @@ export default function ProductsView({
 
       {/* ÜRÜN DETAY / DÜZENLEME MODALI (Mobilde Tam Ekran, Masaüstünde Modal) */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl border border-slate-200 shadow-2xl w-full max-w-5xl max-h-[96dvh] sm:max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 pt-safe overflow-y-auto">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl border border-slate-200 shadow-2xl w-full max-w-5xl max-h-[calc(100dvh-env(safe-area-inset-top,0px)-12px)] sm:max-h-[92vh] overflow-y-auto">
             <div className="sticky top-0 z-10 bg-white px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200 flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">

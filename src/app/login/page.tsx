@@ -45,7 +45,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-slate-950 text-white">
+    <div className="min-h-[100dvh] pt-safe pb-safe grid grid-cols-1 lg:grid-cols-12 bg-slate-950 text-white">
       {/* Sol Tanıtım Alanı (Mobilde Formun Altında, Masaüstünde Solda) */}
       <div className="order-2 lg:order-1 lg:col-span-5 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-6 sm:p-8 lg:p-12 flex flex-col justify-between border-t lg:border-t-0 lg:border-r border-slate-800">
         <div>

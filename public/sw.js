@@ -1,5 +1,5 @@
 // Sopyo Pro PWA Service Worker (Network-first for pages, Network-only for /api/*)
-const CACHE_NAME = 'sopyo-pro-static-v1';
+const CACHE_NAME = 'sopyo-pro-static-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

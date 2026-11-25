@@ -548,8 +548,8 @@ export default function OrdersAndClaimsView({
 
       {/* KARGO ETİKETİ YAZDIRMA MODALI (Mobil Tam Ekran + Yazdırırken Sadece Etiket) */}
       {printingOrder && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-2xl w-full max-h-[96dvh] sm:max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 pt-safe overflow-y-auto">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-2xl w-full max-h-[calc(100dvh-env(safe-area-inset-top,0px)-12px)] sm:max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
             <div className="sticky top-0 z-10 p-4 bg-slate-900 text-white flex items-center justify-between gap-2 no-print">
               <div className="min-w-0">
                 <h3 className="text-sm font-bold truncate">
