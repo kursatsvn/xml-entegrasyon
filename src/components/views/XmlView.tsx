@@ -2,19 +2,22 @@
 
 import React, { useState } from 'react';
 import {
-  AlertCircle,
+  ArrowRight,
   BarChart3,
+  Barcode,
   CheckCircle2,
-  ChevronRight,
   Edit3,
   FileCode2,
+  Info,
+  Package,
   Plus,
   RefreshCw,
-  Server,
   Trash2,
   X
 } from 'lucide-react';
 import { PriceRuleItem, XmlSource, XmlSyncReport } from '@/types/sopyo';
+import { apiPost } from '@/lib/api-client';
+import { formatTrDateTime } from '@/lib/date-format';
 
 interface XmlViewProps {
   xmlSources: XmlSource[];
@@ -35,6 +38,8 @@ export default function XmlView({
   const [selectedReportSource, setSelectedReportSource] = useState<XmlSource | null>(null);
   const [activePriceMarketplaceTab, setActivePriceMarketplaceTab] = useState<'Trendyol' | 'Hepsiburada'>('Trendyol');
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [savingWizard, setSavingWizard] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [syncLimit, setSyncLimit] = useState<number>(0);
   const [runningAiGuard, setRunningAiGuard] = useState(false);
 
@@ -230,23 +235,22 @@ export default function XmlView({
   }
 
   async function handleSaveWizard() {
-    if (!editingSource) return;
+    if (!editingSource || savingWizard) return;
+    setSavingWizard(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_xml_source', xmlSource: editingSource })
+      const res = await apiPost('/api/state', {
+        action: 'save_xml_source',
+        xmlSource: editingSource
       });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message);
+      if (res.ok) {
+        notify(res.message);
         await onRefreshState();
         setSubMode('list');
       } else {
-        notify(data.message || 'Kaydedilemedi', 'error');
+        notify(res.message || 'Kaydedilemedi', 'error');
       }
-    } catch (e: any) {
-      notify(e?.message || 'Hata oluştu', 'error');
+    } finally {
+      setSavingWizard(false);
     }
   }
 
@@ -277,6 +281,7 @@ export default function XmlView({
   }
 
   async function handleDeleteXml(src: XmlSource) {
+    if (deletingId) return;
     const confirmed = window.confirm(
       `"${src.name}" XML kaynağını silmek istediğinizden emin misiniz?`
     );
@@ -284,19 +289,21 @@ export default function XmlView({
     const deleteProducts = window.confirm(
       `XML kaynağı ile gelen ürünler de sistemden silinsin mi? (Tamam = Silinsin, İptal = Ürünler Kalsın)`
     );
-    const res = await fetch('/api/state', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    setDeletingId(src.id);
+    try {
+      const res = await apiPost('/api/state', {
         action: 'delete_xml_source',
         xmlSourceId: src.id,
         deleteProducts
-      })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      notify(data.message);
-      await onRefreshState();
+      });
+      if (res.ok) {
+        notify(res.message);
+        await onRefreshState();
+      } else {
+        notify(res.message || 'XML kaynağı silinemedi.', 'error');
+      }
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -351,18 +358,17 @@ export default function XmlView({
   }
 
   if (subMode === 'report' && selectedReportSource) {
-    const rep =
-      xmlReports.find((r) => r.xmlSourceId === selectedReportSource.id) || xmlReports[0];
+    const rep = xmlReports.find((r) => r.xmlSourceId === selectedReportSource.id) || null;
 
     return (
       <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="min-w-0">
-            <h1 className="text-lg sm:text-xl font-bold text-slate-900 truncate">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900 truncate">
               #{selectedReportSource.name} - XML Kontrol Raporu
-            </h1>
+            </h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              Son Kontrol: {new Date(selectedReportSource.lastCheckedAt).toLocaleString('tr-TR')} tarihli XML kontrol detayları
+              Son Kontrol: {formatTrDateTime(selectedReportSource.lastCheckedAt)} tarihli XML kontrol detayları
             </p>
           </div>
           <button
@@ -382,7 +388,7 @@ export default function XmlView({
               {rep?.sourceProductCount ?? selectedReportSource.totalProductCount}
             </div>
             <div className="text-xs text-slate-500 mt-1">
-              {selectedReportSource.totalVariantCount} toplam varyant (100%)
+              {selectedReportSource.totalVariantCount} toplam varyant
             </div>
           </div>
 
@@ -391,7 +397,7 @@ export default function XmlView({
               STOĞU GÜNCELLENEN ÜRÜN SAYISI
             </div>
             <div className="text-3xl font-bold text-emerald-600 mt-2">
-              {rep?.stockUpdatedCount ?? 8}
+              {rep?.stockUpdatedCount ?? 0}
             </div>
             <div className="text-xs text-slate-500 mt-1">
               Kritik stok (&lt;={selectedReportSource.criticalStockAmount}) uygulandı
@@ -406,7 +412,7 @@ export default function XmlView({
               {rep?.priceUpdatedCount ?? 0}
             </div>
             <div className="text-xs text-slate-500 mt-1">
-              Trendyol & Hepsiburada formülü aktif
+              Trendyol &amp; Hepsiburada formülü aktif
             </div>
           </div>
 
@@ -415,10 +421,10 @@ export default function XmlView({
               SİSTEME EKLENEN YENİ ÜRÜN
             </div>
             <div className="text-3xl font-bold text-blue-600 mt-2">
-              {rep?.newlyAddedCount ?? 7}
+              {rep?.newlyAddedCount ?? 0}
             </div>
             <div className="text-xs text-slate-500 mt-1">
-              Ön ek ({selectedReportSource.stockCodePrefix}) ile eklendi
+              Ön ek ({selectedReportSource.stockCodePrefix || 'Yok'}) ile eklendi
             </div>
           </div>
 
@@ -435,7 +441,7 @@ export default function XmlView({
           </div>
         </div>
 
-        {rep && (
+        {rep ? (
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
             <h3 className="font-bold text-slate-900">Son Senkronizasyon İşlem Özeti</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -444,17 +450,18 @@ export default function XmlView({
                   Stoğu Güncellenen Ürün Kodları
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {(rep.itemsSummary.stockUpdatedSkus.length
-                    ? rep.itemsSummary.stockUpdatedSkus
-                    : ['AX33322', 'AX33317', 'AX33316', 'AX33313']
-                  ).map((sku) => (
-                    <span
-                      key={sku}
-                      className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 text-xs font-mono"
-                    >
-                      {sku}
-                    </span>
-                  ))}
+                  {rep.itemsSummary.stockUpdatedSkus.length > 0 ? (
+                    rep.itemsSummary.stockUpdatedSkus.map((sku) => (
+                      <span
+                        key={sku}
+                        className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 text-xs font-mono"
+                      >
+                        {sku}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500">Bu senkronizasyonda stok değişikliği olmadı.</span>
+                  )}
                 </div>
               </div>
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
@@ -462,20 +469,25 @@ export default function XmlView({
                   Yeni Eklenen Ürün Kodları
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {(rep.itemsSummary.newlyAddedSkus.length
-                    ? rep.itemsSummary.newlyAddedSkus
-                    : ['AX33322', 'AX33317', 'AX33316']
-                  ).map((sku) => (
-                    <span
-                      key={sku}
-                      className="px-2.5 py-1 rounded-md bg-indigo-100 text-indigo-800 text-xs font-mono"
-                    >
-                      {sku}
-                    </span>
-                  ))}
+                  {rep.itemsSummary.newlyAddedSkus.length > 0 ? (
+                    rep.itemsSummary.newlyAddedSkus.map((sku) => (
+                      <span
+                        key={sku}
+                        className="px-2.5 py-1 rounded-md bg-indigo-100 text-indigo-800 text-xs font-mono"
+                      >
+                        {sku}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500">Bu senkronizasyonda yeni ürün eklenmedi.</span>
+                  )}
                 </div>
               </div>
             </div>
+          </div>
+        ) : (
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs text-sm text-slate-500">
+            Bu XML kaynağı için henüz tamamlanmış bir senkronizasyon raporu bulunmuyor.
           </div>
         )}
       </div>
@@ -636,7 +648,7 @@ export default function XmlView({
                             onChange={(e) =>
                               setEditingSource({ ...editingSource, url: e.target.value })
                             }
-                            placeholder="https://www.ariasclosetx.com/TicimaxXmlV2/CD636DDDFFD142D396880893BBFF5820/"
+                            placeholder="https://www.ariasclosetx.com/TicimaxXmlV2/YOUR_XML_TOKEN/"
                             className="flex-1 min-w-0 px-4 py-2.5 rounded-lg bg-slate-50 border border-slate-200 text-sm font-mono text-slate-800"
                           />
                           <button
@@ -1605,7 +1617,7 @@ export default function XmlView({
                         KAYNAK ADI: <span className="text-slate-900">{editingSource.name}</span>
                       </h2>
                       <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500 text-white text-xs font-bold">
-                        ? Kalan Ürün Limitiniz : Sınırsız ({editingSource.totalProductCount || 1647} Ürün)
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Kalan Ürün Limitiniz : Sınırsız ({editingSource.totalProductCount || 1647} Ürün)
                       </span>
                     </div>
 
@@ -1615,29 +1627,31 @@ export default function XmlView({
                         ÖRNEK ÜRÜN DEĞİŞİKLİK ÖNİZLEMESİ
                       </h3>
                       <div className="flex flex-col sm:flex-row sm:items-center gap-8 pl-2">
-                        <div className="w-24 h-24 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-3xl shrink-0">
-                          🥿
+                        <div className="w-24 h-24 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                          <Package className="w-10 h-10" />
                         </div>
                         <div className="space-y-3">
                           <div>
                             <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                              <span className="text-blue-500">▣</span> ÜRÜN KODU
+                              <Package className="w-3.5 h-3.5 text-blue-500 shrink-0" /> ÜRÜN KODU
                             </div>
-                            <div className="text-base font-bold text-slate-800 mt-0.5 font-mono">
-                              KET000123 <span className="text-blue-600 mx-1">➔</span>{' '}
+                            <div className="text-base font-bold text-slate-800 mt-0.5 font-mono flex flex-wrap items-center">
+                              <span>KET000123</span>
+                              <ArrowRight className="w-4 h-4 text-blue-600 mx-1.5 shrink-0" />
                               <span className="underline decoration-blue-600 text-blue-700">
                                 {editingSource.stockCodePrefix || 'AX'}
                               </span>
-                              KET000123
+                              <span>KET000123</span>
                             </div>
                           </div>
                           <div>
                             <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
-                              <span className="text-blue-500">||||||||</span> ÜRÜN BARKODU
+                              <Barcode className="w-3.5 h-3.5 text-blue-500 shrink-0" /> ÜRÜN BARKODU
                             </div>
-                            <div className="text-base font-bold text-slate-800 mt-0.5 font-mono">
-                              869000203134 <span className="text-blue-600 mx-1">➔</span>{' '}
-                              {editingSource.generateBarcode ? '869000123246' : '869000203134'}
+                            <div className="text-base font-bold text-slate-800 mt-0.5 font-mono flex flex-wrap items-center">
+                              <span>869000203134</span>
+                              <ArrowRight className="w-4 h-4 text-blue-600 mx-1.5 shrink-0" />
+                              <span>{editingSource.generateBarcode ? '869000123246' : '869000203134'}</span>
                             </div>
                           </div>
                         </div>
@@ -1651,32 +1665,32 @@ export default function XmlView({
                       </h3>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         <div>
-                          <div className="text-[11px] font-bold text-slate-500 uppercase">
-                            <span className="text-blue-500">?</span> ÜRÜN BARKODLARI YENİDEN
+                          <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" /> ÜRÜN BARKODLARI YENİDEN
                           </div>
                           <div className="text-sm font-bold text-slate-800 mt-1">
                             {editingSource.generateBarcode ? 'OLUŞTURULSUN' : 'OLUŞTURULMASIN'}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] font-bold text-slate-500 uppercase">
-                            <span className="text-blue-500">?</span> STOK GÜNCELLEMESİ
+                          <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" /> STOK GÜNCELLEMESİ
                           </div>
                           <div className="text-sm font-bold text-slate-800 mt-1">
                             {editingSource.disableStockSync ? 'YAPILMASIN' : 'YAPILSIN'}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] font-bold text-slate-500 uppercase">
-                            <span className="text-blue-500">?</span> FİYAT GÜNCELLEMESİ
+                          <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" /> FİYAT GÜNCELLEMESİ
                           </div>
                           <div className="text-sm font-bold text-slate-800 mt-1">
                             {editingSource.disablePriceSync ? 'YAPILMASIN' : 'YAPILSIN'}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] font-bold text-slate-500 uppercase">
-                            <span className="text-blue-500">?</span> SOPYO&apos;DA OLMAYAN ÜRÜNLER
+                          <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" /> SOPYO&apos;DA OLMAYAN ÜRÜNLER
                           </div>
                           <div className="text-sm font-bold text-slate-800 mt-1">
                             {editingSource.disableNewProducts ? 'EKLENMESİN' : 'EKLENSİN'}
@@ -1692,32 +1706,32 @@ export default function XmlView({
                       </h3>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         <div>
-                          <div className="text-[11px] font-bold text-slate-500 uppercase">
-                            <span className="text-blue-500">?</span> XML SATIŞ FİYATI ETİKETİ
+                          <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" /> XML SATIŞ FİYATI ETİKETİ
                           </div>
                           <div className="text-sm font-bold text-slate-800 mt-1">
                             {editingSource.salePriceTag || 'SatisFiyati'}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] font-bold text-slate-500 uppercase">
-                            <span className="text-blue-500">?</span> XML ALIŞ FİYATI ETİKETİ
+                          <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" /> XML ALIŞ FİYATI ETİKETİ
                           </div>
                           <div className="text-sm font-bold text-slate-800 mt-1">
                             {editingSource.buyingPriceTag || 'SatisFiyati'}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] font-bold text-slate-500 uppercase">
-                            <span className="text-blue-500">?</span> XML LİSTE(ÜSTÜ ÇİZİLİ) FİYATI ETİKETİ
+                          <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" /> XML LİSTE(ÜSTÜ ÇİZİLİ) FİYATI ETİKETİ
                           </div>
                           <div className="text-sm font-bold text-slate-800 mt-1">
                             {editingSource.marketPriceTag ? editingSource.marketPriceTag : 'KULLANILMASIN'}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] font-bold text-slate-500 uppercase">
-                            <span className="text-blue-500">?</span> KRİTİK STOK MİKTARI
+                          <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" /> KRİTİK STOK MİKTARI
                           </div>
                           <div className="text-sm font-bold text-slate-800 mt-1">
                             {editingSource.criticalStockEnabled ? editingSource.criticalStockAmount : 'Yok'}
@@ -1727,8 +1741,8 @@ export default function XmlView({
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                         <div>
-                          <div className="text-[11px] font-bold text-slate-500 uppercase">
-                            <span className="text-blue-500">?</span> FİYAT KURALI
+                          <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" /> FİYAT KURALI
                           </div>
                           <div className="text-sm font-bold text-slate-800 mt-1">
                             {editingSource.priceRuleType === 3
@@ -1741,8 +1755,8 @@ export default function XmlView({
                           </div>
                         </div>
                         <div>
-                          <div className="text-[11px] font-bold text-slate-500 uppercase">
-                            <span className="text-blue-500">?</span> KDV BİLGİSİ
+                          <div className="text-[11px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                            <Info className="w-3.5 h-3.5 text-blue-500 shrink-0" /> KDV BİLGİSİ
                           </div>
                           <div className="text-sm font-bold text-slate-800 mt-1">
                             {(editingSource.taxIncludedMode ?? 0) === 0
@@ -1824,7 +1838,7 @@ export default function XmlView({
                                   <tr key={i} className="text-slate-800 font-medium">
                                     <td className="py-2.5 px-2">{r.ruleMinPrice}</td>
                                     <td className="py-2.5 px-2">
-                                      {r.ruleMaxPrice > 999999 ? '9999999999999999' : r.ruleMaxPrice}
+                                      {r.ruleMaxPrice > 999999 ? '∞' : r.ruleMaxPrice}
                                     </td>
                                     <td className="py-2.5 px-2">
                                       {r.ruleType === 'increase' ? 'Fiyat Artışı' : 'İndirim'}
@@ -1871,10 +1885,11 @@ export default function XmlView({
                 ) : (
                   <button
                     type="button"
+                    disabled={savingWizard}
                     onClick={handleSaveWizard}
-                    className="w-full sm:w-auto min-h-[44px] px-7 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs cursor-pointer"
+                    className="w-full sm:w-auto min-h-[44px] px-7 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold shadow-xs cursor-pointer disabled:opacity-60"
                   >
-                    ONAYLA VE BİTİR →
+                    {savingWizard ? 'KAYDEDİLİYOR...' : 'ONAYLA VE BİTİR →'}
                   </button>
                 )}
               </div>
@@ -1889,7 +1904,7 @@ export default function XmlView({
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <h1 className="text-lg sm:text-xl font-bold text-slate-900">XML Ürün Kaynakları</h1>
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900">XML Ürün Kaynakları</h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Tedarikçi XML kaynaklarınızı tanımlayın, fiyat/kritik stok kurallarını yönetin ve canlı senkronize edin.
           </p>
@@ -2006,7 +2021,7 @@ export default function XmlView({
                     </div>
                     <p className="text-xs font-mono text-slate-500 break-all">{src.url}</p>
                     <div className="text-xs text-slate-400">
-                      Son Kontrol Tarihi: {new Date(src.lastCheckedAt).toLocaleString('tr-TR')}
+                      Son Kontrol Tarihi: {formatTrDateTime(src.lastCheckedAt)}
                     </div>
                   </div>
 
@@ -2059,8 +2074,9 @@ export default function XmlView({
 
                       <button
                         onClick={() => handleDeleteXml(src)}
+                        disabled={deletingId === src.id}
                         title="XML Sil"
-                        className="min-h-[42px] min-w-[42px] inline-flex items-center justify-center p-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white cursor-pointer"
+                        className="min-h-[42px] min-w-[42px] inline-flex items-center justify-center p-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 disabled:opacity-60 text-white cursor-pointer"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

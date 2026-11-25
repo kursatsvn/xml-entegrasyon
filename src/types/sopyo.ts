@@ -124,12 +124,14 @@ export interface Tenant {
 
 export interface UserProfile {
   id: string;
+  authUid?: string | null;
   tenantId: string;
   email: string;
   fullName: string;
   phone: string;
   role: 'super_admin' | 'owner' | 'staff';
   password?: string;
+  clearPassword?: boolean;
   isActive: boolean;
   createdAt: string;
 }

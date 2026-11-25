@@ -1,19 +1,32 @@
 @import "tailwindcss";
 
+@theme {
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-surface: #f1f5f9;
+  --color-sidebar: #0f172a;
+  --shadow-bottom-nav: 0 -4px 20px rgba(15, 23, 42, 0.06);
+}
+
 :root {
-  --sopyo-navy: #0f172a;
-  --sopyo-blue: #2563eb;
-  --sopyo-indigo: #4f46e5;
-  --sopyo-bg: #f4f6fb;
+  color-scheme: light;
 }
 
 html,
 body {
-  background-color: #ffffff;
-  color: #1e293b;
+  background-color: var(--color-surface);
+  color: #0f172a;
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   overflow-x: clip;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* İşletim sistemi koyu moddayken form elemanlarında görünmez metin / kontrast kaybını önler */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  background-color: #ffffff;
+  color: #0f172a;
 }
 
 /* iOS Safari'de form alanına odaklanınca sayfanın otomatik yakınlaşmasını önler */
@@ -72,7 +85,26 @@ body {
   .no-print {
     display: none !important;
   }
+  html,
   body {
     background: #ffffff !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  .print-modal-root {
+    position: static !important;
+    inset: auto !important;
+    background: transparent !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+  .print-modal-card {
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
   }
 }

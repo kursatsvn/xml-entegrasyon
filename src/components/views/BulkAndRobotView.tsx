@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { PriceRobotItem, Product, SyncBatch } from '@/types/sopyo';
+import Image from 'next/image';
+import { PriceRobotItem, Product, SyncBatch, XmlSource } from '@/types/sopyo';
+import { apiPost } from '@/lib/api-client';
 import {
   Send,
   RefreshCw,
@@ -42,6 +44,7 @@ interface BulkAndRobotViewProps {
   batches: SyncBatch[];
   products: Product[];
   priceRobotItems: PriceRobotItem[];
+  xmlSources?: XmlSource[];
   onRefresh: () => Promise<void>;
   notify: (msg: string, type?: 'success' | 'error') => void;
 }
@@ -51,6 +54,7 @@ export default function BulkAndRobotView({
   batches,
   products,
   priceRobotItems,
+  xmlSources = [],
   onRefresh,
   notify
 }: BulkAndRobotViewProps) {
@@ -71,13 +75,36 @@ export default function BulkAndRobotView({
   const [newRobotMaxPrice, setNewRobotMaxPrice] = useState<number>(650);
   const [newRobotStep, setNewRobotStep] = useState<number>(1);
 
-  // XML Fiyat Ayarı (% Yüzde + Ekstra TL) state'leri
-  const [tyPercent, setTyPercent] = useState<number>(105);
-  const [tyExtraTl, setTyExtraTl] = useState<number>(75);
-  const [hbPercent, setHbPercent] = useState<number>(120);
-  const [hbExtraTl, setHbExtraTl] = useState<number>(80);
+  // XML Fiyat Ayarı (% Yüzde + Ekstra TL) state'leri (aktif mağazanın XML kaynağından senkronize)
+  const primaryXmlRuleTy = xmlSources[0]?.marketplacePriceRules?.Trendyol?.[0];
+  const primaryXmlRuleHb = xmlSources[0]?.marketplacePriceRules?.Hepsiburada?.[0];
+  const [tyPercent, setTyPercent] = useState<number>(primaryXmlRuleTy?.ruleAmount ?? 105);
+  const [tyExtraTl, setTyExtraTl] = useState<number>(primaryXmlRuleTy?.ruleExtraPrice ?? 75);
+  const [hbPercent, setHbPercent] = useState<number>(primaryXmlRuleHb?.ruleAmount ?? 120);
+  const [hbExtraTl, setHbExtraTl] = useState<number>(primaryXmlRuleHb?.ruleExtraPrice ?? 80);
   const [sampleXmlPrice, setSampleXmlPrice] = useState<number>(200);
   const [savingPriceRules, setSavingPriceRules] = useState(false);
+
+  useEffect(() => {
+    const tyRule = xmlSources[0]?.marketplacePriceRules?.Trendyol?.[0];
+    const hbRule = xmlSources[0]?.marketplacePriceRules?.Hepsiburada?.[0];
+    if (tyRule) {
+      setTyPercent(tyRule.ruleAmount);
+      setTyExtraTl(tyRule.ruleExtraPrice);
+    }
+    if (hbRule) {
+      setHbPercent(hbRule.ruleAmount);
+      setHbExtraTl(hbRule.ruleExtraPrice);
+    }
+  }, [xmlSources]);
+
+  useEffect(() => {
+    if (products.length > 0 && !products.some((p) => p.id === newRobotProductId)) {
+      setNewRobotProductId(products[0].id);
+    } else if (products.length === 0 && newRobotProductId !== '') {
+      setNewRobotProductId('');
+    }
+  }, [products, newRobotProductId]);
 
   const handleApplyQuickPriceRules = async () => {
     setSavingPriceRules(true);
@@ -278,22 +305,18 @@ export default function BulkAndRobotView({
   };
 
   const handleBulkPublish = async () => {
+    if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'bulk_publish',
-          marketplace: selectedMarketplace
-        })
+      const res = await apiPost('/api/state', {
+        action: 'bulk_publish',
+        marketplace: selectedMarketplace
       });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      if (res.ok) {
+        notify(res.message, 'success');
         await onRefresh();
       } else {
-        notify(data.message || 'Gönderim hatası', 'error');
+        notify(res.message || 'Gönderim hatası', 'error');
       }
     } finally {
       setLoading(false);
@@ -301,22 +324,18 @@ export default function BulkAndRobotView({
   };
 
   const handleBulkUpdate = async () => {
+    if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'bulk_update_price_stock',
-          marketplace: selectedMarketplace
-        })
+      const res = await apiPost('/api/state', {
+        action: 'bulk_update_price_stock',
+        marketplace: selectedMarketplace
       });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      if (res.ok) {
+        notify(res.message, 'success');
         await onRefresh();
       } else {
-        notify(data.message || 'Güncelleme hatası', 'error');
+        notify(res.message || 'Güncelleme hatası', 'error');
       }
     } finally {
       setLoading(false);
@@ -324,17 +343,15 @@ export default function BulkAndRobotView({
   };
 
   const handleRunPriceRobot = async () => {
+    if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'run_price_robot' })
-      });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      const res = await apiPost('/api/state', { action: 'run_price_robot' });
+      if (res.ok) {
+        notify(res.message, 'success');
         await onRefresh();
+      } else {
+        notify(res.message || 'Fiyat robotu çalıştırılamadı.', 'error');
       }
     } finally {
       setLoading(false);
@@ -342,26 +359,23 @@ export default function BulkAndRobotView({
   };
 
   const handleAddRobotItem = async () => {
-    if (!newRobotProductId) return;
+    if (!newRobotProductId || loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'add_price_robot_item',
-          productId: newRobotProductId,
-          marketplace: newRobotMarketplace,
-          minFloorPrice: newRobotMinPrice,
-          maxCeilingPrice: newRobotMaxPrice,
-          stepAmount: newRobotStep
-        })
+      const res = await apiPost('/api/state', {
+        action: 'add_price_robot_item',
+        productId: newRobotProductId,
+        marketplace: newRobotMarketplace,
+        minFloorPrice: newRobotMinPrice,
+        maxCeilingPrice: newRobotMaxPrice,
+        stepAmount: newRobotStep
       });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      if (res.ok) {
+        notify(res.message, 'success');
         setShowAddRobotModal(false);
         await onRefresh();
+      } else {
+        notify(res.message || 'Ürün fiyat robotuna eklenemedi.', 'error');
       }
     } finally {
       setLoading(false);
@@ -707,9 +721,12 @@ export default function BulkAndRobotView({
                         className="w-4 h-4 mt-1 rounded border-slate-300 accent-orange-600 shrink-0"
                       />
                       {it.imageUrl && (
-                        <img
+                        <Image
                           src={it.imageUrl}
                           alt={it.title}
+                          width={48}
+                          height={56}
+                          unoptimized
                           className="w-12 h-14 object-cover rounded-lg border border-slate-200 shrink-0"
                         />
                       )}
@@ -818,9 +835,12 @@ export default function BulkAndRobotView({
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           {it.imageUrl && (
-                            <img
+                            <Image
                               src={it.imageUrl}
                               alt={it.title}
+                              width={40}
+                              height={48}
+                              unoptimized
                               className="w-10 h-12 object-cover rounded border border-slate-200 shrink-0"
                             />
                           )}

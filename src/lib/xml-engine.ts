@@ -3,6 +3,8 @@ import { Product, ProductVariant, XmlSource, XmlSyncReport } from '@/types/sopyo
 import { calculateChannelPrices } from '@/lib/pricing-engine';
 import { normalizeColorValue, normalizeSizeValue } from '@/lib/category-matcher';
 import { sanitizeAndDeduplicateCatalog, sanitizeProductContent } from '@/lib/ai-sanitizer';
+import { sanitizeRichHtml } from '@/lib/html-sanitizer';
+import { safeFetchXmlText } from '@/lib/url-guard';
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -47,14 +49,7 @@ export async function inspectXmlFeedNodes(xmlUrl: string): Promise<{
   totalVariants: number;
   tags: { tag: string; count: number }[];
 }> {
-  const response = await fetch(xmlUrl, {
-    headers: { 'User-Agent': 'Sopyo-XML-Bot/2.0' },
-    cache: 'no-store'
-  });
-  if (!response.ok) {
-    throw new Error(`XML kaynağına erişilemedi: HTTP ${response.status}`);
-  }
-  const xmlText = await response.text();
+  const xmlText = await safeFetchXmlText(xmlUrl);
   const parsed = parser.parse(xmlText);
   const rawProducts = asArray(parsed?.Root?.Urunler?.Urun || parsed?.Urunler?.Urun || parsed?.products?.product);
 
@@ -101,15 +96,7 @@ export async function syncXmlFeedProducts(params: {
   const { xmlSource, existingProducts, limit = 0 } = params;
   const startedAt = new Date().toISOString();
 
-  const response = await fetch(xmlSource.url, {
-    headers: { 'User-Agent': 'Sopyo-XML-Bot/2.0' },
-    cache: 'no-store'
-  });
-  if (!response.ok) {
-    throw new Error(`XML indirilemedi (${response.status}): ${xmlSource.url}`);
-  }
-
-  const xmlText = await response.text();
+  const xmlText = await safeFetchXmlText(xmlSource.url);
   const parsed = parser.parse(xmlText);
   const rawProducts = asArray<Record<string, any>>(
     parsed?.Root?.Urunler?.Urun || parsed?.Urunler?.Urun || parsed?.products?.product
@@ -153,7 +140,7 @@ export async function syncXmlFeedProducts(params: {
       categoryTree
     });
     const title = aiSanitized.cleanTitle;
-    const descriptionHtml = aiSanitized.cleanDescriptionHtml;
+    const descriptionHtml = sanitizeRichHtml(aiSanitized.cleanDescriptionHtml);
 
     const rawImages = asArray<string>(rawProd?.Resimler?.Resim).map(String).filter(Boolean);
     const rawVariants = asArray<Record<string, any>>(rawProd?.UrunSecenek?.Secenek);

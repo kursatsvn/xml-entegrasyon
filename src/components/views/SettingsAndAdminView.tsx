@@ -19,6 +19,8 @@ import {
   ArrowRightLeft
 } from 'lucide-react';
 import GeneralSettingsPanel from '@/components/views/GeneralSettingsPanel';
+import { apiPost } from '@/lib/api-client';
+import { formatTrDateTime } from '@/lib/date-format';
 
 interface SettingsAndAdminViewProps {
   initialTab?: 'integrations' | 'settings' | 'operations' | 'admin';
@@ -106,40 +108,87 @@ export default function SettingsAndAdminView({
     setTenantForm(tenant);
   }, [tenant]);
 
+  React.useEffect(() => {
+    const nextTy = marketplaceAccounts.find((m) => m.marketplace === 'trendyol') || {
+      id: 'mkt-ty',
+      tenantId: tenant.id,
+      marketplace: 'trendyol' as const,
+      storeName: tenant.name,
+      supplierOrMerchantId: '',
+      apiKey: '',
+      apiSecret: '',
+      isActive: true,
+      autoConfirmOrders: true,
+      shipmentProviderId: '7',
+      shipmentProviderName: 'Aras Kargo Marketplace',
+      shipmentAddressId: '',
+      shipmentAddressText: '',
+      returningAddressId: '',
+      returningAddressText: '',
+      dispatchTimeHours: 24,
+      hbOrderPullStatus: 'packageable' as const,
+      stockCodeType: 'modelCode' as const,
+      descriptionPrefixHtml: '',
+      descriptionSuffixHtml: '',
+      connectionStatus: 'disconnected' as const
+    };
+    const nextHb = marketplaceAccounts.find((m) => m.marketplace === 'hepsiburada') || {
+      id: 'mkt-hb',
+      tenantId: tenant.id,
+      marketplace: 'hepsiburada' as const,
+      storeName: tenant.name,
+      supplierOrMerchantId: '',
+      apiKey: '',
+      apiSecret: '',
+      isActive: true,
+      autoConfirmOrders: true,
+      shipmentProviderId: 'aras',
+      shipmentProviderName: 'Aras Kargo',
+      shipmentAddressId: '',
+      shipmentAddressText: '',
+      returningAddressId: '',
+      returningAddressText: '',
+      dispatchTimeHours: 24,
+      hbOrderPullStatus: 'packageable' as const,
+      stockCodeType: 'supplierStockCode' as const,
+      descriptionPrefixHtml: '',
+      descriptionSuffixHtml: '',
+      connectionStatus: 'disconnected' as const
+    };
+    setTyForm(nextTy);
+    setHbForm(nextHb);
+  }, [tenant.id, tenant.name, marketplaceAccounts]);
+
   const handleSaveMarketplace = async (account: MarketplaceAccount) => {
+    if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'save_marketplace_account',
-          account
-        })
+      const res = await apiPost('/api/state', {
+        action: 'save_marketplace_account',
+        account
       });
-      const data = await res.json();
-      notify(data.message, data.ok ? 'success' : 'error');
-      await onRefresh();
+      notify(res.message, res.ok ? 'success' : 'error');
+      if (res.ok) {
+        await onRefresh();
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const handleSaveTenantSettings = async () => {
+    if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_tenant_settings',
-          settings: tenantForm
-        })
+      const res = await apiPost('/api/state', {
+        action: 'update_tenant_settings',
+        settings: tenantForm
       });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      if (res.ok) {
+        notify(res.message, 'success');
         await onRefresh();
+      } else {
+        notify(res.message || 'Genel ayarlar kaydedilemedi.', 'error');
       }
     } finally {
       setLoading(false);
@@ -158,10 +207,14 @@ export default function SettingsAndAdminView({
         })
       });
       const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      if (res.ok && data.ok) {
+        notify(data.message || 'Aktif mağaza değiştirildi.', 'success');
         await onRefresh();
+      } else {
+        notify(data?.message || 'Mağaza değiştirilemedi.', 'error');
       }
+    } catch {
+      notify('Mağaza değiştirme sırasında bağlantı hatası oluştu.', 'error');
     } finally {
       setLoading(false);
     }
@@ -234,7 +287,12 @@ export default function SettingsAndAdminView({
                 </p>
               </div>
               <span className="shrink-0 px-2.5 sm:px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Bağlı
+                <CheckCircle2 className="w-3.5 h-3.5" />{' '}
+                {tyForm.connectionStatus === 'connected'
+                  ? 'Bağlı'
+                  : tyForm.connectionStatus === 'error'
+                  ? 'Hatalı'
+                  : 'Bağlı Değil'}
               </span>
             </div>
 
@@ -346,7 +404,12 @@ export default function SettingsAndAdminView({
                 </p>
               </div>
               <span className="shrink-0 px-2.5 sm:px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Bağlı
+                <CheckCircle2 className="w-3.5 h-3.5" />{' '}
+                {hbForm.connectionStatus === 'connected'
+                  ? 'Bağlı'
+                  : hbForm.connectionStatus === 'error'
+                  ? 'Hatalı'
+                  : 'Bağlı Değil'}
               </span>
             </div>
 
@@ -454,6 +517,7 @@ export default function SettingsAndAdminView({
           setTenantForm={setTenantForm}
           onSave={handleSaveTenantSettings}
           loading={loading}
+          notify={notify}
         />
       )}
 
@@ -479,7 +543,7 @@ export default function SettingsAndAdminView({
                   <div className="text-xs text-slate-600 break-words">{op.details}</div>
                 </div>
                 <div className="text-[11px] sm:text-xs text-slate-400 shrink-0">
-                  {new Date(op.createdAt).toLocaleString('tr-TR')}
+                  {formatTrDateTime(op.createdAt)}
                 </div>
               </div>
             ))}

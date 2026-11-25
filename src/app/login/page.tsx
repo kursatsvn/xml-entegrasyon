@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Eye, EyeOff, Layers, Lock, Mail, Phone, ShieldCheck, Store, User } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Lock, Mail, Phone, ShieldCheck, Store, User } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();

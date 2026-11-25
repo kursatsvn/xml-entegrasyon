@@ -3,6 +3,8 @@
 import React, { useMemo, useState } from 'react';
 import { ClaimItem, Order, Tenant } from '@/types/sopyo';
 import { mergeTenantGeneralSettings } from '@/lib/general-settings';
+import { apiPost } from '@/lib/api-client';
+import { formatTrDateTime } from '@/lib/date-format';
 import {
   ShoppingBag,
   RotateCcw,
@@ -56,23 +58,19 @@ export default function OrdersAndClaimsView({
   }, [tenant.cargoLabelTemplate, gs.customerInvoiceMaskStatus]);
 
   const handlePullOrders = async (simulateNewOrder = false, marketplace: 'trendyol' | 'hepsiburada' = 'trendyol') => {
+    if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'pull_orders_and_deduct_stock',
-          simulateNewOrder,
-          marketplace
-        })
+      const res = await apiPost('/api/state', {
+        action: 'pull_orders_and_deduct_stock',
+        simulateNewOrder,
+        marketplace
       });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      if (res.ok) {
+        notify(res.message, 'success');
         await onRefresh();
       } else {
-        notify(data.message || 'Sipariş çekme hatası', 'error');
+        notify(res.message || 'Sipariş çekme hatası', 'error');
       }
     } finally {
       setLoading(false);
@@ -83,21 +81,19 @@ export default function OrdersAndClaimsView({
     orderId: string,
     updates: { status?: Order['status']; invoiceStatus?: Order['invoiceStatus']; labelPrinted?: boolean }
   ) => {
+    if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_order',
-          orderId,
-          ...updates
-        })
+      const res = await apiPost('/api/state', {
+        action: 'update_order',
+        orderId,
+        ...updates
       });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      if (res.ok) {
+        notify(res.message, 'success');
         await onRefresh();
+      } else {
+        notify(res.message || 'Sipariş güncellenemedi.', 'error');
       }
     } finally {
       setLoading(false);
@@ -253,7 +249,7 @@ export default function OrdersAndClaimsView({
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">
-                        {new Date(ord.orderDate).toLocaleString('tr-TR')}
+                        {formatTrDateTime(ord.orderDate)}
                       </div>
                     </div>
                     <div className="text-right">
@@ -295,6 +291,7 @@ export default function OrdersAndClaimsView({
                       }
                       className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white"
                     >
+                      <option value="pending">Beklemede / Yeni</option>
                       <option value="ready_to_ship">Gönderime Hazır</option>
                       <option value="shipped">Kargolandı</option>
                       <option value="delivered">Teslim Edildi</option>
@@ -356,7 +353,7 @@ export default function OrdersAndClaimsView({
                           {ord.marketplace}
                         </span>
                         <div className="text-[11px] text-slate-400 mt-1">
-                          {new Date(ord.orderDate).toLocaleString('tr-TR')}
+                          {formatTrDateTime(ord.orderDate)}
                         </div>
                       </td>
 
@@ -408,6 +405,7 @@ export default function OrdersAndClaimsView({
                           }
                           className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white"
                         >
+                          <option value="pending">Beklemede / Yeni</option>
                           <option value="ready_to_ship">Gönderime Hazır</option>
                           <option value="shipped">Kargolandı</option>
                           <option value="delivered">Teslim Edildi</option>
@@ -422,7 +420,7 @@ export default function OrdersAndClaimsView({
                             className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold inline-flex items-center gap-1"
                           >
                             <Printer className="w-3.5 h-3.5" />
-                            Kargo Fiși
+                            Kargo Fişi
                           </button>
                           {gs.showDetailOrderReceipt && (
                             <button
@@ -465,46 +463,116 @@ export default function OrdersAndClaimsView({
           <div className="p-4 bg-slate-50 border-b border-slate-200 font-bold text-slate-800 text-sm">
             Müşteri İade ve Değişim Talepleri (Trendyol & Hepsiburada)
           </div>
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
-                <th className="py-3.5 px-4">TALEP NO / SİPARİŞ</th>
-                <th className="py-3.5 px-4">PAZARYERİ</th>
-                <th className="py-3.5 px-4">MÜŞTERİ & ÜRÜN</th>
-                <th className="py-3.5 px-4">İADE NEDENİ</th>
-                <th className="py-3.5 px-4">TUTAR</th>
-                <th className="py-3.5 px-4">DURUM</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 text-sm">
-              {claims.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50">
-                  <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                    {c.claimNumber}
-                    <div className="text-xs text-slate-400">Sipariş: #{c.orderNumber}</div>
-                  </td>
-                  <td className="py-3.5 px-4 uppercase font-bold text-xs text-orange-600">
-                    {c.marketplace}
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <div className="font-semibold text-slate-900">{c.customerName}</div>
-                    <div className="text-xs text-slate-500">
-                      {c.productTitle} ({c.sku})
+
+          {claims.length === 0 ? (
+            <div className="p-8 text-center text-sm text-slate-500">
+              Henüz kayıtlı iade veya değişim talebi bulunmuyor.
+            </div>
+          ) : (
+            <>
+              {/* Mobil İade Kartları */}
+              <div className="md:hidden divide-y divide-slate-200">
+                {claims.map((c) => (
+                  <div key={`m-${c.id}`} className="p-4 space-y-2.5 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-mono font-bold text-slate-900 truncate">
+                          {c.claimNumber}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Sipariş: #{c.orderNumber} •{' '}
+                          <span className="uppercase font-bold text-orange-600">{c.marketplace}</span>
+                        </div>
+                      </div>
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0 ${
+                          c.status === 'approved'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : c.status === 'rejected'
+                            ? 'bg-rose-50 text-rose-700'
+                            : 'bg-amber-50 text-amber-700'
+                        }`}
+                      >
+                        {c.status === 'approved'
+                          ? 'Onaylandı'
+                          : c.status === 'rejected'
+                          ? 'Reddedildi'
+                          : 'Bekliyor'}
+                      </span>
                     </div>
-                  </td>
-                  <td className="py-3.5 px-4 text-xs text-slate-700">{c.reason}</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-900">
-                    {c.amount.toFixed(2)} TL
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">
-                      Onaylandı
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <div>
+                      <div className="font-semibold text-slate-900">{c.customerName}</div>
+                      <div className="text-slate-600 mt-0.5">
+                        {c.productTitle} ({c.sku})
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                      <span className="text-slate-600 truncate">{c.reason}</span>
+                      <span className="font-bold text-slate-900 shrink-0">
+                        {c.amount.toFixed(2)} TL
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Masaüstü İade Tablosu */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
+                      <th className="py-3.5 px-4">TALEP NO / SİPARİŞ</th>
+                      <th className="py-3.5 px-4">PAZARYERİ</th>
+                      <th className="py-3.5 px-4">MÜŞTERİ & ÜRÜN</th>
+                      <th className="py-3.5 px-4">İADE NEDENİ</th>
+                      <th className="py-3.5 px-4">TUTAR</th>
+                      <th className="py-3.5 px-4">DURUM</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 text-sm">
+                    {claims.map((c) => (
+                      <tr key={c.id} className="hover:bg-slate-50">
+                        <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
+                          {c.claimNumber}
+                          <div className="text-xs text-slate-400">Sipariş: #{c.orderNumber}</div>
+                        </td>
+                        <td className="py-3.5 px-4 uppercase font-bold text-xs text-orange-600">
+                          {c.marketplace}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="font-semibold text-slate-900">{c.customerName}</div>
+                          <div className="text-xs text-slate-500">
+                            {c.productTitle} ({c.sku})
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-xs text-slate-700">{c.reason}</td>
+                        <td className="py-3.5 px-4 font-bold text-slate-900">
+                          {c.amount.toFixed(2)} TL
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                              c.status === 'approved'
+                                ? 'bg-emerald-50 text-emerald-700'
+                                : c.status === 'rejected'
+                                ? 'bg-rose-50 text-rose-700'
+                                : 'bg-amber-50 text-amber-700'
+                            }`}
+                          >
+                            {c.status === 'approved'
+                              ? 'Onaylandı'
+                              : c.status === 'rejected'
+                              ? 'Reddedildi'
+                              : 'Bekliyor'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -548,8 +616,8 @@ export default function OrdersAndClaimsView({
 
       {/* KARGO ETİKETİ YAZDIRMA MODALI (Mobil Tam Ekran + Yazdırırken Sadece Etiket) */}
       {printingOrder && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 pt-safe overflow-y-auto">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-2xl w-full max-h-[calc(100dvh-env(safe-area-inset-top,0px)-12px)] sm:max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 pt-safe overflow-y-auto print-modal-root">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl max-w-2xl w-full max-h-[calc(100dvh-env(safe-area-inset-top,0px)-12px)] sm:max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200 print-modal-card">
             <div className="sticky top-0 z-10 p-4 bg-slate-900 text-white flex items-center justify-between gap-2 no-print">
               <div className="min-w-0">
                 <h3 className="text-sm font-bold truncate">
@@ -644,17 +712,17 @@ export default function OrdersAndClaimsView({
                 </div>
 
                 {/* Barkod Alanı */}
-                <div className="py-4 text-center bg-slate-50 rounded-lg border border-slate-200">
-                  <div className="font-mono tracking-[0.35em] text-2xl font-black text-slate-900">
+                <div className="py-4 px-2 text-center bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                  <div className="font-mono tracking-widest text-lg sm:text-2xl font-black text-slate-900 break-all">
                     ||| |||| || ||||| |||| |||
                   </div>
-                  <div className="font-mono text-sm font-bold text-slate-800 mt-1">
+                  <div className="font-mono text-sm font-bold text-slate-800 mt-1 break-all">
                     {printingOrder.cargoBarcode}
                   </div>
                 </div>
 
                 {/* Alıcı Bilgileri */}
-                <div className="grid grid-cols-2 gap-4 text-xs border-b border-slate-200 pb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs border-b border-slate-200 pb-4">
                   <div>
                     <div className="font-bold text-slate-500 uppercase">ALICI ADI SOYADI</div>
                     <div className="text-sm font-bold text-slate-900 mt-0.5">
@@ -752,11 +820,12 @@ export default function OrdersAndClaimsView({
                 Kapat
               </button>
               <button
-                onClick={() => {
-                  handleUpdateOrder(printingOrder.id, { labelPrinted: true });
+                onClick={async () => {
+                  await handleUpdateOrder(printingOrder.id, { labelPrinted: true });
                   window.print();
                 }}
-                className="flex-1 sm:flex-none px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 min-h-[42px]"
+                disabled={loading}
+                className="flex-1 sm:flex-none px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-semibold flex items-center justify-center gap-1.5 min-h-[42px]"
               >
                 <Printer className="w-4 h-4" />
                 Etiketi Yazdır

@@ -8,6 +8,7 @@ import {
   VariantGroupMapping
 } from '@/types/sopyo';
 import { MARKETPLACE_CATEGORY_CATALOG } from '@/lib/category-matcher';
+import { apiPost } from '@/lib/api-client';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -55,19 +56,15 @@ export default function CatalogMappingsView({
   }, [initialSection]);
 
   const handleAutoMatchCategories = async () => {
+    if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'auto_match_all_categories' })
-      });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      const res = await apiPost('/api/state', { action: 'auto_match_all_categories' });
+      if (res.ok) {
+        notify(res.message, 'success');
         await onRefresh();
       } else {
-        notify(data.message || 'Hata oluştu', 'error');
+        notify(res.message || 'Hata oluştu', 'error');
       }
     } finally {
       setLoading(false);
@@ -75,19 +72,19 @@ export default function CatalogMappingsView({
   };
 
   const handleSaveSingleCategory = async () => {
-    if (!editingCat) return;
+    if (!editingCat || loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_category_mapping', category: editingCat })
+      const res = await apiPost('/api/state', {
+        action: 'save_category_mapping',
+        category: editingCat
       });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      if (res.ok) {
+        notify(res.message, 'success');
         setEditingCat(null);
         await onRefresh();
+      } else {
+        notify(res.message || 'Kategori eşleştirmesi kaydedilemedi.', 'error');
       }
     } finally {
       setLoading(false);
@@ -95,20 +92,18 @@ export default function CatalogMappingsView({
   };
 
   const handleAutoMatchBrands = async () => {
+    if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'auto_match_all_brands',
-          defaultBrandName: defaultBrandInput
-        })
+      const res = await apiPost('/api/state', {
+        action: 'auto_match_all_brands',
+        defaultBrandName: defaultBrandInput
       });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      if (res.ok) {
+        notify(res.message, 'success');
         await onRefresh();
+      } else {
+        notify(res.message || 'Markalar eşitlenemedi.', 'error');
       }
     } finally {
       setLoading(false);
@@ -116,17 +111,15 @@ export default function CatalogMappingsView({
   };
 
   const handleAutoMatchVariants = async () => {
+    if (loading) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'auto_match_all_variants' })
-      });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
+      const res = await apiPost('/api/state', { action: 'auto_match_all_variants' });
+      if (res.ok) {
+        notify(res.message, 'success');
         await onRefresh();
+      } else {
+        notify(res.message || 'Seçenek grupları eşitlenemedi.', 'error');
       }
     } finally {
       setLoading(false);
@@ -539,17 +532,29 @@ export default function CatalogMappingsView({
                     </h4>
                     <p className="text-xs text-slate-500">{vg.productCount} üründe kullanılıyor</p>
                   </div>
-                  <div className="flex gap-2">
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
-                      Trendyol: Eşitlendi
+                  <div className="flex flex-wrap gap-2">
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                        vg.trendyolMapped
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}
+                    >
+                      Trendyol: {vg.trendyolMapped ? 'Eşitlendi' : 'Eşitlenmedi'}
                     </span>
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
-                      Hepsiburada: Eşitlendi
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                        vg.hepsiburadaMapped
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}
+                    >
+                      Hepsiburada: {vg.hepsiburadaMapped ? 'Eşitlendi' : 'Eşitlenmedi'}
                     </span>
                   </div>
                 </div>
-                <div className="p-4">
-                  <table className="w-full text-left text-xs">
+                <div className="p-4 overflow-x-auto">
+                  <table className="w-full min-w-[480px] text-left text-xs">
                     <thead>
                       <tr className="border-b border-slate-200 text-slate-500 uppercase">
                         <th className="py-2">XML Değer</th>
@@ -585,24 +590,31 @@ export default function CatalogMappingsView({
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <h3 className="text-base font-bold text-slate-900 mb-4">Ürün Etiketleri</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {tags.map((t) => (
-              <div
-                key={t.id}
-                className="p-4 rounded-xl border border-slate-200 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className="w-4 h-4 rounded-full"
-                    style={{ backgroundColor: t.color }}
-                  />
-                  <div>
-                    <div className="font-bold text-slate-900 text-sm">{t.name}</div>
-                    <div className="text-xs text-slate-500">{t.productCount} üründe tanımlı</div>
+            {tags.map((t) => {
+              const tagDotClass =
+                t.color.toLowerCase() === '#4f46e5'
+                  ? 'bg-indigo-600'
+                  : t.color.toLowerCase() === '#10b981'
+                  ? 'bg-emerald-500'
+                  : t.color.toLowerCase() === '#f59e0b'
+                  ? 'bg-amber-500'
+                  : 'bg-blue-600';
+              return (
+                <div
+                  key={t.id}
+                  className="p-4 rounded-xl border border-slate-200 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`w-4 h-4 rounded-full shrink-0 ${tagDotClass}`} />
+                    <div>
+                      <div className="font-bold text-slate-900 text-sm">{t.name}</div>
+                      <div className="text-xs text-slate-500">{t.productCount} üründe tanımlı</div>
+                    </div>
                   </div>
+                  <span className="text-xs font-mono text-slate-400">{t.color}</span>
                 </div>
-                <span className="text-xs font-mono text-slate-400">{t.color}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -651,7 +663,7 @@ export default function CatalogMappingsView({
                     }
                   }}
                   value={editingCat.trendyolCategoryId || ''}
-                  className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm"
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white text-slate-900"
                 >
                   <option value="">-- Pazaryeri Kategorisi Seçin --</option>
                   {MARKETPLACE_CATEGORY_CATALOG.map((item) => (

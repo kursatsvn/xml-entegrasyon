@@ -1,13 +1,25 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import XmlView from '@/components/views/XmlView';
-import ProductsView from '@/components/views/ProductsView';
-import CatalogMappingsView from '@/components/views/CatalogMappingsView';
-import BulkAndRobotView from '@/components/views/BulkAndRobotView';
-import OrdersAndClaimsView from '@/components/views/OrdersAndClaimsView';
-import SettingsAndAdminView from '@/components/views/SettingsAndAdminView';
+import { formatTrTime } from '@/lib/date-format';
+
+function ViewLoader() {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm flex items-center justify-center gap-3 text-sm font-semibold text-slate-500">
+      <span className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      Bölüm yükleniyor...
+    </div>
+  );
+}
+
+const XmlView = dynamic(() => import('@/components/views/XmlView'), { loading: ViewLoader });
+const ProductsView = dynamic(() => import('@/components/views/ProductsView'), { loading: ViewLoader });
+const CatalogMappingsView = dynamic(() => import('@/components/views/CatalogMappingsView'), { loading: ViewLoader });
+const BulkAndRobotView = dynamic(() => import('@/components/views/BulkAndRobotView'), { loading: ViewLoader });
+const OrdersAndClaimsView = dynamic(() => import('@/components/views/OrdersAndClaimsView'), { loading: ViewLoader });
+const SettingsAndAdminView = dynamic(() => import('@/components/views/SettingsAndAdminView'), { loading: ViewLoader });
 import {
   BrandMapping,
   CategoryMapping,
@@ -79,6 +91,13 @@ type ActiveRoute =
 
 interface StatePayload {
   tenant: Tenant;
+  currentUser?: {
+    id: string;
+    email: string;
+    fullName: string;
+    role: UserProfile['role'];
+    tenantId: string;
+  };
   marketplaceAccounts: MarketplaceAccount[];
   xmlSources: XmlSource[];
   xmlReports: XmlSyncReport[];
@@ -159,61 +178,126 @@ export default function SopyoCloneApp() {
     }
   };
 
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
   const notify = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
-    setTimeout(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
       setToast((prev) => (prev?.msg === msg ? null : prev));
     }, 4500);
   }, []);
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const fetchState = useCallback(async () => {
     try {
+      setFetchError(null);
       const res = await fetch('/api/state', { cache: 'no-store' });
+      if (res.status === 401) {
+        router.replace('/login');
+        return;
+      }
       const json = await res.json();
+      if (!res.ok || !json || !json.tenant || !Array.isArray(json.orders)) {
+        const msg = json?.message || 'Panel verileri yüklenemedi.';
+        setFetchError(msg);
+        notify(msg, 'error');
+        return;
+      }
       setData(json);
     } catch (e) {
       console.error('State fetch error:', e);
+      setFetchError('Sunucuya bağlanılamadı. Lütfen tekrar deneyin.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router, notify]);
 
   useEffect(() => {
     fetchState();
   }, [fetchState]);
 
   const handleLogout = async () => {
-    await fetch('/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'logout' })
-    });
-    router.push('/login');
+    try {
+      await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' })
+      });
+    } catch (e) {
+      console.error('Logout error:', e);
+    } finally {
+      router.push('/login');
+      router.refresh();
+    }
   };
 
   const handleQuickSwitchTenant = async (targetTenantId: string) => {
-    const res = await fetch('/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'switch_tenant', targetTenantId })
-    });
-    const json = await res.json();
-    if (json.ok) {
-      notify(json.message, 'success');
-      await fetchState();
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'switch_tenant', targetTenantId })
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        notify(json.message || 'Aktif mağaza değiştirildi.', 'success');
+        await fetchState();
+      } else {
+        notify(json?.message || 'Mağaza değiştirilemedi.', 'error');
+      }
+    } catch (e) {
+      console.error('Switch tenant error:', e);
+      notify('Mağaza değiştirme sırasında bağlantı hatası oluştu.', 'error');
     }
   };
 
   if (loading || !data) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-blue-600 mx-auto flex items-center justify-center animate-pulse font-black text-xl">
+      <div className="min-h-screen bg-surface text-slate-900 flex items-center justify-center p-6">
+        <div className="text-center space-y-3 max-w-sm bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+          <div className="w-12 h-12 rounded-2xl bg-primary text-white mx-auto flex items-center justify-center animate-pulse font-black text-xl shadow-sm">
             S
           </div>
-          <div className="text-sm font-semibold text-slate-300">
-            Sopyo Kurumsal XML & Pazaryeri Entegrasyonu Yükleniyor...
-          </div>
+          {fetchError ? (
+            <>
+              <div className="text-sm font-semibold text-rose-600">{fetchError}</div>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoading(true);
+                    fetchState();
+                  }}
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold cursor-pointer"
+                >
+                  Tekrar Dene
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.replace('/login')}
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+                >
+                  Giriş Ekranı
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="text-sm font-semibold text-slate-600">
+              Sopyo Kurumsal XML &amp; Pazaryeri Entegrasyonu Yükleniyor...
+            </div>
+          )}
         </div>
       </div>
     );
@@ -224,6 +308,10 @@ export default function SopyoCloneApp() {
     (c) => c.trendyolStatus === 'mapped' && c.hepsiburadaStatus === 'mapped'
   ).length;
   const primaryXml = data.xmlSources[0];
+  const tyAccount = data.marketplaceAccounts.find((m) => m.marketplace === 'trendyol');
+  const hbAccount = data.marketplaceAccounts.find((m) => m.marketplace === 'hepsiburada');
+  const displayUserName = data.currentUser?.fullName || data.tenant.name;
+  const displayUserEmail = data.currentUser?.email || data.tenant.companyEmail;
 
   const navItems: {
     id: ActiveRoute;
@@ -340,7 +428,7 @@ export default function SopyoCloneApp() {
   const groups = Array.from(new Set(navItems.map((i) => i.group)));
 
   return (
-    <div className="min-h-screen bg-slate-100 flex overflow-x-clip">
+    <div className="min-h-screen bg-surface flex overflow-x-clip">
       {/* iOS 26 PWA Üst Durum Çubuğu Sabit Beyaz Zemin (Beyaz sistem blur'unu görünmez kılar) */}
       <div
         aria-hidden="true"
@@ -375,7 +463,7 @@ export default function SopyoCloneApp() {
 
       {/* SOL MENÜ (Masaüstünde Sabit, Mobilde Off-Canvas Çekmece - iOS Durum Çubuğunun Altında) */}
       <aside
-        className={`fixed top-safe-drawer bottom-0 left-0 z-50 w-72 lg:w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 border-r border-slate-800 transform transition-transform duration-200 ease-out lg:static lg:translate-x-0 pb-safe no-print ${
+        className={`fixed top-safe-drawer bottom-0 left-0 z-50 w-72 lg:w-64 bg-sidebar text-slate-300 flex flex-col shrink-0 border-r border-slate-800 transform transition-transform duration-200 ease-out lg:static lg:translate-x-0 pb-safe no-print ${
           mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
       >
@@ -413,10 +501,10 @@ export default function SopyoCloneApp() {
             <select
               value={data.tenant.id}
               onChange={(e) => handleQuickSwitchTenant(e.target.value)}
-              className="w-full px-2.5 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-xs font-bold"
+              className="w-full px-2.5 py-2 rounded-lg !bg-slate-800 border border-slate-700 !text-white text-xs font-bold"
             >
               {data.allTenants.map((t) => (
-                <option key={t.id} value={t.id}>
+                <option key={t.id} value={t.id} className="bg-slate-800 text-white">
                   {t.name} ({t.plan.toUpperCase()})
                 </option>
               ))}
@@ -500,9 +588,9 @@ export default function SopyoCloneApp() {
         {/* Alt Kullanıcı & Çıkış */}
         <div className="p-3.5 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between">
           <div className="truncate pr-2">
-            <div className="text-xs font-bold text-white truncate">Zeki Hamdi Çınar</div>
+            <div className="text-xs font-bold text-white truncate">{displayUserName}</div>
             <div className="text-[11px] text-slate-400 truncate">
-              {data.tenant.companyEmail}
+              {displayUserEmail}
             </div>
           </div>
           <button
@@ -533,10 +621,16 @@ export default function SopyoCloneApp() {
                 {navItems.find((n) => n.id === route)?.label || 'Yönetim Paneli'}
               </h1>
               <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-bold shrink-0">
-                Trendyol: #1192080 (Aktif)
+                Trendyol:{' '}
+                {tyAccount?.supplierOrMerchantId
+                  ? `#${tyAccount.supplierOrMerchantId} (${tyAccount.isActive ? 'Aktif' : 'Pasif'})`
+                  : 'Tanımlanmadı'}
               </span>
               <span className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold shrink-0">
-                Hepsiburada: LuneRose (Aktif)
+                Hepsiburada:{' '}
+                {hbAccount?.storeName
+                  ? `${hbAccount.storeName} (${hbAccount.isActive ? 'Aktif' : 'Pasif'})`
+                  : 'Tanımlanmadı'}
               </span>
             </div>
 
@@ -557,7 +651,7 @@ export default function SopyoCloneApp() {
               >
                 <FileCode2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 <span className="hidden md:inline">
-                  XML: {primaryXml?.name || 'ariasclosetx'} ({primaryXml?.totalProductCount || 1648} Ürün)
+                  XML: {primaryXml?.name || 'Tanımlı Değil'} ({primaryXml?.totalProductCount ?? data.products.length} Ürün)
                 </span>
                 <span className="md:hidden">XML</span>
               </button>
@@ -580,14 +674,14 @@ export default function SopyoCloneApp() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm">
                   <div className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase truncate">
-                    XML ({primaryXml?.name})
+                    XML ({primaryXml?.name || 'Kaynak Yok'})
                   </div>
                   <div className="text-xl sm:text-2xl font-black text-slate-900 mt-1.5 sm:mt-2">
-                    {primaryXml?.totalProductCount || 1648} Ürün
+                    {primaryXml?.totalProductCount ?? data.products.length} Ürün
                   </div>
                   <div className="text-[11px] sm:text-xs text-blue-600 font-semibold mt-1 line-clamp-2">
-                    {primaryXml?.totalVariantCount || 7283} Varyant • Ön Ek:{' '}
-                    {primaryXml?.stockCodePrefix || 'AX'}
+                    {primaryXml?.totalVariantCount ?? 0} Varyant • Ön Ek:{' '}
+                    {primaryXml?.stockCodePrefix || '—'}
                   </div>
                 </div>
 
@@ -634,10 +728,14 @@ export default function SopyoCloneApp() {
                   <div>
                     <h2 className="text-base sm:text-lg font-extrabold flex items-center gap-2">
                       <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
-                      LuneRose Hızlı Operasyon Merkezi
+                      {data.tenant.name} Hızlı Operasyon Merkezi
                     </h2>
                     <p className="text-xs text-slate-300 mt-1">
-                      `ariasclosetx` XML, Trendyol (`1192080`) ve Hepsiburada API bilgileriniz hazır:
+                      {primaryXml?.name ? `${primaryXml.name} XML` : 'XML kaynağı'}
+                      {tyAccount?.supplierOrMerchantId
+                        ? `, Trendyol (#${tyAccount.supplierOrMerchantId})`
+                        : ''}
+                      {hbAccount?.storeName ? ` ve Hepsiburada (${hbAccount.storeName})` : ''} operasyon kısayolları:
                     </p>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:flex xl:flex-wrap gap-2">
@@ -732,7 +830,7 @@ export default function SopyoCloneApp() {
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-slate-900">{log.summary}</span>
                           <span className="text-[11px] text-slate-400">
-                            {new Date(log.createdAt).toLocaleTimeString('tr-TR')}
+                            {formatTrTime(log.createdAt)}
                           </span>
                         </div>
                         <div className="text-slate-500">{log.details}</div>
@@ -747,6 +845,7 @@ export default function SopyoCloneApp() {
           {/* XML KAYNAKLARI */}
           {route === 'xml' && (
             <XmlView
+              key={data.tenant.id}
               xmlSources={data.xmlSources}
               xmlReports={data.xmlReports}
               onRefreshState={fetchState}
@@ -757,6 +856,7 @@ export default function SopyoCloneApp() {
           {/* ÜRÜN LİSTESİ */}
           {route === 'products' && (
             <ProductsView
+              key={data.tenant.id}
               products={data.products}
               categories={data.categories}
               tenant={data.tenant}
@@ -771,6 +871,7 @@ export default function SopyoCloneApp() {
             route === 'variants' ||
             route === 'tags') && (
             <CatalogMappingsView
+              key={data.tenant.id}
               initialSection={route}
               categories={data.categories}
               brands={data.brands}
@@ -787,6 +888,7 @@ export default function SopyoCloneApp() {
             route === 'diff_check' ||
             route === 'price_robot') && (
             <BulkAndRobotView
+              key={data.tenant.id}
               initialTab={
                 route === 'bulk_publish'
                   ? 'publish'
@@ -799,6 +901,7 @@ export default function SopyoCloneApp() {
               batches={data.syncBatches}
               products={data.products}
               priceRobotItems={data.priceRobotItems}
+              xmlSources={data.xmlSources}
               onRefresh={fetchState}
               notify={notify}
             />
@@ -807,6 +910,7 @@ export default function SopyoCloneApp() {
           {/* SİPARİŞLER, İADELER, RAPORLAR */}
           {(route === 'orders' || route === 'claims' || route === 'reports') && (
             <OrdersAndClaimsView
+              key={data.tenant.id}
               initialSection={route}
               orders={data.orders}
               claims={data.claims}
@@ -822,6 +926,7 @@ export default function SopyoCloneApp() {
             route === 'operations' ||
             route === 'super_admin') && (
             <SettingsAndAdminView
+              key={data.tenant.id}
               initialTab={
                 route === 'integrations'
                   ? 'integrations'
@@ -846,7 +951,7 @@ export default function SopyoCloneApp() {
         {/* MOBİL ALT HIZLI NAVİGASYON BARI (Başparmak Bölgesi - 5 Temel Sekme) */}
         <nav
           aria-label="Mobil Alt Menü"
-          className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 pb-safe shadow-[0_-4px_20px_rgba(15,23,42,0.06)] no-print"
+          className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 pb-safe shadow-bottom-nav no-print"
         >
           <div className="grid grid-cols-5 h-16">
             {[

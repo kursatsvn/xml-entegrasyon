@@ -94,7 +94,7 @@ function createInitialSeedData(): DatabaseState {
     fullName: 'Zeki Hamdi Çınar (LuneRose)',
     phone: '0(545) 146 11 58',
     role: 'super_admin',
-    password: process.env.ADMIN_INITIAL_PASSWORD || 'admin123',
+    password: process.env.ADMIN_INITIAL_PASSWORD || '',
     isActive: true,
     createdAt: '2026-01-15T10:00:00Z'
   };
@@ -129,8 +129,8 @@ function createInitialSeedData(): DatabaseState {
       tenantId: LUNEROSE_TENANT_ID,
       marketplace: 'hepsiburada',
       storeName: 'LuneRose',
-      supplierOrMerchantId: process.env.HEPSIBURADA_MERCHANT_ID || 'fea9499f-fc24-4c45-bbcc-e367e7896bd7',
-      apiKey: process.env.HEPSIBURADA_INTEGRATOR || 'kodanka_dev',
+      supplierOrMerchantId: process.env.HEPSIBURADA_MERCHANT_ID || '',
+      apiKey: process.env.HEPSIBURADA_INTEGRATOR || '',
       apiSecret: process.env.HEPSIBURADA_SERVICE_KEY || '',
       isActive: true,
       autoConfirmOrders: false,
@@ -1175,128 +1175,150 @@ export function writeDb(state: DatabaseState): void {
   }
 }
 
-export async function readDbAsync(): Promise<DatabaseState> {
+export async function readDbAsync(options?: { skipProducts?: boolean }): Promise<DatabaseState> {
   if (!isSupabaseConfigured()) {
     return readDb();
   }
 
-  try {
-    const supabase = createSupabaseServerClient();
-    const { serverSecret } = getSupabaseEnv();
-    if (!supabase || !serverSecret) {
-      return readDb();
-    }
+  const supabase = createSupabaseServerClient();
+  const { serverSecret } = getSupabaseEnv();
+  if (!supabase || !serverSecret) {
+    throw new Error('Supabase istemcisi veya sunucu gizli anahtarı başlatılamadı.');
+  }
 
-    const { data: meta, error: metaError } = await supabase.rpc('sopyo_get_meta_state', {
-      p_secret: serverSecret
-    });
+  const { data: meta, error: metaError } = await supabase.rpc('sopyo_get_meta_state', {
+    p_secret: serverSecret
+  });
 
-    if (metaError || !meta || !Array.isArray(meta.tenants) || meta.tenants.length === 0) {
-      // Supabase henüz boşsa yerel DB/seed verisini dön (ilk kurulum / migration fallback)
-      return readDb();
-    }
+  if (metaError) {
+    throw new Error(`Supabase meta okuma hatası: ${metaError.message}`);
+  }
 
-    const CHUNK_SIZE = 450;
-    const { data: firstChunk, error: prodError } = await supabase.rpc('sopyo_get_products_chunk', {
-      p_secret: serverSecret,
-      p_offset: 0,
-      p_limit: CHUNK_SIZE
-    });
-
-    if (prodError || !firstChunk) {
-      throw new Error(prodError?.message || 'Supabase ürün okuma hatası');
-    }
-
-    const totalProducts = Number(firstChunk.total || 0);
-    const allProducts: Product[] = Array.isArray(firstChunk.items) ? [...firstChunk.items] : [];
-
-    if (totalProducts > CHUNK_SIZE) {
-      const offsets: number[] = [];
-      for (let off = CHUNK_SIZE; off < totalProducts; off += CHUNK_SIZE) {
-        offsets.push(off);
-      }
-      const chunkResults = await Promise.all(
-        offsets.map((off) =>
-          supabase.rpc('sopyo_get_products_chunk', {
-            p_secret: serverSecret,
-            p_offset: off,
-            p_limit: CHUNK_SIZE
-          })
-        )
-      );
-      for (const res of chunkResults) {
-        if (res.data && Array.isArray(res.data.items)) {
-          allProducts.push(...res.data.items);
-        }
-      }
-    }
-
-    return {
-      tenants: meta.tenants || [],
-      users: meta.users || [],
-      marketplaceAccounts: meta.marketplaceAccounts || [],
-      xmlSources: meta.xmlSources || [],
-      xmlReports: meta.xmlReports || [],
-      products: allProducts,
-      categories: meta.categories || [],
-      brands: meta.brands || [],
-      variantGroups: meta.variantGroups || [],
-      tags: meta.tags || [],
-      syncBatches: meta.syncBatches || [],
-      priceRobotItems: meta.priceRobotItems || [],
-      orders: meta.orders || [],
-      claims: meta.claims || [],
-      operationLogs: meta.operationLogs || []
-    };
-  } catch (err) {
-    console.error('[Supabase readDbAsync fallback]', err);
+  if (!meta || !Array.isArray(meta.tenants) || meta.tenants.length === 0) {
+    // Yalnızca veritabanı gerçekten ilk kurulumda (0 kiracı) boşsa başlangıç seed verisini dön
     return readDb();
   }
+
+  const baseState: DatabaseState = {
+    tenants: meta.tenants || [],
+    users: meta.users || [],
+    marketplaceAccounts: meta.marketplaceAccounts || [],
+    xmlSources: meta.xmlSources || [],
+    xmlReports: meta.xmlReports || [],
+    products: [],
+    categories: meta.categories || [],
+    brands: meta.brands || [],
+    variantGroups: meta.variantGroups || [],
+    tags: meta.tags || [],
+    syncBatches: meta.syncBatches || [],
+    priceRobotItems: meta.priceRobotItems || [],
+    orders: meta.orders || [],
+    claims: meta.claims || [],
+    operationLogs: meta.operationLogs || []
+  };
+
+  if (options?.skipProducts) {
+    return baseState;
+  }
+
+  const CHUNK_SIZE = 450;
+  const { data: firstChunk, error: prodError } = await supabase.rpc('sopyo_get_products_chunk', {
+    p_secret: serverSecret,
+    p_offset: 0,
+    p_limit: CHUNK_SIZE
+  });
+
+  if (prodError || !firstChunk) {
+    throw new Error(prodError?.message || 'Supabase ürün okuma hatası');
+  }
+
+  const totalProducts = Number(firstChunk.total || 0);
+  const allProducts: Product[] = Array.isArray(firstChunk.items) ? [...firstChunk.items] : [];
+
+  if (totalProducts > CHUNK_SIZE) {
+    const offsets: number[] = [];
+    for (let off = CHUNK_SIZE; off < totalProducts; off += CHUNK_SIZE) {
+      offsets.push(off);
+    }
+    const chunkResults = await Promise.all(
+      offsets.map((off) =>
+        supabase.rpc('sopyo_get_products_chunk', {
+          p_secret: serverSecret,
+          p_offset: off,
+          p_limit: CHUNK_SIZE
+        })
+      )
+    );
+    for (const res of chunkResults) {
+      if (res.error) {
+        throw new Error(`Supabase ürün parçası okuma hatası: ${res.error.message}`);
+      }
+      if (res.data && Array.isArray(res.data.items)) {
+        allProducts.push(...res.data.items);
+      }
+    }
+  }
+
+  baseState.products = allProducts;
+  return baseState;
 }
 
 export async function writeDbAsync(
   state: DatabaseState,
   options?: {
     skipProducts?: boolean;
+    skipMeta?: boolean;
     onlyProductIds?: string[];
     syncDeletedProducts?: boolean;
+    tenantId?: string;
   }
 ): Promise<void> {
-  // Yerel ortamda JSON yedeğini güncel tut (Vercel salt okunur diskte hata vermez)
-  writeDb(state);
-
   if (!isSupabaseConfigured()) {
+    // Yalnızca yerel offline JSON modunda (Supabase yokken) asenkron disk yazımı yap
+    try {
+      await fs.promises.mkdir(DB_DIR, { recursive: true });
+      const tmpFile = `${DB_FILE}.${Date.now()}.tmp`;
+      await fs.promises.writeFile(tmpFile, JSON.stringify(state, null, 2), 'utf8');
+      await fs.promises.rename(tmpFile, DB_FILE);
+    } catch (err) {
+      console.error('[writeDbAsync local JSON error]', err);
+      writeDb(state);
+    }
     return;
   }
 
   const supabase = createSupabaseServerClient();
   const { serverSecret } = getSupabaseEnv();
-  if (!supabase || !serverSecret) return;
+  if (!supabase || !serverSecret) {
+    throw new Error('Supabase istemcisi veya sunucu gizli anahtarı başlatılamadı.');
+  }
 
-  const metaPayload = {
-    tenants: state.tenants,
-    users: state.users,
-    marketplaceAccounts: state.marketplaceAccounts,
-    xmlSources: state.xmlSources,
-    xmlReports: state.xmlReports.slice(0, 50),
-    categories: state.categories,
-    brands: state.brands,
-    variantGroups: state.variantGroups,
-    tags: state.tags,
-    syncBatches: state.syncBatches.slice(0, 50),
-    priceRobotItems: state.priceRobotItems,
-    orders: state.orders,
-    claims: state.claims,
-    operationLogs: state.operationLogs.slice(0, 150)
-  };
+  if (!options?.skipMeta) {
+    const metaPayload = {
+      tenants: state.tenants,
+      users: state.users,
+      marketplaceAccounts: state.marketplaceAccounts,
+      xmlSources: state.xmlSources,
+      xmlReports: state.xmlReports.slice(0, 50),
+      categories: state.categories,
+      brands: state.brands,
+      variantGroups: state.variantGroups,
+      tags: state.tags,
+      syncBatches: state.syncBatches.slice(0, 50),
+      priceRobotItems: state.priceRobotItems,
+      orders: state.orders,
+      claims: state.claims,
+      operationLogs: state.operationLogs.slice(0, 150)
+    };
 
-  const { error: metaError } = await supabase.rpc('sopyo_save_meta_state', {
-    p_secret: serverSecret,
-    p_payload: metaPayload
-  });
+    const { error: metaError } = await supabase.rpc('sopyo_save_meta_state', {
+      p_secret: serverSecret,
+      p_payload: metaPayload
+    });
 
-  if (metaError) {
-    throw new Error(`Supabase meta kayıt hatası: ${metaError.message}`);
+    if (metaError) {
+      throw new Error(`Supabase meta kayıt hatası: ${metaError.message}`);
+    }
   }
 
   if (options?.skipProducts) {
@@ -1321,11 +1343,17 @@ export async function writeDbAsync(
   }
 
   if (options?.syncDeletedProducts && !options?.onlyProductIds) {
-    const keepIds = state.products.map((p) => p.id);
-    await supabase.rpc('sopyo_mark_missing_products_deleted', {
+    const keepIds = options?.tenantId
+      ? state.products.filter((p) => p.tenantId === options.tenantId).map((p) => p.id)
+      : state.products.map((p) => p.id);
+    const { error: delErr } = await supabase.rpc('sopyo_mark_missing_products_deleted', {
       p_secret: serverSecret,
-      p_keep_ids: keepIds
+      p_keep_ids: keepIds,
+      p_tenant_id: options?.tenantId ?? null
     });
+    if (delErr) {
+      throw new Error(`Supabase silinen ürün güncelleme hatası: ${delErr.message}`);
+    }
   }
 }
 

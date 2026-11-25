@@ -11,6 +11,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Production 3-Hour XML & AI Compliance Sync
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL || 'https://xml-entegrasyon-orcin.vercel.app' }}
         run: |
-          echo "Triggering 3-hour automatic XML sync on https://xml-entegrasyon-orcin.vercel.app/api/cron/sync ..."
-          curl -s -S -L --max-time 60 "https://xml-entegrasyon-orcin.vercel.app/api/cron/sync" || true
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET gizli değişkeni GitHub Actions Secrets altında tanımlanmalıdır."
+            exit 1
+          fi
+          echo "Triggering 3-hour automatic XML sync on ${APP_BASE_URL}/api/cron/sync ..."
+          curl -s -S -L --fail-with-body --max-time 60 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_BASE_URL}/api/cron/sync"

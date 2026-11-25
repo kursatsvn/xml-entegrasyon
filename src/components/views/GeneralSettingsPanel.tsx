@@ -35,6 +35,7 @@ interface GeneralSettingsPanelProps {
   setTenantForm: React.Dispatch<React.SetStateAction<Tenant>>;
   onSave: () => Promise<void>;
   loading: boolean;
+  notify?: (msg: string, type?: 'success' | 'error') => void;
 }
 
 const SIDEBAR_ITEMS: {
@@ -57,10 +58,12 @@ export default function GeneralSettingsPanel({
   tenantForm,
   setTenantForm,
   onSave,
-  loading
+  loading,
+  notify
 }: GeneralSettingsPanelProps) {
   const [activeFilter, setActiveFilter] = useState<SettingsFilterId>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   const gs = useMemo(() => mergeTenantGeneralSettings(tenantForm), [tenantForm]);
 
@@ -114,20 +117,41 @@ export default function GeneralSettingsPanel({
     });
   };
 
-  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    if (file.size > 512 * 1024) {
-      alert('Logo dosyası 512 KB boyutundan küçük olmalıdır.');
+
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      notify?.('Yalnızca PNG, JPEG veya WebP formatında logo yükleyebilirsiniz (SVG desteklenmez).', 'error');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        updateGs('customerLogo', reader.result);
+    if (file.size > 512 * 1024) {
+      notify?.('Logo dosyası 512 KB boyutundan küçük olmalıdır.', 'error');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/upload/logo', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok || !data?.url) {
+        notify?.(data?.message || 'Logo yüklenemedi.', 'error');
+        return;
       }
-    };
-    reader.readAsDataURL(file);
+      updateGs('customerLogo', String(data.url));
+      notify?.('Logo yüklendi. Değişikliği kalıcı kılmak için "AYARLARI KAYDET" butonuna basın.', 'success');
+    } catch {
+      notify?.('Logo yüklenirken bağlantı hatası oluştu.', 'error');
+    } finally {
+      setUploadingLogo(false);
+    }
   };
 
   const matches = (group: Exclude<SettingsFilterId, 'all'>, title: string, desc = '') => {
@@ -369,13 +393,18 @@ export default function GeneralSettingsPanel({
                     ) : (
                       <span className="text-xs text-slate-400">Logo yüklenmedi</span>
                     )}
-                    <label className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 cursor-pointer">
+                    <label
+                      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-700 cursor-pointer ${
+                        uploadingLogo ? 'opacity-60 pointer-events-none' : ''
+                      }`}
+                    >
                       <Upload className="w-3.5 h-3.5" />
-                      Logo Seç
+                      {uploadingLogo ? 'Yükleniyor...' : 'Logo Seç (PNG/JPG/WebP)'}
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/png,image/jpeg,image/webp"
                         onChange={handleLogoFileChange}
+                        disabled={uploadingLogo}
                         className="hidden"
                       />
                     </label>

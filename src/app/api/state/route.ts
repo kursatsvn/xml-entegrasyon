@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { DatabaseState, getTenantData, readDbAsync, writeDbAsync } from '@/lib/store';
+import { getTenantData, readDbAsync, writeDbAsync } from '@/lib/store';
 import { calculateChannelPrices } from '@/lib/pricing-engine';
 import {
   enrichCategoryMappingWithAutoMatch,
@@ -8,7 +7,11 @@ import {
 } from '@/lib/category-matcher';
 import { inspectXmlFeedNodes, syncXmlFeedProducts } from '@/lib/xml-engine';
 import { sanitizeAndDeduplicateCatalog } from '@/lib/ai-sanitizer';
+import { sanitizeRichHtml } from '@/lib/html-sanitizer';
 import { mergeTenantGeneralSettings, syncLegacyTenantFields } from '@/lib/general-settings';
+import { resolveAuthenticatedContext } from '@/lib/auth-server';
+import { UrlGuardError, assertSafeExternalXmlUrl } from '@/lib/url-guard';
+import { StateActionSchema, formatZodError } from '@/lib/validators';
 import {
   archiveLiveTrendyolProducts,
   deleteLiveTrendyolProducts,
@@ -18,148 +21,104 @@ import {
   syncPriceAndInventoryToMarketplace,
   testMarketplaceConnection
 } from '@/lib/marketplace-api';
-import { CategoryMapping, MarketplaceAccount, Order, Product, XmlSource } from '@/types/sopyo';
+import {
+  CategoryMapping,
+  MarketplaceAccount,
+  Order,
+  Product,
+  Tenant,
+  XmlSource
+} from '@/types/sopyo';
 
-const SESSION_COOKIE = 'sopyo_session_v1';
+export const dynamic = 'force-dynamic';
 
-async function resolveCurrentTenantId(
-  db: DatabaseState
-): Promise<{ userId: string; tenantId: string; role: string }> {
-  const cookieStore = await cookies();
-  const raw = cookieStore.get(SESSION_COOKIE)?.value;
-  const defaultUser = db.users[0];
+const SECRET_MASK = '••••••••';
 
-  if (!raw) {
-    return { userId: defaultUser.id, tenantId: defaultUser.tenantId, role: defaultUser.role };
-  }
-  try {
-    const parsed = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
-    const user = db.users.find((u) => u.id === parsed.userId) || defaultUser;
-    return {
-      userId: user.id,
-      tenantId: parsed.tenantId || user.tenantId,
-      role: user.role
-    };
-  } catch {
-    return { userId: defaultUser.id, tenantId: defaultUser.tenantId, role: defaultUser.role };
-  }
+function maskMarketplaceAccount(acc: MarketplaceAccount): MarketplaceAccount {
+  return {
+    ...acc,
+    apiSecret: acc.apiSecret ? SECRET_MASK : ''
+  };
+}
+
+function sanitizeLogoUrl(raw: unknown, fallback: string): string {
+  if (typeof raw !== 'string') return fallback;
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  if (/^https:\/\//i.test(trimmed)) return trimmed;
+  if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/i.test(trimmed)) return trimmed;
+  return fallback;
 }
 
 export async function GET() {
-  const db = await readDbAsync();
-  const { tenantId, role } = await resolveCurrentTenantId(db);
-
-  // Eğer veritabanında henüz sadece 12 başlangıç (seed) ürünü varsa, canlı XML'den tüm ürünleri (1.648 ürün) otomatik çek
-  const tenantProducts = db.products.filter((p) => p.tenantId === tenantId);
-  const primaryXml = db.xmlSources.find((x) => x.tenantId === tenantId);
-  if (primaryXml && process.env.ARIASCLOSET_XML_URL && primaryXml.url.includes('YOUR_XML_TOKEN')) {
-    primaryXml.url = process.env.ARIASCLOSET_XML_URL;
-  }
-
-  if (
-    tenantProducts.length <= 20 &&
-    primaryXml &&
-    primaryXml.url &&
-    !primaryXml.url.includes('YOUR_XML_TOKEN')
-  ) {
-    try {
-      const { products: syncedProducts, report, totalInXml, totalVariantsInXml } =
-        await syncXmlFeedProducts({
-          xmlSource: primaryXml,
-          existingProducts: tenantProducts,
-          limit: 0
-        });
-      primaryXml.totalProductCount = totalInXml;
-      primaryXml.totalVariantCount = totalVariantsInXml;
-      primaryXml.lastCheckedAt = new Date().toISOString();
-      const otherProducts = db.products.filter(
-        (p) => !(p.tenantId === tenantId && p.xmlSourceId === primaryXml.id)
+  try {
+    const db = await readDbAsync();
+    const auth = await resolveAuthenticatedContext(db);
+    if (!auth) {
+      return NextResponse.json(
+        { ok: false, message: 'Oturum gerekli. Lütfen giriş yapın.' },
+        { status: 401 }
       );
-      db.products = [...otherProducts, ...syncedProducts];
-      db.xmlReports.unshift(report);
-
-      // Kategorileri ve Markaları da tüm 1.648 üründen otomatik çıkar
-      const catCounts = new Map<string, { tree: string; count: number }>();
-      const brandCounts = new Map<string, number>();
-      for (const p of syncedProducts) {
-        const prevCat = catCounts.get(p.categoryName);
-        catCounts.set(p.categoryName, {
-          tree: p.categoryTree || p.categoryName,
-          count: (prevCat?.count || 0) + 1
-        });
-        brandCounts.set(p.brandName, (brandCounts.get(p.brandName) || 0) + 1);
-      }
-
-      for (const [catName, info] of catCounts.entries()) {
-        const existingCat = db.categories.find(
-          (c) => c.tenantId === tenantId && c.name === catName
-        );
-        if (existingCat) {
-          existingCat.productCount = info.count;
-          existingCat.xmlCategoryTree = info.tree;
-        } else {
-          db.categories.push(
-            enrichCategoryMappingWithAutoMatch({
-              id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-              tenantId,
-              name: catName,
-              xmlCategoryTree: info.tree,
-              sourceName: primaryXml.name,
-              productCount: info.count,
-              trendyolStatus: 'unmapped',
-              trendyolAttributes: [],
-              hepsiburadaStatus: 'unmapped',
-              hepsiburadaAttributes: []
-            })
-          );
-        }
-      }
-
-      for (const [bName, count] of brandCounts.entries()) {
-        const existingBrand = db.brands.find(
-          (b) => b.tenantId === tenantId && b.name === bName
-        );
-        if (existingBrand) {
-          existingBrand.productCount = count;
-        } else {
-          db.brands.push({
-            id: `brand-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            tenantId,
-            name: bName,
-            productCount: count,
-            trendyolBrandId: 1845920,
-            trendyolBrandName: "Aria's Closet",
-            hepsiburadaBrandName: "Aria's Closet",
-            isMapped: true
-          });
-        }
-      }
-
-      await writeDbAsync(db);
-    } catch (e) {
-      console.error('Auto XML sync on initial load failed:', e);
     }
+
+    const { tenantId, role } = auth;
+    const data = getTenantData(tenantId, db);
+
+    return NextResponse.json({
+      ...data,
+      currentUser: {
+        id: auth.user.id,
+        email: auth.user.email,
+        fullName: auth.user.fullName,
+        role: auth.user.role,
+        tenantId: auth.user.tenantId
+      },
+      marketplaceAccounts: data.marketplaceAccounts.map(maskMarketplaceAccount),
+      isSuperAdmin: role === 'super_admin',
+      allTenants: role === 'super_admin' ? db.tenants : [data.tenant],
+      allUsers:
+        role === 'super_admin'
+          ? db.users.map(({ password: _password, clearPassword: _clear, ...rest }) => rest)
+          : []
+    });
+  } catch (err) {
+    console.error('[api/state GET error]', err);
+    return NextResponse.json(
+      { ok: false, message: 'Veriler yüklenirken bir sunucu hatası oluştu.' },
+      { status: 500 }
+    );
   }
-
-  const data = getTenantData(tenantId, db);
-
-  return NextResponse.json({
-    ...data,
-    isSuperAdmin: role === 'super_admin',
-    allTenants: role === 'super_admin' ? db.tenants : [data.tenant],
-    allUsers:
-      role === 'super_admin'
-        ? db.users.map(({ password, ...rest }) => rest)
-        : []
-  });
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { action } = body;
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return NextResponse.json({ ok: false, message: 'Geçersiz JSON istek gövdesi.' }, { status: 400 });
+    }
+
     const db = await readDbAsync();
-    const { tenantId, role } = await resolveCurrentTenantId(db);
+    const auth = await resolveAuthenticatedContext(db);
+    if (!auth) {
+      return NextResponse.json(
+        { ok: false, message: 'Oturum gerekli. Lütfen giriş yapın.' },
+        { status: 401 }
+      );
+    }
+
+    const parsed = StateActionSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { ok: false, message: formatZodError(parsed.error) },
+        { status: 400 }
+      );
+    }
+
+    const body = parsed.data as Record<string, any>;
+    const action = parsed.data.action;
+    const { tenantId, role, tenant: activeTenant } = auth;
 
     // 1. XML Etiketlerini İncele (Sopyo Step 3 getXMLNodes.php)
     if (action === 'inspect_xml_nodes') {
@@ -173,21 +132,40 @@ export async function POST(req: NextRequest) {
 
     // 2. XML Kaynağı Ekle / Güncelle + Fiyat Kurallarını Tüm Ürünlere Uygula
     if (action === 'save_xml_source') {
-      const incoming = body.xmlSource as Partial<XmlSource>;
+      const incoming = body.xmlSource as Partial<XmlSource> | undefined;
+      if (!incoming || typeof incoming !== 'object') {
+        return NextResponse.json({ ok: false, message: 'XML kaynak verisi eksik.' }, { status: 400 });
+      }
+      if (incoming.url && String(incoming.url).trim()) {
+        await assertSafeExternalXmlUrl(String(incoming.url));
+      }
       const existingIdx = db.xmlSources.findIndex(
         (x) => x.id === incoming.id && x.tenantId === tenantId
       );
 
       let savedSource: XmlSource;
       if (existingIdx >= 0) {
+        const existing = db.xmlSources[existingIdx];
         savedSource = {
-          ...db.xmlSources[existingIdx],
+          ...existing,
           ...incoming,
+          id: existing.id,
           tenantId,
           lastCheckedAt: new Date().toISOString()
         };
         db.xmlSources[existingIdx] = savedSource;
       } else {
+        const currentTenantXmlCount = db.xmlSources.filter((x) => x.tenantId === tenantId).length;
+        if (currentTenantXmlCount >= activeTenant.maxXmlSources) {
+          return NextResponse.json(
+            {
+              ok: false,
+              message: `XML kaynak limitinize ulaştınız (${currentTenantXmlCount}/${activeTenant.maxXmlSources}). Yeni kaynak eklemek için paketinizi yükseltin.`
+            },
+            { status: 403 }
+          );
+        }
+
         savedSource = {
           id: `xml-${Date.now()}`,
           tenantId,
@@ -539,7 +517,7 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString()
       });
 
-      await writeDbAsync(db, { syncDeletedProducts: true });
+      await writeDbAsync(db, { syncDeletedProducts: true, tenantId });
       return NextResponse.json({
         ok: true,
         message: `${xmlSource.name} kaynağından ${syncedProducts.length} tekil ürün başarıyla çekildi, yasaklı kelimeler temizlendi, Ürün Listesi güncellendi${trendyolAutoMsg}!`,
@@ -559,13 +537,20 @@ export async function POST(req: NextRequest) {
           (p) => !(p.xmlSourceId === xmlSourceId && p.tenantId === tenantId)
         );
       }
-      await writeDbAsync(db, { skipProducts: !deleteProducts, syncDeletedProducts: deleteProducts });
+      await writeDbAsync(db, {
+        skipProducts: !deleteProducts,
+        syncDeletedProducts: deleteProducts,
+        tenantId
+      });
       return NextResponse.json({ ok: true, message: 'XML kaynağı silindi.' });
     }
 
     // 5. Tekil Ürün Güncelle / Yeni Ürün Ekle
     if (action === 'save_product') {
-      const incoming = body.product as Partial<Product>;
+      const incoming = body.product as Partial<Product> | undefined;
+      if (!incoming || typeof incoming !== 'object') {
+        return NextResponse.json({ ok: false, message: 'Ürün verisi eksik.' }, { status: 400 });
+      }
       const idx = db.products.findIndex(
         (p) => p.id === incoming.id && p.tenantId === tenantId
       );
@@ -589,9 +574,30 @@ export async function POST(req: NextRequest) {
         const stillHasZero =
           newSalePrice <= 0 || updatedVariants.some((v) => !v.salePrice || v.salePrice <= 0);
 
+        const sanitizedMarketplaceDescriptions = incoming.marketplaceDescriptions
+          ? {
+              trendyol:
+                incoming.marketplaceDescriptions.trendyol !== undefined
+                  ? sanitizeRichHtml(incoming.marketplaceDescriptions.trendyol)
+                  : prev.marketplaceDescriptions?.trendyol,
+              hepsiburada:
+                incoming.marketplaceDescriptions.hepsiburada !== undefined
+                  ? sanitizeRichHtml(incoming.marketplaceDescriptions.hepsiburada)
+                  : prev.marketplaceDescriptions?.hepsiburada
+            }
+          : prev.marketplaceDescriptions;
+
         db.products[idx] = {
           ...prev,
           ...incoming,
+          id: prev.id,
+          descriptionHtml:
+            incoming.descriptionHtml !== undefined
+              ? sanitizeRichHtml(incoming.descriptionHtml)
+              : prev.descriptionHtml,
+          minPrice:
+            incoming.minPrice !== undefined ? Number(incoming.minPrice) : prev.minPrice,
+          marketplaceDescriptions: sanitizedMarketplaceDescriptions,
           variants: updatedVariants,
           xmlPriceLock: prev.salePrice <= 0 && newSalePrice > 0 ? true : Boolean(incoming.xmlPriceLock ?? prev.xmlPriceLock),
           status: !stillHasZero ? incoming.status || 'active' : 'passive',
@@ -607,6 +613,17 @@ export async function POST(req: NextRequest) {
           updatedAt: new Date().toISOString()
         };
       } else {
+        const currentTenantProdCount = db.products.filter((p) => p.tenantId === tenantId).length;
+        if (currentTenantProdCount >= activeTenant.maxProducts) {
+          return NextResponse.json(
+            {
+              ok: false,
+              message: `Ürün limitinize ulaştınız (${currentTenantProdCount}/${activeTenant.maxProducts}). Yeni ürün eklemek için paketinizi yükseltin.`
+            },
+            { status: 403 }
+          );
+        }
+
         const newProd: Product = {
           id: `prod-${Date.now()}`,
           tenantId,
@@ -619,7 +636,7 @@ export async function POST(req: NextRequest) {
           title: incoming.title || 'Yeni Ürün',
           subtitle: incoming.subtitle || '',
           invoiceTitle: incoming.invoiceTitle || '',
-          descriptionHtml: incoming.descriptionHtml || '',
+          descriptionHtml: sanitizeRichHtml(incoming.descriptionHtml || ''),
           brandName: incoming.brandName || "Aria's Closet",
           categoryName: incoming.categoryName || 'Genel',
           categoryTree: incoming.categoryTree || 'Genel',
@@ -636,6 +653,17 @@ export async function POST(req: NextRequest) {
           buyingPrice: Number(incoming.buyingPrice ?? 0),
           marketPrice: Number(incoming.marketPrice ?? 0),
           salePrice: Number(incoming.salePrice ?? 0),
+          minPrice: incoming.minPrice !== undefined ? Number(incoming.minPrice) : undefined,
+          marketplaceDescriptions: incoming.marketplaceDescriptions
+            ? {
+                trendyol: incoming.marketplaceDescriptions.trendyol
+                  ? sanitizeRichHtml(incoming.marketplaceDescriptions.trendyol)
+                  : undefined,
+                hepsiburada: incoming.marketplaceDescriptions.hepsiburada
+                  ? sanitizeRichHtml(incoming.marketplaceDescriptions.hepsiburada)
+                  : undefined
+              }
+            : undefined,
           trendyolListPrice: Number(incoming.trendyolListPrice ?? 0),
           trendyolSalePrice: Number(incoming.trendyolSalePrice ?? 0),
           hepsiburadaSalePrice: Number(incoming.hepsiburadaSalePrice ?? 0),
@@ -670,7 +698,10 @@ export async function POST(req: NextRequest) {
         db.products.unshift(newProd);
       }
       const savedProdId = incoming.id || db.products[0]?.id;
-      await writeDbAsync(db, { onlyProductIds: savedProdId ? [savedProdId] : undefined });
+      await writeDbAsync(db, {
+        skipMeta: true,
+        onlyProductIds: savedProdId ? [savedProdId] : undefined
+      });
       return NextResponse.json({ ok: true, message: 'Ürün bilgileri kaydedildi.' });
     }
 
@@ -691,12 +722,16 @@ export async function POST(req: NextRequest) {
 
     // 7. Tekil Kategori Eşitleme Kaydet
     if (action === 'save_category_mapping') {
-      const incoming = body.category as CategoryMapping;
+      const incoming = body.category as CategoryMapping | undefined;
+      if (!incoming || typeof incoming !== 'object') {
+        return NextResponse.json({ ok: false, message: 'Kategori verisi eksik.' }, { status: 400 });
+      }
       const idx = db.categories.findIndex(
         (c) => c.id === incoming.id && c.tenantId === tenantId
       );
       if (idx >= 0) {
-        db.categories[idx] = { ...db.categories[idx], ...incoming };
+        const prev = db.categories[idx];
+        db.categories[idx] = { ...prev, ...incoming, id: prev.id, tenantId };
       }
       await writeDbAsync(db, { skipProducts: true });
       return NextResponse.json({ ok: true, message: 'Kategori eşleştirmesi güncellendi.' });
@@ -741,16 +776,36 @@ export async function POST(req: NextRequest) {
 
     // 10. Pazaryeri API Ayarlarını Kaydet & Test Et
     if (action === 'save_marketplace_account') {
-      const incoming = body.account as MarketplaceAccount;
+      const incoming = body.account as MarketplaceAccount | undefined;
+      if (
+        !incoming ||
+        typeof incoming !== 'object' ||
+        (incoming.marketplace !== 'trendyol' && incoming.marketplace !== 'hepsiburada')
+      ) {
+        return NextResponse.json({ ok: false, message: 'Geçersiz pazaryeri hesabı.' }, { status: 400 });
+      }
       const idx = db.marketplaceAccounts.findIndex(
         (m) => m.tenantId === tenantId && m.marketplace === incoming.marketplace
       );
-      const testResult = await testMarketplaceConnection({ ...incoming, tenantId });
+      const existingAcc = idx >= 0 ? db.marketplaceAccounts[idx] : undefined;
+      const resolvedApiSecret =
+        existingAcc && (!incoming.apiSecret || incoming.apiSecret === SECRET_MASK)
+          ? existingAcc.apiSecret
+          : String(incoming.apiSecret || '');
+
+      const candidateAccount: MarketplaceAccount = {
+        ...incoming,
+        id: existingAcc ? existingAcc.id : `mkt-${incoming.marketplace}-${Date.now()}`,
+        tenantId,
+        apiSecret: resolvedApiSecret,
+        descriptionPrefixHtml: sanitizeRichHtml(incoming.descriptionPrefixHtml || ''),
+        descriptionSuffixHtml: sanitizeRichHtml(incoming.descriptionSuffixHtml || '')
+      };
+
+      const testResult = await testMarketplaceConnection(candidateAccount);
 
       const updated: MarketplaceAccount = {
-        ...incoming,
-        id: idx >= 0 ? db.marketplaceAccounts[idx].id : `mkt-${incoming.marketplace}-${Date.now()}`,
-        tenantId,
+        ...candidateAccount,
         lastTestedAt: new Date().toISOString(),
         connectionStatus: testResult.ok ? 'connected' : 'error'
       };
@@ -764,7 +819,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: testResult.ok,
         message: testResult.message,
-        account: updated
+        account: maskMarketplaceAccount(updated)
       });
     }
 
@@ -864,12 +919,16 @@ export async function POST(req: NextRequest) {
       );
 
       const batchIds: string[] = [];
+      let totalSuccess = 0;
+      const allErrors: { stockCode: string; title: string; marketplace: string; message: string }[] = [];
       for (const acc of accounts) {
         const res = await syncPriceAndInventoryToMarketplace({
           account: acc,
           products: tenantProducts
         });
         batchIds.push(res.remoteBatchId);
+        totalSuccess = Math.max(totalSuccess, res.successCount);
+        allErrors.push(...res.errors);
       }
 
       const newBatch = {
@@ -880,11 +939,11 @@ export async function POST(req: NextRequest) {
         operationType: 'ÜRÜN GÜNCELLEME(Stok & Fiyat)',
         remoteBatchId: batchIds.join(' | ') || `INV-${Date.now()}`,
         attemptedCount: tenantProducts.length,
-        successCount: tenantProducts.length,
-        errorCount: 0,
-        status: 'completed' as const,
+        successCount: totalSuccess,
+        errorCount: allErrors.length,
+        status: allErrors.length > 0 && totalSuccess === 0 ? ('failed' as const) : ('completed' as const),
         createdAt: new Date().toISOString(),
-        errors: []
+        errors: allErrors
       };
 
       db.syncBatches.unshift(newBatch);
@@ -893,8 +952,8 @@ export async function POST(req: NextRequest) {
         tenantId,
         type: 'price_stock_sync',
         channel: targetMarketplace,
-        summary: `Toplu Stok & Fiyat Güncellendi (${tenantProducts.length} ürün)`,
-        status: 'success',
+        summary: `Toplu Stok & Fiyat Güncellendi (${totalSuccess} başarılı, ${allErrors.length} hata)`,
+        status: allErrors.length === 0 ? 'success' : 'warning',
         details: `Batch ID: ${newBatch.remoteBatchId}`,
         createdAt: new Date().toISOString()
       });
@@ -902,7 +961,10 @@ export async function POST(req: NextRequest) {
       await writeDbAsync(db, { skipProducts: true });
       return NextResponse.json({
         ok: true,
-        message: `${tenantProducts.length} ürünün güncel stok ve fiyatları ${targetMarketplace} kanallarına başarıyla gönderildi!`,
+        message:
+          allErrors.length === 0
+            ? `${totalSuccess} ürünün güncel stok ve fiyatları ${targetMarketplace} kanallarına başarıyla gönderildi!`
+            : `Stok & fiyat güncelleme tamamlandı: ${totalSuccess} başarılı, ${allErrors.length} hata döndü.`,
         batch: newBatch
       });
     }
@@ -1083,27 +1145,83 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, message: 'Sipariş güncellendi.' });
     }
 
-    // 15. Firma & Genel Ayarları Kaydet (Sopyo 9 Sekme / 65 Alan)
+    // 15. Firma & Genel Ayarları Kaydet (Sopyo 9 Sekme / 65 Alan - Mass Assignment Korumalı)
     if (action === 'update_tenant_settings') {
       const idx = db.tenants.findIndex((t) => t.id === tenantId);
       if (idx >= 0) {
-        const incoming = body.settings || {};
-        const mergedTenant = {
-          ...db.tenants[idx],
-          ...incoming
+        const currentTenant = db.tenants[idx];
+        const incoming = (body.settings && typeof body.settings === 'object' ? body.settings : {}) as Partial<Tenant>;
+        const safeSettings: Partial<Tenant> = {
+          name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name.trim() : currentTenant.name,
+          companyPhone: typeof incoming.companyPhone === 'string' ? incoming.companyPhone : currentTenant.companyPhone,
+          companyEmail: typeof incoming.companyEmail === 'string' ? incoming.companyEmail : currentTenant.companyEmail,
+          companyAddress: typeof incoming.companyAddress === 'string' ? incoming.companyAddress : currentTenant.companyAddress,
+          companyWebsite: typeof incoming.companyWebsite === 'string' ? incoming.companyWebsite : currentTenant.companyWebsite,
+          defaultVatRate: incoming.defaultVatRate !== undefined ? Number(incoming.defaultVatRate) : currentTenant.defaultVatRate,
+          maskInvoiceProductNames:
+            typeof incoming.maskInvoiceProductNames === 'boolean'
+              ? incoming.maskInvoiceProductNames
+              : currentTenant.maskInvoiceProductNames,
+          defaultMaskedProductName:
+            typeof incoming.defaultMaskedProductName === 'string'
+              ? incoming.defaultMaskedProductName
+              : currentTenant.defaultMaskedProductName,
+          cargoLabelTemplate: incoming.cargoLabelTemplate ?? currentTenant.cargoLabelTemplate,
+          cargoLabelShowStock:
+            typeof incoming.cargoLabelShowStock === 'boolean'
+              ? incoming.cargoLabelShowStock
+              : currentTenant.cargoLabelShowStock,
+          cargoLabelShowProducts:
+            typeof incoming.cargoLabelShowProducts === 'boolean'
+              ? incoming.cargoLabelShowProducts
+              : currentTenant.cargoLabelShowProducts,
+          cargoLabelShowPrice:
+            typeof incoming.cargoLabelShowPrice === 'boolean'
+              ? incoming.cargoLabelShowPrice
+              : currentTenant.cargoLabelShowPrice,
+          cargoLabelShowSku:
+            typeof incoming.cargoLabelShowSku === 'boolean'
+              ? incoming.cargoLabelShowSku
+              : currentTenant.cargoLabelShowSku,
+          cargoLabelFontSize:
+            incoming.cargoLabelFontSize !== undefined
+              ? Number(incoming.cargoLabelFontSize)
+              : currentTenant.cargoLabelFontSize,
+          trendyolInvoiceNote:
+            typeof incoming.trendyolInvoiceNote === 'string'
+              ? incoming.trendyolInvoiceNote
+              : currentTenant.trendyolInvoiceNote,
+          hepsiburadaInvoiceNote:
+            typeof incoming.hepsiburadaInvoiceNote === 'string'
+              ? incoming.hepsiburadaInvoiceNote
+              : currentTenant.hepsiburadaInvoiceNote
         };
+
+        const mergedTenant: Tenant = {
+          ...currentTenant,
+          ...safeSettings
+        };
+        const currentGs = mergeTenantGeneralSettings(currentTenant);
+        const incomingGs =
+          incoming.generalSettings && typeof incoming.generalSettings === 'object'
+            ? { ...incoming.generalSettings }
+            : {};
+        if ('customerLogo' in incomingGs) {
+          incomingGs.customerLogo = sanitizeLogoUrl(incomingGs.customerLogo, currentGs.customerLogo);
+        }
+
         const mergedGs = mergeTenantGeneralSettings({
           ...mergedTenant,
           generalSettings: {
-            ...mergeTenantGeneralSettings(db.tenants[idx]),
-            ...(incoming.generalSettings || {})
+            ...currentGs,
+            ...incomingGs
           }
         });
         db.tenants[idx] = syncLegacyTenantFields(mergedTenant, mergedGs);
 
-        // Kullanıcı giriş e-postası güncellendiyse aktif kullanıcı profilini de senkronize et
-        if (mergedGs.userMail) {
-          const ownerUser = db.users.find((u) => u.tenantId === tenantId);
+        // Kullanıcı bilgilendirme e-postası güncellendiyse yerel profille senkronize et
+        if (mergedGs.userMail && auth.authMode === 'local_hmac') {
+          const ownerUser = db.users.find((u) => u.id === auth.userId);
           if (ownerUser) {
             ownerUser.email = mergedGs.userMail;
           }
@@ -1190,43 +1308,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, message: 'Ürün Fiyat Rekabet Robotuna eklendi.' });
     }
 
-    // 18. Canlı Trendyol Ürünlerini Listele (Onaylı + Onay Bekleyenler Dahil)
+    // 18. Canlı Trendyol Ürünlerini Listele (Yalnızca Aktif Kiracının Kendi API Anahtarı ile)
     if (action === 'fetch_live_trendyol_products') {
       const tyAcc = db.marketplaceAccounts.find(
         (m) => m.tenantId === tenantId && m.marketplace === 'trendyol'
       );
-      const effectiveAccount: MarketplaceAccount = {
-        ...(tyAcc || {
-          id: 'mkt-ty-lunerose',
-          tenantId,
-          marketplace: 'trendyol',
-          storeName: 'LuneRose',
-          supplierOrMerchantId: process.env.TRENDYOL_SUPPLIER_ID || '1192080',
-          apiKey: '',
-          apiSecret: '',
-          isActive: true,
-          autoConfirmOrders: false,
-          shipmentProviderId: '7',
-          shipmentProviderName: 'Aras Kargo Marketplace',
-          shipmentAddressId: '7853340',
-          shipmentAddressText: '',
-          returningAddressId: '7853341',
-          returningAddressText: '',
-          dispatchTimeHours: 24,
-          hbOrderPullStatus: 'ready_to_ship',
-          stockCodeType: 'modelCode',
-          descriptionPrefixHtml: '',
-          descriptionSuffixHtml: '',
-          connectionStatus: 'connected'
-        }),
-        supplierOrMerchantId:
-          tyAcc?.supplierOrMerchantId || process.env.TRENDYOL_SUPPLIER_ID || '1192080',
-        apiKey: tyAcc?.apiKey || process.env.TRENDYOL_API_KEY || '',
-        apiSecret: tyAcc?.apiSecret || process.env.TRENDYOL_API_SECRET || ''
-      };
+      if (!tyAcc || !tyAcc.supplierOrMerchantId || !tyAcc.apiKey || !tyAcc.apiSecret) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              'Bu işlem için önce Entegrasyonlar sekmesinden mağazanıza ait Trendyol Satıcı ID, API Key ve API Secret bilgilerini kaydedin.'
+          },
+          { status: 400 }
+        );
+      }
 
       const result = await fetchLiveTrendyolProducts({
-        account: effectiveAccount,
+        account: tyAcc,
         page: Number(body.page || 0),
         size: Number(body.size || 50),
         filter: body.filter || 'all'
@@ -1235,22 +1334,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result);
     }
 
-    // 19. Canlı Trendyol Ürünlerini Önce Arşivle (1. Adım)
+    // 19. Canlı Trendyol Ürünlerini Önce Arşivle (1. Adım - Kiracı İzolasyonlu)
     if (action === 'archive_live_trendyol_products') {
       const tyAcc = db.marketplaceAccounts.find(
         (m) => m.tenantId === tenantId && m.marketplace === 'trendyol'
       );
-      const effectiveAccount: MarketplaceAccount = {
-        ...(tyAcc as MarketplaceAccount),
-        supplierOrMerchantId:
-          tyAcc?.supplierOrMerchantId || process.env.TRENDYOL_SUPPLIER_ID || '1192080',
-        apiKey: tyAcc?.apiKey || process.env.TRENDYOL_API_KEY || '',
-        apiSecret: tyAcc?.apiSecret || process.env.TRENDYOL_API_SECRET || ''
-      };
+      if (!tyAcc || !tyAcc.supplierOrMerchantId || !tyAcc.apiKey || !tyAcc.apiSecret) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              'Bu işlem için önce Entegrasyonlar sekmesinden mağazanıza ait Trendyol API bilgilerini kaydedin.'
+          },
+          { status: 400 }
+        );
+      }
 
       const result = await archiveLiveTrendyolProducts({
-        account: effectiveAccount,
-        barcodes: body.barcodes || [],
+        account: tyAcc,
+        barcodes: Array.isArray(body.barcodes) ? body.barcodes : [],
         archiveMode: body.archiveMode || 'selected'
       });
 
@@ -1269,22 +1371,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(result);
     }
 
-    // 20. Canlı Trendyol Ürünlerini Kalıcı Sil (2. Adım - Arşivlendikten Sonra)
+    // 20. Canlı Trendyol Ürünlerini Kalıcı Sil (2. Adım - Kiracı İzolasyonlu)
     if (action === 'delete_live_trendyol_products') {
       const tyAcc = db.marketplaceAccounts.find(
         (m) => m.tenantId === tenantId && m.marketplace === 'trendyol'
       );
-      const effectiveAccount: MarketplaceAccount = {
-        ...(tyAcc as MarketplaceAccount),
-        supplierOrMerchantId:
-          tyAcc?.supplierOrMerchantId || process.env.TRENDYOL_SUPPLIER_ID || '1192080',
-        apiKey: tyAcc?.apiKey || process.env.TRENDYOL_API_KEY || '',
-        apiSecret: tyAcc?.apiSecret || process.env.TRENDYOL_API_SECRET || ''
-      };
+      if (!tyAcc || !tyAcc.supplierOrMerchantId || !tyAcc.apiKey || !tyAcc.apiSecret) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              'Bu işlem için önce Entegrasyonlar sekmesinden mağazanıza ait Trendyol API bilgilerini kaydedin.'
+          },
+          { status: 400 }
+        );
+      }
 
       const result = await deleteLiveTrendyolProducts({
-        account: effectiveAccount,
-        barcodes: body.barcodes || [],
+        account: tyAcc,
+        barcodes: Array.isArray(body.barcodes) ? body.barcodes : [],
         deleteAllMode: body.deleteAllMode || 'selected',
         maxPagesToDelete: Number(body.maxPagesToDelete || 20)
       });
@@ -1305,13 +1410,24 @@ export async function POST(req: NextRequest) {
     }
 
     // 17. Süper Admin: Mağaza/Kullanıcı Yönetimi
-    if (action === 'admin_update_tenant' && role === 'super_admin') {
+    if (action === 'admin_update_tenant') {
+      if (role !== 'super_admin') {
+        return NextResponse.json(
+          { ok: false, message: 'Bu işlem için Süper Admin yetkisi gereklidir.' },
+          { status: 403 }
+        );
+      }
       const targetId = String(body.targetTenantId || '');
+      const updates = (body.updates && typeof body.updates === 'object' ? body.updates : {}) as Partial<Tenant>;
       const idx = db.tenants.findIndex((t) => t.id === targetId);
       if (idx >= 0) {
+        const current = db.tenants[idx];
+        const { id: _id, createdAt: _createdAt, ...allowedUpdates } = updates;
         db.tenants[idx] = {
-          ...db.tenants[idx],
-          ...body.updates
+          ...current,
+          ...allowedUpdates,
+          id: current.id,
+          createdAt: current.createdAt
         };
         await writeDbAsync(db, { skipProducts: true });
       }
@@ -1325,7 +1441,7 @@ export async function POST(req: NextRequest) {
       const scanResult = sanitizeAndDeduplicateCatalog(tenantProducts);
       db.products = [...otherProducts, ...scanResult.products];
 
-      await writeDbAsync(db, { syncDeletedProducts: true });
+      await writeDbAsync(db, { syncDeletedProducts: true, tenantId });
 
       return NextResponse.json({
         ok: true,
@@ -1339,9 +1455,13 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: false, message: 'Bilinmeyen işlem' }, { status: 400 });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    if (err instanceof UrlGuardError) {
+      return NextResponse.json({ ok: false, message: err.message }, { status: 400 });
+    }
+    console.error('[api/state POST error]', err);
     return NextResponse.json(
-      { ok: false, message: err?.message || 'İşlem sırasında bir hata oluştu.' },
+      { ok: false, message: 'İşlem sırasında beklenmeyen bir sunucu hatası oluştu.' },
       { status: 500 }
     );
   }

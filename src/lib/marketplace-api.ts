@@ -13,6 +13,7 @@ import {
   resolveTrendyolBrandId
 } from '@/lib/category-matcher';
 import { sanitizeProductContent } from '@/lib/ai-sanitizer';
+import { sanitizeRichHtml } from '@/lib/html-sanitizer';
 
 function getTrendyolAuthHeaders(account: MarketplaceAccount) {
   const token = Buffer.from(`${account.apiKey}:${account.apiSecret}`).toString('base64');
@@ -140,6 +141,8 @@ export async function syncPriceAndInventoryToMarketplace(params: {
 
   let remoteBatchId = `${account.marketplace.toUpperCase()}-BATCH-${Date.now()}`;
 
+  const marketplaceLabel = account.marketplace === 'trendyol' ? 'Trendyol' : 'Hepsiburada';
+
   try {
     if (account.marketplace === 'trendyol' && itemsPayload.length > 0) {
       const url = `https://apigw.trendyol.com/integration/inventory/sellers/${account.supplierOrMerchantId}/products/price-and-inventory`;
@@ -147,11 +150,19 @@ export async function syncPriceAndInventoryToMarketplace(params: {
         method: 'POST',
         headers: getTrendyolAuthHeaders(account),
         body: JSON.stringify({ items: itemsPayload.slice(0, 1000) }),
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(12000)
       });
       if (res.ok) {
         const data = await res.json();
         if (data?.batchRequestId) remoteBatchId = data.batchRequestId;
+      } else {
+        const errBody = await res.text().catch(() => '');
+        errors.push({
+          stockCode: 'SYNC-HTTP',
+          title: `Trendyol Stok/Fiyat API Hatası (HTTP ${res.status})`,
+          marketplace: marketplaceLabel,
+          message: errBody.slice(0, 200) || `HTTP ${res.status}`
+        });
       }
     } else if (account.marketplace === 'hepsiburada' && itemsPayload.length > 0) {
       const url = `https://listing-external.hepsiburada.com/listings/merchantid/${account.supplierOrMerchantId}/inventory-uploads`;
@@ -159,15 +170,29 @@ export async function syncPriceAndInventoryToMarketplace(params: {
         method: 'POST',
         headers: getHepsiburadaAuthHeaders(account),
         body: JSON.stringify({ listings: itemsPayload.slice(0, 1000) }),
-        signal: AbortSignal.timeout(10000)
+        signal: AbortSignal.timeout(12000)
       });
       if (res.ok) {
         const data = await res.json();
         if (data?.id || data?.ticketId) remoteBatchId = data.id || data.ticketId;
+      } else {
+        const errBody = await res.text().catch(() => '');
+        errors.push({
+          stockCode: 'SYNC-HTTP',
+          title: `Hepsiburada Stok/Fiyat API Hatası (HTTP ${res.status})`,
+          marketplace: marketplaceLabel,
+          message: errBody.slice(0, 200) || `HTTP ${res.status}`
+        });
       }
     }
-  } catch {
-    // Ağ veya IP kısıtında yerel kuyruk batchRequestId ile devam eder
+  } catch (err: unknown) {
+    console.error(`[syncPriceAndInventoryToMarketplace ${account.marketplace} error]`, err);
+    errors.push({
+      stockCode: 'SYNC-NETWORK',
+      title: `${marketplaceLabel} Bağlantı / Zaman Aşımı Hatası`,
+      marketplace: marketplaceLabel,
+      message: 'Pazaryeri API isteği zaman aşımına uğradı veya bağlantı kurulamadı.'
+    });
   }
 
   return {
@@ -330,7 +355,9 @@ export async function publishProductsToMarketplace(params: {
         quantity: prod.status === 'active' ? Math.min(19999, Math.max(0, Number(v.netStock ?? 0))) : 0,
         stockCode: v.sku || `${prod.stockCode}-${vIdx + 1}`,
         dimensionalWeight: Math.max(1, Number(prod.desi || 1)),
-        description: `${account.descriptionPrefixHtml || ''}${sanitizedDesc}${account.descriptionSuffixHtml || ''}`,
+        description: sanitizeRichHtml(
+          `${account.descriptionPrefixHtml || ''}${sanitizedDesc}${account.descriptionSuffixHtml || ''}`
+        ),
         currencyType: 'TRY',
         listPrice: resolvedListPrice,
         salePrice: resolvedSalePrice,
@@ -563,18 +590,29 @@ export async function fetchLiveTrendyolProducts(params: {
   const [unarchAppRes, onSaleRes, archRes, unappRes, blackRes] = await Promise.all([
     fetch(`${baseUrl}?page=0&size=1&approved=true&archived=false`, {
       headers,
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12000)
     }),
     fetch(`${baseUrl}?page=0&size=1&approved=true&onSale=true&archived=false`, {
       headers,
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12000)
     }),
     fetch(`${baseUrl}?page=0&size=1&archived=true&blacklisted=false`, {
       headers,
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12000)
     }),
-    fetch(`${baseUrl}?page=0&size=1&approved=false`, { headers, cache: 'no-store' }),
-    fetch(`${baseUrl}?page=0&size=1&blacklisted=true`, { headers, cache: 'no-store' })
+    fetch(`${baseUrl}?page=0&size=1&approved=false`, {
+      headers,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12000)
+    }),
+    fetch(`${baseUrl}?page=0&size=1&blacklisted=true`, {
+      headers,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12000)
+    })
   ]);
 
   const unarchAppJson = unarchAppRes.ok ? await unarchAppRes.json() : { totalElements: 0 };
@@ -597,7 +635,7 @@ export async function fetchLiveTrendyolProducts(params: {
   if (filter === 'on_sale') {
     const mainRes = await fetch(
       `${baseUrl}?page=${page}&size=${size}&approved=true&onSale=true&archived=false`,
-      { headers, cache: 'no-store' }
+      { headers, cache: 'no-store', signal: AbortSignal.timeout(12000) }
     );
     if (!mainRes.ok) {
       throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
@@ -608,7 +646,7 @@ export async function fetchLiveTrendyolProducts(params: {
   } else if (filter === 'passive') {
     const mainRes = await fetch(
       `${baseUrl}?page=${page}&size=${Math.max(size, 200)}&approved=true&archived=false`,
-      { headers, cache: 'no-store' }
+      { headers, cache: 'no-store', signal: AbortSignal.timeout(12000) }
     );
     if (mainRes.ok) {
       const mainJson = await mainRes.json();
@@ -622,7 +660,8 @@ export async function fetchLiveTrendyolProducts(params: {
       `${baseUrl}?page=${page}&size=${size}&archived=true&blacklisted=false`,
       {
         headers,
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: AbortSignal.timeout(12000)
       }
     );
     if (!mainRes.ok) {
@@ -636,7 +675,8 @@ export async function fetchLiveTrendyolProducts(params: {
       `${baseUrl}?page=${page}&size=${size}&approved=true&archived=false`,
       {
         headers,
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: AbortSignal.timeout(12000)
       }
     );
     if (mainRes.ok) {
@@ -654,7 +694,8 @@ export async function fetchLiveTrendyolProducts(params: {
 
     const mainRes = await fetch(`${baseUrl}?page=${page}&size=${size}${filterParam}`, {
       headers,
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12000)
     });
     if (!mainRes.ok) {
       throw new Error(`Trendyol API yanıt vermedi: HTTP ${mainRes.status}`);
@@ -722,7 +763,8 @@ export async function archiveLiveTrendyolProducts(params: {
   if (archiveMode !== 'selected') {
     const r = await fetch(`${baseUrl}?page=0&size=200&approved=true&archived=false`, {
       headers,
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(12000)
     });
     if (r.ok) {
       const j = await r.json();
@@ -754,6 +796,7 @@ export async function archiveLiveTrendyolProducts(params: {
     const archRes = await fetch(`${baseUrl}/archive-state`, {
       method: 'PUT',
       headers,
+      signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
         items: chunk.map((barcode) => ({ barcode, archived: true }))
       })
@@ -813,7 +856,8 @@ export async function deleteLiveTrendyolProducts(params: {
     for (let p = 0; p < maxPagesToDelete; p++) {
       const r = await fetch(`${baseUrl}?page=${p}&size=200${querySuffix}`, {
         headers,
-        cache: 'no-store'
+        cache: 'no-store',
+        signal: AbortSignal.timeout(12000)
       });
       if (!r.ok) break;
       const j = await r.json();
@@ -847,6 +891,7 @@ export async function deleteLiveTrendyolProducts(params: {
     const res = await fetch(baseUrl, {
       method: 'DELETE',
       headers,
+      signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
         items: chunk.map((barcode) => ({ barcode }))
       })
@@ -861,7 +906,8 @@ export async function deleteLiveTrendyolProducts(params: {
           try {
             const bRes = await fetch(`${baseUrl}/batch-requests/${data.batchRequestId}`, {
               headers,
-              cache: 'no-store'
+              cache: 'no-store',
+              signal: AbortSignal.timeout(10000)
             });
             if (bRes.ok) {
               const bJson = await bRes.json();

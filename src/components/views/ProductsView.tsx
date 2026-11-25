@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import {
   Calculator,
   CheckCircle2,
@@ -16,6 +17,8 @@ import {
 import { CategoryMapping, Product, Tenant } from '@/types/sopyo';
 import { calculateDesi, calculateProfitBreakdown } from '@/lib/pricing-engine';
 import { mergeTenantGeneralSettings } from '@/lib/general-settings';
+import { apiPost } from '@/lib/api-client';
+import { formatTrDate } from '@/lib/date-format';
 
 interface ProductsViewProps {
   products: Product[];
@@ -46,6 +49,7 @@ export default function ProductsView({
 
   const activeFilterCount =
     (platformFilter !== 'all' ? 1 : 0) +
+    (statusFilter !== 'all' ? 1 : 0) +
     (categoryFilter !== 'all' ? 1 : 0) +
     (brandFilter !== 'all' ? 1 : 0) +
     (priceLockFilter !== 'all' ? 1 : 0);
@@ -56,6 +60,7 @@ export default function ProductsView({
   }, [gs.productListPerPage]);
 
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [savingProduct, setSavingProduct] = useState(false);
   const [showProfitModal, setShowProfitModal] = useState(false);
   const [showDesiModal, setShowDesiModal] = useState(false);
 
@@ -153,19 +158,22 @@ export default function ProductsView({
 
   async function handleSaveProduct(e: React.FormEvent) {
     e.preventDefault();
-    if (!editingProduct) return;
-    const res = await fetch('/api/state', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'save_product', product: editingProduct })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      notify(data.message);
-      setEditingProduct(null);
-      await onRefreshState();
-    } else {
-      notify(data.message || 'Hata oluştu', 'error');
+    if (!editingProduct || savingProduct) return;
+    setSavingProduct(true);
+    try {
+      const res = await apiPost('/api/state', {
+        action: 'save_product',
+        product: editingProduct
+      });
+      if (res.ok) {
+        notify(res.message);
+        setEditingProduct(null);
+        await onRefreshState();
+      } else {
+        notify(res.message || 'Hata oluştu', 'error');
+      }
+    } finally {
+      setSavingProduct(false);
     }
   }
 
@@ -242,9 +250,9 @@ export default function ProductsView({
       {/* Üst Başlık ve Hızlı Aksiyonlar */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">
+          <h2 className="text-xl font-bold text-slate-900">
             Ürün Listesi ({filteredProducts.length} adet)
-          </h1>
+          </h2>
           <p className="text-sm text-slate-500 mt-0.5">
             XML kaynaklarından gelen ve manuel eklenen tüm ürünler, Trendyol ve Hepsiburada fiyatları ve stok durumları.
           </p>
@@ -319,7 +327,7 @@ export default function ProductsView({
           </button>
         </div>
 
-        <div className={`${mobileFiltersOpen ? 'grid' : 'hidden'} md:grid grid-cols-1 md:grid-cols-6 gap-2.5 sm:gap-3`}>
+        <div className={`${mobileFiltersOpen ? 'grid' : 'hidden'} md:grid grid-cols-1 md:grid-cols-7 gap-2.5 sm:gap-3`}>
           <div className="hidden md:block md:col-span-2 relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
@@ -329,10 +337,23 @@ export default function ProductsView({
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Stok Kodu (AX33322), Ürün Adı, Barkod veya Varyant ara..."
+              placeholder="Stok Kodu, Ürün Adı, Barkod veya Varyant ara..."
               className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 text-sm"
             />
           </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-3 py-2.5 md:py-2 rounded-xl border border-slate-300 text-sm bg-white"
+          >
+            <option value="all">Tüm Durumlar</option>
+            <option value="active">Aktif Ürünler</option>
+            <option value="passive">Pasif Ürünler</option>
+          </select>
 
           <select
             value={platformFilter}
@@ -407,12 +428,15 @@ export default function ProductsView({
             return (
               <div key={`m-${p.id}-${idx}`} className="p-4 space-y-3">
                 <div className="flex items-start gap-3">
-                  <img
+                  <Image
                     src={
                       p.images[0] ||
                       'https://static.ticimax.cloud/33490/Uploads/UrunResimleri/saten-kapli-dantell-babydoll-e086.jpg'
                     }
                     alt={p.title}
+                    width={64}
+                    height={80}
+                    unoptimized
                     className="w-16 h-20 object-cover rounded-xl border border-slate-200 bg-slate-100 shrink-0"
                   />
                   <div className="min-w-0 flex-1 space-y-1">
@@ -445,7 +469,7 @@ export default function ProductsView({
                     )}
                     {gs.productListAddedDateStatus && p.updatedAt && (
                       <div className="text-[10px] text-slate-400">
-                        Tarih: {new Date(p.updatedAt).toLocaleDateString('tr-TR')}
+                        Tarih: {formatTrDate(p.updatedAt)}
                       </div>
                     )}
                   </div>
@@ -535,12 +559,15 @@ export default function ProductsView({
                 <tr key={`${p.id}-${idx}`} className="hover:bg-slate-50/80 transition">
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-3">
-                      <img
+                      <Image
                         src={
                           p.images[0] ||
                           'https://static.ticimax.cloud/33490/Uploads/UrunResimleri/saten-kapli-dantell-babydoll-e086.jpg'
                         }
                         alt={p.title}
+                        width={48}
+                        height={56}
+                        unoptimized
                         className="w-12 h-14 object-cover rounded-lg border border-slate-200 bg-slate-100 shrink-0"
                       />
                       <div>
@@ -557,7 +584,7 @@ export default function ProductsView({
                         </div>
                         {gs.productListAddedDateStatus && p.updatedAt && (
                           <div className="text-[10px] text-slate-400 mt-0.5">
-                            Tarih: {new Date(p.updatedAt).toLocaleDateString('tr-TR')}
+                            Tarih: {formatTrDate(p.updatedAt)}
                           </div>
                         )}
                       </div>
@@ -679,11 +706,11 @@ export default function ProductsView({
         </div>
 
         {/* Sayfalama */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-600">
+        <div className="px-4 sm:px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
           <div>
             Toplam <strong>{totalPages}</strong> sayfada <strong>{currentPage}.</strong> sayfadasınız.
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span>Sayfa başına:</span>
             {[20, 50, 100].map((sz) => (
               <button
@@ -692,8 +719,8 @@ export default function ProductsView({
                   setPageSize(sz);
                   setCurrentPage(1);
                 }}
-                className={`px-2.5 py-1 rounded-md font-bold cursor-pointer ${
-                  pageSize === sz ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300'
+                className={`min-h-[36px] min-w-[36px] px-2.5 py-1.5 rounded-lg font-bold cursor-pointer ${
+                  pageSize === sz ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-300 text-slate-700'
                 }`}
               >
                 {sz}
@@ -702,14 +729,14 @@ export default function ProductsView({
             <button
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage((c) => Math.max(1, c - 1))}
-              className="px-3 py-1 rounded-md bg-white border border-slate-300 disabled:opacity-40 cursor-pointer"
+              className="min-h-[36px] px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold disabled:opacity-40 cursor-pointer"
             >
               Önceki
             </button>
             <button
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage((c) => Math.min(totalPages, c + 1))}
-              className="px-3 py-1 rounded-md bg-white border border-slate-300 disabled:opacity-40 cursor-pointer"
+              className="min-h-[36px] px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold disabled:opacity-40 cursor-pointer"
             >
               Sonraki
             </button>
@@ -753,7 +780,7 @@ export default function ProductsView({
                     onChange={(e) =>
                       setEditingProduct({ ...editingProduct, title: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white text-slate-900"
                   />
                 </div>
 
@@ -769,7 +796,7 @@ export default function ProductsView({
                         status: e.target.value as 'active' | 'passive'
                       })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-semibold"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-semibold bg-white text-slate-900"
                   >
                     <option value="active">SATIŞA AÇIK</option>
                     <option value="passive">SATIŞA KAPALI</option>
@@ -787,7 +814,7 @@ export default function ProductsView({
                     onChange={(e) =>
                       setEditingProduct({ ...editingProduct, stockCode: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono bg-white text-slate-900"
                   />
                 </div>
 
@@ -801,7 +828,7 @@ export default function ProductsView({
                     onChange={(e) =>
                       setEditingProduct({ ...editingProduct, barcode: e.target.value })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono bg-white text-slate-900"
                   />
                 </div>
 
@@ -825,7 +852,7 @@ export default function ProductsView({
                     onChange={(e) =>
                       setEditingProduct({ ...editingProduct, desi: Number(e.target.value) })
                     }
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white text-slate-900"
                   />
                 </div>
 
@@ -840,7 +867,7 @@ export default function ProductsView({
                       setEditingProduct({ ...editingProduct, invoiceTitle: e.target.value })
                     }
                     placeholder="Örn: Tekstil & Ev Giyim Ürünü"
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm bg-white text-slate-900"
                   />
                   <span className="text-[11px] text-slate-500">
                     Fatura ve kargo fişinde ürün adını gizlemek/maskelemek için kullanılır.
@@ -1240,9 +1267,10 @@ export default function ProductsView({
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold min-h-[44px] cursor-pointer"
+                  disabled={savingProduct}
+                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-bold min-h-[44px] cursor-pointer"
                 >
-                  KAYDET & GÜNCELLE
+                  {savingProduct ? 'Kaydediliyor...' : 'KAYDET & GÜNCELLE'}
                 </button>
               </div>
             </form>
