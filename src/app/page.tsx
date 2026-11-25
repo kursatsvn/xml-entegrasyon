@@ -340,7 +340,13 @@ export default function SopyoCloneApp() {
   const groups = Array.from(new Set(navItems.map((i) => i.group)));
 
   return (
-    <div className="min-h-screen bg-slate-100 flex overflow-x-hidden">
+    <div className="min-h-screen bg-slate-100 flex overflow-x-clip">
+      {/* iOS 26 PWA Üst Durum Çubuğu Sabit Beyaz Zemin (Beyaz sistem blur'unu görünmez kılar) */}
+      <div
+        aria-hidden="true"
+        className="fixed top-0 inset-x-0 h-safe-top bg-white z-[55] lg:hidden pointer-events-none no-print"
+      />
+
       {/* Sağ Üst Bildirim Toast (Mobil + iOS Notch uyumlu) */}
       {toast && (
         <div
@@ -363,13 +369,13 @@ export default function SopyoCloneApp() {
       {mobileMenuOpen && (
         <div
           onClick={() => setMobileMenuOpen(false)}
-          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-xs lg:hidden no-print"
+          className="fixed top-safe-drawer bottom-0 inset-x-0 z-40 bg-slate-950/60 backdrop-blur-xs lg:hidden no-print"
         />
       )}
 
-      {/* SOL MENÜ (Masaüstünde Sabit, Mobilde Off-Canvas Çekmece + iOS Safe Area) */}
+      {/* SOL MENÜ (Masaüstünde Sabit, Mobilde Off-Canvas Çekmece - iOS Durum Çubuğunun Altında) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 lg:w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 border-r border-slate-800 transform transition-transform duration-200 ease-out lg:static lg:translate-x-0 pt-safe pb-safe no-print ${
+        className={`fixed top-safe-drawer bottom-0 left-0 z-50 w-72 lg:w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 border-r border-slate-800 transform transition-transform duration-200 ease-out lg:static lg:translate-x-0 pb-safe no-print ${
           mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
       >
@@ -510,9 +516,9 @@ export default function SopyoCloneApp() {
       </aside>
 
       {/* SAĞ ANA İÇERİK ALANI */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Üst Bar (Mobil + Masaüstü + iPhone Safe-Area Duyarlı) */}
-        <header className="bg-white border-b border-slate-200 sticky top-0 z-30 pt-safe no-print">
+      <div className="flex-1 flex flex-col min-w-0 pt-mobile-header">
+        {/* Üst Bar (Mobilde Sabit + Solid Beyaz Safe-Area, Masaüstünde Sticky) */}
+        <header className="fixed top-0 inset-x-0 lg:sticky bg-white border-b border-slate-200 z-30 pt-safe no-print">
           <div className="h-14 sm:h-16 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               <button

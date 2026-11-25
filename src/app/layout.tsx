@@ -31,7 +31,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="tr">
-      <body className="antialiased selection:bg-indigo-600 selection:text-white overflow-x-hidden">
+      <body className="antialiased selection:bg-indigo-600 selection:text-white overflow-x-clip">
         {children}
       </body>
     </html>
