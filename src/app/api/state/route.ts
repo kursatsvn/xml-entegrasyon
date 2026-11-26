@@ -745,8 +745,19 @@ export async function POST(req: NextRequest) {
         matchedCount++;
         const enriched = enrichCategoryMappingWithAutoMatch(cat);
 
-        // Eğer halihazırda gerçek sayısal bir Hepsiburada kategori ID varsa koru
-        if (parseHepsiburadaCategoryId(cat.hepsiburadaCategoryId)) {
+        // Eğer halihazırda gerçek sayısal ve doğru cinsiyet/alanda bir Hepsiburada kategori ID varsa koru
+        const existingHbNameLower = (cat.hepsiburadaCategoryName || '').toLocaleLowerCase('tr-TR');
+        const xmlLower = `${cat.name} ${cat.xmlCategoryTree}`.toLocaleLowerCase('tr-TR');
+        const isXmlErkek = /\berkek\b/.test(xmlLower);
+        const isXmlBebek = /\b(bebek|çocuk|cocuk)\b/.test(xmlLower);
+        const hasWrongHbSegment =
+          (!isXmlBebek && (existingHbNameLower.includes('bebek') || existingHbNameLower.includes('çocuk'))) ||
+          (!isXmlErkek && existingHbNameLower.includes('erkek')) ||
+          (isXmlErkek && existingHbNameLower.includes('kadın')) ||
+          existingHbNameLower.includes('mobilya') ||
+          existingHbNameLower.includes('ev dekorasyon');
+
+        if (parseHepsiburadaCategoryId(cat.hepsiburadaCategoryId) && !hasWrongHbSegment) {
           hbRealMatchedCount++;
           return {
             ...enriched,

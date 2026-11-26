@@ -11,6 +11,12 @@ import {
   normalizeHepsiburadaMerchantSku,
   parseHepsiburadaCategoryId
 } from '@/lib/hepsiburada-client';
+import {
+  HepsiburadaCategoryAttribute,
+  HepsiburadaAttributeValue,
+  fetchHepsiburadaAttributeValues,
+  fetchHepsiburadaCategoryAttributes
+} from '@/lib/hepsiburada-catalog';
 import { normalizeColorValue, normalizeSizeValue } from '@/lib/category-matcher';
 import { sanitizeProductContent } from '@/lib/ai-sanitizer';
 import { sanitizeRichHtml } from '@/lib/html-sanitizer';
@@ -243,8 +249,48 @@ export async function syncHepsiburadaInventoryAndPrice(params: {
   };
 }
 
+function pickAllowedEnumValue(
+  desired: string,
+  allowedValues: HepsiburadaAttributeValue[],
+  fallbacks: string[] = []
+): string {
+  if (allowedValues.length === 0) return desired;
+  const norm = (s: string) => s.trim().toLocaleLowerCase('tr-TR');
+  const candidates = [desired, ...fallbacks].filter(Boolean);
+
+  for (const cand of candidates) {
+    const cNorm = norm(cand);
+    const exact = allowedValues.find((v) => norm(v.value) === cNorm);
+    if (exact) return exact.value;
+  }
+
+  // S/M -> S-M veya S, L/XL -> L-XL veya L gibi esnek eşleştirme
+  for (const cand of candidates) {
+    const altSlash = cand.replace('/', '-');
+    const altDash = cand.replace('-', '/');
+    const altFirst = cand.split(/[\/\- ]/)[0];
+    for (const alt of [altSlash, altDash, altFirst]) {
+      if (!alt) continue;
+      const aNorm = norm(alt);
+      const exact = allowedValues.find((v) => norm(v.value) === aNorm);
+      if (exact) return exact.value;
+    }
+  }
+
+  for (const cand of candidates) {
+    const cNorm = norm(cand);
+    const partial = allowedValues.find(
+      (v) => norm(v.value).includes(cNorm) || cNorm.includes(norm(v.value))
+    );
+    if (partial) return partial.value;
+  }
+
+  return allowedValues[0].value;
+}
+
 /**
  * 3. Gerçek Hepsiburada Ürün Gönderimi (MPOP /product/api/products/import - multipart/form-data)
+ * Her kategori için gerçek MPOP zorunlu & varyant özelliklerini dinamik okuyarak eksiksiz doldurur.
  */
 export async function publishProductsToHepsiburada(params: {
   account: MarketplaceAccount;
@@ -277,6 +323,39 @@ export async function publishProductsToHepsiburada(params: {
   const candidateProductIds: string[] = [];
   const importItems: Record<string, unknown>[] = [];
   const skuToProduct = new Map<string, { id: string; stockCode: string; title: string }>();
+
+  // Gönderilecek ürünlerin benzersiz HB kategori şemalarını ve zorunlu enum değerlerini tek seferde önbellekle
+  const catSchemaMap = new Map<number, HepsiburadaCategoryAttribute[]>();
+  const attrValuesMap = new Map<string, HepsiburadaAttributeValue[]>();
+  const uniqueCatIds = Array.from(
+    new Set(
+      products
+        .map((p) => parseHepsiburadaCategoryId(catMap.get(p.categoryName)?.hepsiburadaCategoryId))
+        .filter((id): id is number => Boolean(id))
+    )
+  );
+
+  for (const cid of uniqueCatIds) {
+    const attrRes = await fetchHepsiburadaCategoryAttributes(account, cid);
+    if (attrRes.ok) {
+      catSchemaMap.set(cid, attrRes.attributes);
+      // Zorunlu veya varyant enum özelliklerin geçerli değer listesini çek (önbellekli)
+      const enumTargets = attrRes.attributes.filter(
+        (a) =>
+          !a.isBase &&
+          (a.mandatory || a.isVariant) &&
+          a.type.toLowerCase().includes('enum')
+      );
+      await Promise.all(
+        enumTargets.map(async (attr) => {
+          const valRes = await fetchHepsiburadaAttributeValues(account, cid, attr.id);
+          if (valRes.ok && valRes.values.length > 0) {
+            attrValuesMap.set(`${cid}:${attr.id}`, valRes.values);
+          }
+        })
+      );
+    }
+  }
 
   for (const prod of products) {
     const cat = catMap.get(prod.categoryName);
@@ -351,6 +430,18 @@ export async function publishProductsToHepsiburada(params: {
     const resolvedBrandName = (brand?.hepsiburadaBrandName || prod.brandName || account.storeName || 'Genel').trim();
     const minFloor = useMinPrice && prod.minPrice && prod.minPrice > 0 ? prod.minPrice : 0;
 
+    const catAttrs = catSchemaMap.get(numericCatId) || [];
+    const baseAttrIds = new Set(catAttrs.filter((a) => a.isBase).map((a) => a.id));
+    const isErkekCat = /\berkek\b/i.test(`${cat.hepsiburadaCategoryName || ''} ${prod.categoryName}`);
+
+    // Kullanıcının kategori eşleştirmesinde tanımladığı değerleri id/name bazlı haritala
+    const userMappedAttrValues = new Map<string, string>();
+    for (const ua of cat.hepsiburadaAttributes || []) {
+      if (ua.attributeName && ua.mappedValue) {
+        userMappedAttrValues.set(ua.attributeName.trim().toLocaleLowerCase('tr-TR'), ua.mappedValue.trim());
+      }
+    }
+
     let hasValidVariant = false;
     for (let vIdx = 0; vIdx < prod.variants.length; vIdx++) {
       const v = prod.variants[vIdx];
@@ -381,28 +472,102 @@ export async function publishProductsToHepsiburada(params: {
         Marka: resolvedBrandName,
         GarantiSuresi: String(Math.max(0, Number(prod.warrantyMonths || 0))),
         kg: String(Math.max(1, Number(prod.desi || 1))),
-        tax_rate: String(validVatRate),
+        tax_vat_rate: String(validVatRate),
         price: resolvedPrice.toFixed(2).replace('.', ','),
         stock: String(prod.status === 'active' ? Math.max(0, Math.floor(Number(v.netStock ?? 0))) : 0)
       };
+
+      // Eğer kategori baseAttributes içinde tax_vat_rate yerine başka bir KDV alanı yoksa koru
+      if (baseAttrIds.size > 0 && !baseAttrIds.has('tax_vat_rate') && baseAttrIds.has('tax_rate')) {
+        delete attributes.tax_vat_rate;
+        attributes.tax_rate = String(validVatRate);
+      }
 
       validImages.forEach((imgUrl, idx) => {
         attributes[`Image${idx + 1}`] = imgUrl;
       });
 
-      // Kategori eşleştirmesinde tanımlı Hepsiburada özellikleri
-      for (const attr of cat.hepsiburadaAttributes || []) {
-        if (attr.attributeName && attr.mappedValue) {
-          attributes[attr.attributeName] = attr.mappedValue;
-        }
-      }
+      // Kategori şemasındaki gerçek varyant ve zorunlu özellikleri dinamik doldur
+      if (catAttrs.length > 0) {
+        for (const attr of catAttrs) {
+          if (attr.isBase) continue;
+          const idLower = attr.id.toLocaleLowerCase('tr-TR');
+          const nameLower = attr.name.toLocaleLowerCase('tr-TR');
+          const allowed = attrValuesMap.get(`${numericCatId}:${attr.id}`) || [];
 
-      // Varyant renk ve beden özellikleri
-      if (!attributes.renk_variant_property) {
+          // 1) Varyant veya standart Renk özelliği
+          if (idLower.includes('renk') || nameLower.includes('renk')) {
+            attributes[attr.id] = pickAllowedEnumValue(resolvedColor, allowed, [
+              'Çok Renkli',
+              'Siyah',
+              'Diğer'
+            ]);
+            continue;
+          }
+
+          // 2) Varyant veya standart Beden / Ebat / Numara özelliği
+          if (
+            idLower.includes('beden') ||
+            nameLower.includes('beden') ||
+            idLower.includes('ebat') ||
+            nameLower.includes('ebat') ||
+            idLower.includes('numara')
+          ) {
+            attributes[attr.id] = pickAllowedEnumValue(resolvedSize, allowed, [
+              'Standart',
+              'Tek Ebat',
+              'S/M',
+              'M',
+              'L'
+            ]);
+            continue;
+          }
+
+          // 3) Kullanıcının kategori eşleştirmesinde tanımladığı değer
+          const userVal = userMappedAttrValues.get(idLower) || userMappedAttrValues.get(nameLower);
+          if (userVal) {
+            attributes[attr.id] = pickAllowedEnumValue(userVal, allowed);
+            continue;
+          }
+
+          // 4) Zorunlu diğer kategori özellikleri (Cinsiyet, Yaş Grubu, Kumaş, Menşei, Parça Sayısı vb.)
+          if (attr.mandatory) {
+            let smartDefault = '';
+            let fallbacks: string[] = ['Belirtilmemiş', 'Diğer', 'Standart', 'Yok'];
+
+            if (idLower.includes('cinsiyet') || nameLower.includes('cinsiyet')) {
+              smartDefault = isErkekCat ? 'Erkek' : 'Kadın';
+              fallbacks = [isErkekCat ? 'Erkek' : 'Kadın', 'Kadın / Kız', 'Unisex'];
+            } else if (idLower.includes('yas') || nameLower.includes('yaş')) {
+              smartDefault = 'Yetişkin';
+              fallbacks = ['Yetişkin', 'Genç'];
+            } else if (idLower.includes('mensei') || nameLower.includes('menşei') || nameLower.includes('uretim')) {
+              smartDefault = 'Türkiye';
+              fallbacks = ['Türkiye', 'TR', 'Yerli'];
+            } else if (idLower.includes('kumas') || nameLower.includes('kumaş') || nameLower.includes('materyal')) {
+              smartDefault = 'Dokuma';
+              fallbacks = ['Belirtilmemiş', 'Dokuma', 'Örme', 'Polyester', 'Pamuk', 'Dantel'];
+            } else if (idLower.includes('desen') || nameLower.includes('desen')) {
+              smartDefault = 'Düz';
+              fallbacks = ['Düz', 'Dantelli', 'Desenli'];
+            } else if (idLower.includes('parca') || nameLower.includes('parça') || idLower.includes('paket')) {
+              smartDefault = '1';
+              fallbacks = ['Tekli', '1', '1 Parça', '2 Parça'];
+            } else if (attr.type.toLowerCase().includes('int') || attr.type.toLowerCase().includes('num')) {
+              smartDefault = '1';
+            } else {
+              smartDefault = 'Belirtilmemiş';
+            }
+
+            attributes[attr.id] = pickAllowedEnumValue(smartDefault, allowed, fallbacks);
+          }
+        }
+      } else {
+        // Şema okunamadıysa giyim için standart HB varyant alan adlarıyla devam et
         attributes.renk_variant_property = resolvedColor;
-      }
-      if (!attributes.ebatlar_variant_property && resolvedSize) {
-        attributes.ebatlar_variant_property = resolvedSize;
+        if (resolvedSize) {
+          attributes.beden_variant_property = resolvedSize;
+        }
       }
 
       importItems.push({
@@ -563,14 +728,20 @@ export async function checkHepsiburadaImportStatus(
     const validationErrors: string[] = [];
     if (Array.isArray(entry.validationResults)) {
       for (const vr of entry.validationResults) {
-        const msg = vr?.message || vr?.attributeName || '';
-        if (msg) validationErrors.push(String(msg));
+        const attrLabel = String(vr?.attributeName || vr?.fieldName || '').trim();
+        const msgText = String(vr?.message || '').trim();
+        const formatted = attrLabel && msgText ? `${attrLabel}: ${msgText}` : msgText || attrLabel;
+        if (formatted) validationErrors.push(formatted);
       }
     }
     if (Array.isArray(entry.importMessages)) {
       for (const im of entry.importMessages) {
-        const msg = im?.message || im?.severity || '';
-        if (msg) validationErrors.push(String(msg));
+        const msg = String(im?.message || '').trim();
+        const sev = String(im?.severity || '').trim();
+        // Bilgilendirici/ignored uyarılarını gerçek hata olarak sayma (ERROR veya FAILED hariç)
+        if (msg && (!sev || sev.toUpperCase() === 'ERROR' || sev.toUpperCase() === 'FATAL')) {
+          validationErrors.push(msg);
+        }
       }
     }
     return {

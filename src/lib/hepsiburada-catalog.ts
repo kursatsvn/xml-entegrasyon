@@ -34,6 +34,7 @@ interface CacheEntry<T> {
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 dakika
 const categoryCache = new Map<string, CacheEntry<HepsiburadaLeafCategory[]>>();
 const attributeCache = new Map<string, CacheEntry<HepsiburadaCategoryAttribute[]>>();
+const attributeValuesCache = new Map<string, CacheEntry<HepsiburadaAttributeValue[]>>();
 
 function normalizeTr(text: string): string {
   return (text || '').toLocaleLowerCase('tr-TR').trim();
@@ -213,13 +214,19 @@ export async function fetchHepsiburadaCategoryAttributes(
 }
 
 /**
- * Enum tipindeki bir Hepsiburada kategori özelliği için kabul edilen değerleri çeker.
+ * Enum tipindeki bir Hepsiburada kategori özelliği için kabul edilen değerleri çeker ve önbellekler.
  */
 export async function fetchHepsiburadaAttributeValues(
   account: Pick<MarketplaceAccount, 'supplierOrMerchantId' | 'apiKey' | 'apiSecret' | 'environment'>,
   categoryId: number,
   attributeId: string
 ): Promise<{ ok: boolean; values: HepsiburadaAttributeValue[]; message?: string }> {
+  const cacheKey = `${account.environment || 'production'}:${categoryId}:${attributeId}`;
+  const cached = attributeValuesCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { ok: true, values: cached.data };
+  }
+
   const res = await hepsiburadaFetch<any>(
     account,
     'mpop',
@@ -237,19 +244,26 @@ export async function fetchHepsiburadaAttributeValues(
     ? res.data
     : [];
 
-  return {
-    ok: true,
-    values: rawList
-      .map((v: any) => ({
-        id: String(v.id || v.value || ''),
-        value: String(v.value || v.name || '')
-      }))
-      .filter((v) => Boolean(v.value))
-  };
+  const values = rawList
+    .map((v: any) => ({
+      id: String(v.id || v.value || ''),
+      value: String(v.value || v.name || '')
+    }))
+    .filter((v) => Boolean(v.value));
+
+  if (values.length > 0) {
+    attributeValuesCache.set(cacheKey, {
+      expiresAt: Date.now() + CACHE_TTL_MS,
+      data: values
+    });
+  }
+
+  return { ok: true, values };
 }
 
 /**
  * XML kategori adına göre canlı Hepsiburada yaprak kategorileri arasından en iyi eşleşmeyi bulur.
+ * Kadın/Erkek/Bebek/Çocuk ve Mobilya/Dekorasyon çapraz eşleşme hatalarını kesin olarak engeller.
  */
 export function findBestHepsiburadaCategoryMatch(
   xmlCategoryName: string,
@@ -261,21 +275,33 @@ export function findBestHepsiburadaCategoryMatch(
   const combined = normalizeTr(`${xmlCategoryName} ${xmlCategoryTree}`);
   const nameNorm = normalizeTr(xmlCategoryName);
 
-  // Öncelikli giyim / iç giyim arama ipuçları
+  const isXmlErkek = /\berkek\b/.test(combined);
+  const isXmlBebekOrCocuk = /\b(bebek|çocuk|cocuk|kız çocuk|erkek çocuk)\b/.test(combined);
+  const isXmlFantezi = /fant[ae]zi|jartiyer|babydoll|kost[üu]m|harness|vücut çorabı|string|tanga/.test(combined);
+
   const keywordHints: { match: string[]; target: string[] }[] = [
     { match: ['babydoll'], target: ['babydoll'] },
+    { match: ['jartiyer çorabı', 'jartiyer corabi'], target: ['jartiyer çorabı'] },
     { match: ['jartiyer'], target: ['jartiyer'] },
     { match: ['kostüm', 'kostum'], target: ['fantezi kostüm', 'kostüm'] },
-    { match: ['vücut çorabı', 'çorap', 'corap'], target: ['vücut çorabı', 'fantezi çorap', 'kadın çorap'] },
-    { match: ['pijama', 'şortlu takım', 'ev giyim'], target: ['pijama takımı', 'pijama'] },
-    { match: ['sabahlık', 'sabahlik'], target: ['sabahlık'] },
-    { match: ['gecelik', 'elbise'], target: ['fantezi gecelik', 'gecelik'] },
-    { match: ['büstiyer', 'bustiyer', 'bralet'], target: ['büstiyer', 'bralet'] },
+    { match: ['vücut çorabı', 'vucut corabi'], target: ['vücut çorabı'] },
+    { match: ['çorap', 'corap'], target: ['jartiyer çorabı', 'vücut çorabı', 'çorap'] },
+    { match: ['sabahlık', 'sabahlik'], target: ['sabahlık', 'gecelik'] },
+    { match: ['gecelik', 'hamile', 'lohusa'], target: ['gecelik'] },
+    { match: ['pijama', 'şortlu', 'saten takım', 'saten takımlar', 'ev giyim', 'uzun kol takım', 'alt üst takım', 'monamise', 'monamıse'], target: ['pijama', 'pijama takımı'] },
+    { match: ['bralet', 'büstiyer', 'bustiyer'], target: ['büstiyer', 'bralet', 'sütyen'] },
+    { match: ['sütyen & külot', 'sütyen takımları', 'sütyen / büstiyer'], target: ['iç çamaşır takımı', 'sütyen takımı', 'sütyen'] },
     { match: ['sütyen', 'sutyen'], target: ['sütyen'] },
-    { match: ['külot', 'kulot', 'tanga', 'string', 'boxer'], target: ['string', 'külot'] },
-    { match: ['korse', 'kombinezon', 'jupon'], target: ['korse', 'kombinezon'] },
-    { match: ['atlet'], target: ['kadın atlet', 'atlet'] },
-    { match: ['body', 'takım', 'iç giyim'], target: ['fantezi iç giyim', 'iç çamaşır takımı', 'body'] }
+    { match: ['boxer', 'bokser'], target: ['boxer', 'külot'] },
+    { match: ['tanga', 'string', 'g-string'], target: ['string', 'tanga', 'külot'] },
+    { match: ['külot', 'kulot', 'slip'], target: ['külot'] },
+    { match: ['korse'], target: ['korse'] },
+    { match: ['kombinezon', 'jupon', 'jüpon'], target: ['kombinezon', 'jüpon'] },
+    { match: ['tayt'], target: ['tayt', 'korse'] },
+    { match: ['atlet', 'termal'], target: ['atlet', 'termal'] },
+    { match: ['aksesuar', 'maske', 'kelepçe'], target: ['aksesuar'] },
+    { match: ['elbise', 'tulum'], target: ['büyük beden elbise', 'fantezi gecelik', 'gecelik', 'elbise'] },
+    { match: ['body', 'bodysuit', 'harness', 'deri', 'fantazi iç giyim', 'büyük beden fantezi'], target: ['fantezi iç giyim', 'fantezi gecelik', 'babydoll', 'body'] }
   ];
 
   let bestCat: HepsiburadaLeafCategory | null = null;
@@ -284,23 +310,52 @@ export function findBestHepsiburadaCategoryMatch(
   for (const cat of leafCategories) {
     const catName = normalizeTr(cat.name);
     const catPath = normalizeTr(cat.displayName);
+
+    // Giyim / Ayakkabı dışındaki tamamen ilgisiz kategorileri (Mobilya, Ev Dekorasyon vb.) ele
+    if (!catPath.startsWith('giyim') && !catPath.includes('iç giyim') && !catPath.includes('fantezi')) {
+      continue;
+    }
+
+    // Bebek / Çocuk koruması
+    if (!isXmlBebekOrCocuk && (catPath.includes('bebek') || catPath.includes('çocuk'))) {
+      continue;
+    }
+
+    // Erkek / Kadın ayrımı koruması
+    if (isXmlErkek) {
+      if (catPath.includes('kadın')) continue;
+    } else {
+      if (catPath.includes('erkek')) continue;
+    }
+
     let score = 0;
+
+    if (isXmlErkek && catPath.includes('erkek') && catPath.includes('iç giyim')) {
+      score += 45;
+    } else if (!isXmlErkek && catPath.includes('kadın') && catPath.includes('iç giyim')) {
+      score += 45;
+    } else if (!isXmlErkek && catPath.includes('kadın')) {
+      score += 25;
+    }
+
+    if (isXmlFantezi && catPath.includes('fantezi')) {
+      score += 20;
+    }
 
     if (catName === nameNorm) score += 50;
     else if (catName && nameNorm.includes(catName)) score += 20;
     else if (nameNorm && catName.includes(nameNorm)) score += 18;
 
-    if (catPath.includes('kadın') || catPath.includes('iç giyim') || catPath.includes('giyim')) {
-      score += 5;
-    }
-
     for (const hint of keywordHints) {
       if (hint.match.some((m) => combined.includes(m))) {
-        if (hint.target.some((t) => catName.includes(t))) {
-          score += 35;
+        if (hint.target.some((t) => catName === t)) {
+          score += 55;
+        } else if (hint.target.some((t) => catName.includes(t))) {
+          score += 40;
         } else if (hint.target.some((t) => catPath.includes(t))) {
-          score += 15;
+          score += 18;
         }
+        break;
       }
     }
 
@@ -310,5 +365,5 @@ export function findBestHepsiburadaCategoryMatch(
     }
   }
 
-  return bestScore >= 15 ? bestCat : null;
+  return bestScore >= 40 ? bestCat : null;
 }
