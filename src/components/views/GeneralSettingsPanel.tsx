@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { Tenant, TenantGeneralSettings } from '@/types/sopyo';
 import { mergeTenantGeneralSettings } from '@/lib/general-settings';
+import { useOperation } from '@/components/ui/OperationFeedbackContext';
 import {
   LayoutGrid,
   User,
@@ -16,6 +17,7 @@ import {
   Search,
   Save,
   Upload,
+  Loader2,
   Check
 } from 'lucide-react';
 
@@ -61,6 +63,7 @@ export default function GeneralSettingsPanel({
   loading,
   notify
 }: GeneralSettingsPanelProps) {
+  const { runOperation } = useOperation();
   const [activeFilter, setActiveFilter] = useState<SettingsFilterId>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -132,26 +135,38 @@ export default function GeneralSettingsPanel({
       return;
     }
 
-    setUploadingLogo(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('/api/upload/logo', {
-        method: 'POST',
-        body: formData
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.ok || !data?.url) {
-        notify?.(data?.message || 'Logo yüklenemedi.', 'error');
-        return;
+    await runOperation(
+      {
+        title: 'Firma Logosu Yükleniyor',
+        description: 'Görsel doğrulanıyor ve güvenli depolama alanına aktarılıyor...',
+        mode: 'soft'
+      },
+      async () => {
+        setUploadingLogo(true);
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await fetch('/api/upload/logo', {
+            method: 'POST',
+            body: formData
+          });
+          const data = await res.json();
+          if (!res.ok || !data?.ok || !data?.url) {
+            notify?.(data?.message || 'Logo yüklenemedi.', 'error');
+            return;
+          }
+          updateGs('customerLogo', String(data.url));
+          notify?.(
+            'Logo yüklendi. Değişikliği kalıcı kılmak için "AYARLARI KAYDET" butonuna basın.',
+            'success'
+          );
+        } catch {
+          notify?.('Logo yüklenirken bağlantı hatası oluştu.', 'error');
+        } finally {
+          setUploadingLogo(false);
+        }
       }
-      updateGs('customerLogo', String(data.url));
-      notify?.('Logo yüklendi. Değişikliği kalıcı kılmak için "AYARLARI KAYDET" butonuna basın.', 'success');
-    } catch {
-      notify?.('Logo yüklenirken bağlantı hatası oluştu.', 'error');
-    } finally {
-      setUploadingLogo(false);
-    }
+    );
   };
 
   const matches = (group: Exclude<SettingsFilterId, 'all'>, title: string, desc = '') => {
@@ -330,7 +345,7 @@ export default function GeneralSettingsPanel({
             disabled={loading}
             className="min-h-[44px] px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm shrink-0 cursor-pointer"
           >
-            <Save className="w-4 h-4" />
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {loading ? 'Kaydediliyor...' : 'AYARLARI KAYDET →'}
           </button>
         </div>
@@ -398,7 +413,11 @@ export default function GeneralSettingsPanel({
                         uploadingLogo ? 'opacity-60 pointer-events-none' : ''
                       }`}
                     >
-                      <Upload className="w-3.5 h-3.5" />
+                      {uploadingLogo ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5" />
+                      )}
                       {uploadingLogo ? 'Yükleniyor...' : 'Logo Seç (PNG/JPG/WebP)'}
                       <input
                         type="file"
@@ -1103,7 +1122,7 @@ export default function GeneralSettingsPanel({
               disabled={loading}
               className="w-full sm:w-auto min-h-[44px] px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-xs font-extrabold flex items-center justify-center gap-2 shadow-sm cursor-pointer shrink-0"
             >
-              <Save className="w-4 h-4" />
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {loading ? 'Kaydediliyor...' : 'AYARLARI KAYDET →'}
             </button>
           </div>

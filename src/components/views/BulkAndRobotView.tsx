@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { PriceRobotItem, Product, SyncBatch, XmlSource } from '@/types/sopyo';
 import { apiPost } from '@/lib/api-client';
 import { formatTrDateTime } from '@/lib/date-format';
+import { useOperation } from '@/components/ui/OperationFeedbackContext';
 import HepsiburadaLivePanel from '@/components/views/HepsiburadaLivePanel';
 import {
   Send,
@@ -18,6 +19,7 @@ import {
   FileWarning,
   Trash2,
   CloudDownload,
+  Loader2,
   X
 } from 'lucide-react';
 
@@ -60,6 +62,7 @@ export default function BulkAndRobotView({
   onRefresh,
   notify
 }: BulkAndRobotViewProps) {
+  const { runOperation, confirmDialog, guardNavigation } = useOperation();
   const [tab, setTab] = useState<
     'publish' | 'update' | 'diff' | 'robot' | 'trendyol_live' | 'hepsiburada_live'
   >(initialTab);
@@ -111,31 +114,35 @@ export default function BulkAndRobotView({
   }, [products, newRobotProductId]);
 
   const handleApplyQuickPriceRules = async () => {
-    setSavingPriceRules(true);
-    try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_quick_price_rules',
-          trendyolPercent: tyPercent,
-          trendyolExtraTl: tyExtraTl,
-          hepsiburadaPercent: hbPercent,
-          hepsiburadaExtraTl: hbExtraTl
-        })
-      });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
-        await onRefresh();
-      } else {
-        notify(data.message || 'Fiyat kuralları kaydedilemedi', 'error');
+    if (savingPriceRules) return;
+    await runOperation(
+      {
+        title: 'XML Fiyat Formülü Tüm Ürünlere Uygulanıyor',
+        description: `Trendyol (+%${tyPercent} + ${tyExtraTl} ₺) ve Hepsiburada (+%${hbPercent} + ${hbExtraTl} ₺) satış fiyatları hesaplanıp kaydediliyor...`,
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setSavingPriceRules(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'update_quick_price_rules',
+            trendyolPercent: tyPercent,
+            trendyolExtraTl: tyExtraTl,
+            hepsiburadaPercent: hbPercent,
+            hepsiburadaExtraTl: hbExtraTl
+          });
+          if (res.ok) {
+            setStage('Güncellenen ürün fiyatları panele yükleniyor...');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Fiyat kuralları kaydedilemedi', 'error');
+          }
+        } finally {
+          setSavingPriceRules(false);
+        }
       }
-    } catch (e: any) {
-      notify(e?.message || 'Fiyat güncelleme hatası', 'error');
-    } finally {
-      setSavingPriceRules(false);
-    }
+    );
   };
 
   // Canlı Trendyol Ürün Listeleme & Silme state'leri
@@ -226,31 +233,45 @@ export default function BulkAndRobotView({
       return;
     }
 
-    setTyLoading(true);
-    try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'archive_live_trendyol_products',
-          barcodes: selectedBarcodes,
-          archiveMode
-        })
-      });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
-        setTyFilter('archived');
-        await loadLiveTrendyolProducts(0, 'archived');
-        await onRefresh();
-      } else {
-        notify(data.message || 'Arşivleme işlemi başarısız oldu', 'error');
+    const confirmed = await confirmDialog({
+      title: '1. Adım: Trendyol Ürünlerini Arşivle',
+      message:
+        archiveMode === 'selected'
+          ? `Seçili ${selectedBarcodes.length} ürünü Trendyol arşivine taşımak istediğinize emin misiniz?`
+          : 'Satıştaki ve pasif tüm ürünleri Trendyol arşivine taşımak istediğinize emin misiniz?',
+      confirmText: 'Evet, Arşivle',
+      variant: 'warning'
+    });
+    if (!confirmed) return;
+
+    await runOperation(
+      {
+        title: 'Trendyol Ürünleri Arşivleniyor (1. Adım)',
+        description: 'Trendyol Partner API üzerinden ürünler arşiv durumuna aktarılıyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setTyLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'archive_live_trendyol_products',
+            barcodes: selectedBarcodes,
+            archiveMode
+          });
+          if (res.ok) {
+            setStage('Canlı Trendyol arşiv listesi ve panel verileri yenileniyor...');
+            setTyFilter('archived');
+            await loadLiveTrendyolProducts(0, 'archived');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Arşivleme işlemi başarısız oldu', 'error');
+          }
+        } finally {
+          setTyLoading(false);
+        }
       }
-    } catch (e: any) {
-      notify(e?.message || 'Arşivleme hatası', 'error');
-    } finally {
-      setTyLoading(false);
-    }
+    );
   };
 
   // 2. ADIM: ARŞİVLENDİKTEN SONRA KALICI OLARAK SİL
@@ -279,132 +300,199 @@ export default function BulkAndRobotView({
         ? `Kara listedeki (${tyStats.blacklistedTotal.toLocaleString('tr-TR')} adet) ürünleri kalıcı olarak silmek istediğinize emin misiniz?`
         : `Arşivlenmiş tüm ürünleri kalıcı olarak silmek istediğinize emin misiniz?`;
 
-    if (!window.confirm(confirmText)) return;
+    const confirmed = await confirmDialog({
+      title: '2. Adım: Trendyol Ürünlerini Kalıcı Sil',
+      message: confirmText,
+      confirmText: 'Kalıcı Olarak Sil',
+      variant: 'danger'
+    });
+    if (!confirmed) return;
 
-    setTyLoading(true);
-    try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'delete_live_trendyol_products',
-          barcodes: selectedBarcodes,
-          deleteAllMode,
-          maxPagesToDelete: 80
-        })
-      });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
-        await loadLiveTrendyolProducts(0, tyFilter);
-        await onRefresh();
-      } else {
-        notify(data.message || 'Silme işlemi başarısız oldu', 'error');
+    await runOperation(
+      {
+        title: 'Trendyol Ürünleri Kalıcı Olarak Siliniyor',
+        description: 'Trendyol Partner API silme paketleri işleniyor, lütfen sayfadan ayrılmayın...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setTyLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'delete_live_trendyol_products',
+            barcodes: selectedBarcodes,
+            deleteAllMode,
+            maxPagesToDelete: 80
+          });
+          if (res.ok) {
+            setStage('Canlı Trendyol listesi ve panel verileri yenileniyor...');
+            await loadLiveTrendyolProducts(0, tyFilter);
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Silme işlemi başarısız oldu', 'error');
+          }
+        } finally {
+          setTyLoading(false);
+        }
       }
-    } catch (e: any) {
-      notify(e?.message || 'Silme hatası', 'error');
-    } finally {
-      setTyLoading(false);
-    }
+    );
   };
 
   const handleBulkPublish = async () => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'bulk_publish',
-        marketplace: selectedMarketplace,
-        limit: publishLimit,
-        onlyUnsent
-      });
-      if (res.ok) {
-        notify(res.message, 'success');
-        await onRefresh();
-      } else {
-        notify(res.message || 'Gönderim hatası', 'error');
+    const scopeLabel =
+      publishLimit > 0
+        ? `${publishLimit} Ürün Test`
+        : onlyUnsent
+        ? 'Eksik / Hatalı Aktif Ürünler'
+        : 'Tüm Uygun Ürünler';
+    await runOperation(
+      {
+        title: `${selectedMarketplace} Ürün Gönderimi Yapılıyor (${scopeLabel})`,
+        description:
+          'Kategori özellikleri doğrulanıyor ve ürün paketleri pazaryeri API sunucusuna iletiliyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'bulk_publish',
+            marketplace: selectedMarketplace,
+            limit: publishLimit,
+            onlyUnsent
+          });
+          if (res.ok) {
+            setStage('Batch raporu ve güncel ürün durumları yükleniyor...');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Gönderim hatası', 'error');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleCheckHbTracking = async (trackingId: string) => {
     if (loading || !trackingId) return;
-    setLoading(true);
-    try {
-      const cleanId =
-        trackingId
-          .split('|')
-          .map((s) => s.split(' (')[0].trim())
-          .find(Boolean) || trackingId;
-      const res = await apiPost('/api/state', {
-        action: 'check_hepsiburada_import_status',
-        trackingId: cleanId
-      });
-      notify(res.message, res.ok ? 'success' : 'error');
-    } finally {
-      setLoading(false);
-    }
+    const cleanId =
+      trackingId
+        .split('|')
+        .map((s) => s.split(' (')[0].trim())
+        .find(Boolean) || trackingId;
+    await runOperation(
+      {
+        title: 'Hepsiburada Tracking Durumu Sorgulanıyor',
+        description: `Takip No: ${cleanId}`,
+        mode: 'soft'
+      },
+      async () => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'check_hepsiburada_import_status',
+            trackingId: cleanId
+          });
+          notify(res.message, res.ok ? 'success' : 'error');
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
   };
 
   const handleBulkUpdate = async () => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'bulk_update_price_stock',
-        marketplace: selectedMarketplace
-      });
-      if (res.ok) {
-        notify(res.message, 'success');
-        await onRefresh();
-      } else {
-        notify(res.message || 'Güncelleme hatası', 'error');
+    await runOperation(
+      {
+        title: `${selectedMarketplace} Stok ve Fiyatları Eşitleniyor`,
+        description:
+          'Kritik stok, rezerve sipariş stoğu ve kanal satış fiyatları pazaryerlerine aktarılıyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'bulk_update_price_stock',
+            marketplace: selectedMarketplace
+          });
+          if (res.ok) {
+            setStage('Güncel stok/fiyat batch kayıtları yükleniyor...');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Güncelleme hatası', 'error');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleRunPriceRobot = async () => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', { action: 'run_price_robot' });
-      if (res.ok) {
-        notify(res.message, 'success');
-        await onRefresh();
-      } else {
-        notify(res.message || 'Fiyat robotu çalıştırılamadı.', 'error');
+    await runOperation(
+      {
+        title: 'Buybox Fiyat Rekabet Robotu Çalışıyor',
+        description:
+          'Canlı rakip Buybox fiyatları sorgulanıyor ve dip fiyat korumasıyla yeni fiyatlar iletiliyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', { action: 'run_price_robot' });
+          if (res.ok) {
+            setStage('Güncel Buybox sıralamaları ve fiyatlar yükleniyor...');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Fiyat robotu çalıştırılamadı.', 'error');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleAddRobotItem = async () => {
     if (!newRobotProductId || loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'add_price_robot_item',
-        productId: newRobotProductId,
-        marketplace: newRobotMarketplace,
-        minFloorPrice: newRobotMinPrice,
-        maxCeilingPrice: newRobotMaxPrice,
-        stepAmount: newRobotStep
-      });
-      if (res.ok) {
-        notify(res.message, 'success');
-        setShowAddRobotModal(false);
-        await onRefresh();
-      } else {
-        notify(res.message || 'Ürün fiyat robotuna eklenemedi.', 'error');
+    await runOperation(
+      {
+        title: 'Ürün Rekabet Robotuna Ekleniyor',
+        description: 'Dip ve tavan fiyat kurallarıyla Buybox takibi başlatılıyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'add_price_robot_item',
+            productId: newRobotProductId,
+            marketplace: newRobotMarketplace,
+            minFloorPrice: newRobotMinPrice,
+            maxCeilingPrice: newRobotMaxPrice,
+            stepAmount: newRobotStep
+          });
+          if (res.ok) {
+            setStage('Rekabet robotu listesi güncelleniyor...');
+            setShowAddRobotModal(false);
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Ürün fiyat robotuna eklenemedi.', 'error');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   return (
@@ -413,7 +501,7 @@ export default function BulkAndRobotView({
       <div className="bg-white rounded-xl border border-slate-200 p-2.5 sm:p-4 shadow-sm">
         <div className="flex overflow-x-auto no-scrollbar items-center gap-2 pb-0.5">
           <button
-            onClick={() => setTab('publish')}
+            onClick={() => guardNavigation(() => setTab('publish'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'publish'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -424,7 +512,7 @@ export default function BulkAndRobotView({
             Toplu Gönderim
           </button>
           <button
-            onClick={() => setTab('update')}
+            onClick={() => guardNavigation(() => setTab('update'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'update'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -435,7 +523,7 @@ export default function BulkAndRobotView({
             Stok &amp; Fiyat Güncelleme
           </button>
           <button
-            onClick={() => setTab('diff')}
+            onClick={() => guardNavigation(() => setTab('diff'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'diff'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -446,7 +534,7 @@ export default function BulkAndRobotView({
             Farklılık Kontrolü
           </button>
           <button
-            onClick={() => setTab('robot')}
+            onClick={() => guardNavigation(() => setTab('robot'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'robot'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -457,7 +545,7 @@ export default function BulkAndRobotView({
             Fiyat Robotu (Buybox)
           </button>
           <button
-            onClick={() => setTab('trendyol_live')}
+            onClick={() => guardNavigation(() => setTab('trendyol_live'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'trendyol_live'
                 ? 'bg-orange-600 text-white shadow-sm'
@@ -468,7 +556,7 @@ export default function BulkAndRobotView({
             Trendyol Canlı &amp; Silme (API)
           </button>
           <button
-            onClick={() => setTab('hepsiburada_live')}
+            onClick={() => guardNavigation(() => setTab('hepsiburada_live'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'hepsiburada_live'
                 ? 'bg-amber-600 text-white shadow-sm'
@@ -724,7 +812,21 @@ export default function BulkAndRobotView({
           </div>
 
           {/* Canlı Ürün Listesi (Mobil Kartlar + Masaüstü Tablosu) */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="relative bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            {tyLoading && tyItems.length > 0 && (
+              <div className="absolute inset-0 z-10 bg-white/75 backdrop-blur-[1px] flex items-center justify-center p-4">
+                <div className="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold shadow-lg flex items-center gap-2.5">
+                  <Loader2 className="w-4 h-4 animate-spin text-orange-400" />
+                  Trendyol canlı verileri yükleniyor...
+                </div>
+              </div>
+            )}
+            {tyItems.length === 0 && tyLoading && (
+              <div className="p-8 text-center text-sm text-slate-600 flex flex-col items-center justify-center gap-2">
+                <Loader2 className="w-6 h-6 animate-spin text-orange-600" />
+                <span className="font-semibold">Trendyol canlı ürünleri çekiliyor, lütfen bekleyin...</span>
+              </div>
+            )}
             {/* Mobil Tümünü Seç Barı & Kartlar */}
             <div className="md:hidden">
               <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
@@ -1395,10 +1497,10 @@ export default function BulkAndRobotView({
               <button
                 onClick={handleBulkUpdate}
                 disabled={loading}
-                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
               >
                 <RefreshCw className={`w-4 h-4 shrink-0 ${loading ? 'animate-spin' : ''}`} />
-                Stok &amp; Fiyatları Şimdi Güncelle
+                {loading ? 'Stok & Fiyatlar Güncelleniyor...' : 'Stok & Fiyatları Şimdi Güncelle'}
               </button>
             </div>
           </div>
@@ -1421,10 +1523,10 @@ export default function BulkAndRobotView({
             <button
               onClick={handleBulkUpdate}
               disabled={loading}
-              className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shrink-0"
+              className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shrink-0"
             >
-              <RefreshCw className="w-4 h-4 shrink-0" />
-              Tüm Farklılıkları Pazaryerleriyle Eşitle
+              <RefreshCw className={`w-4 h-4 shrink-0 ${loading ? 'animate-spin' : ''}`} />
+              {loading ? 'Eşitleniyor...' : 'Tüm Farklılıkları Pazaryerleriyle Eşitle'}
             </button>
           </div>
 
@@ -1535,10 +1637,10 @@ export default function BulkAndRobotView({
               <button
                 onClick={handleRunPriceRobot}
                 disabled={loading}
-                className="min-h-[42px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                className="min-h-[42px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <Play className="w-4 h-4" />
-                Robotu Şimdi Çalıştır
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                {loading ? 'Robot Çalışıyor...' : 'Robotu Şimdi Çalıştır'}
               </button>
             </div>
           </div>
@@ -1782,15 +1884,18 @@ export default function BulkAndRobotView({
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row justify-end gap-2 pb-safe">
               <button
                 onClick={() => setShowAddRobotModal(false)}
-                className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-lg border border-slate-300 text-xs font-semibold cursor-pointer"
+                disabled={loading}
+                className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-lg border border-slate-300 disabled:opacity-50 text-xs font-semibold cursor-pointer"
               >
                 İptal
               </button>
               <button
                 onClick={handleAddRobotItem}
-                className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold cursor-pointer"
+                disabled={loading}
+                className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                Robota Ekle
+                {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {loading ? 'Ekleniyor...' : 'Robota Ekle'}
               </button>
             </div>
           </div>

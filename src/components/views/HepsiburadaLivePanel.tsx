@@ -5,6 +5,7 @@ import Image from 'next/image';
 import {
   CheckCircle2,
   CloudDownload,
+  Loader2,
   Power,
   PowerOff,
   RefreshCw,
@@ -12,6 +13,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { apiPost } from '@/lib/api-client';
+import { useOperation } from '@/components/ui/OperationFeedbackContext';
 import type {
   HepsiburadaLiveFilter,
   LiveHepsiburadaProductItem
@@ -26,6 +28,7 @@ export default function HepsiburadaLivePanel({
   onRefresh,
   notify
 }: HepsiburadaLivePanelProps) {
+  const { runOperation, confirmDialog } = useOperation();
   const [items, setItems] = useState<LiveHepsiburadaProductItem[]>([]);
   const [filter, setFilter] = useState<HepsiburadaLiveFilter>('all');
   const [page, setPage] = useState(0);
@@ -86,28 +89,47 @@ export default function HepsiburadaLivePanel({
 
   const handleToggleState = async (targetState: 'activate' | 'deactivate') => {
     if (selectedItems.length === 0 || loading) return;
-    const label = targetState === 'activate' ? 'satışa açmak' : 'satışa kapatmak';
-    if (!window.confirm(`Seçili ${selectedItems.length} Hepsiburada ürününü ${label} istediğinize emin misiniz?`)) {
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'toggle_hepsiburada_listings_state',
-        targetState,
-        items: selectedItems.map((i) => ({
-          hepsiburadaSku: i.hepsiburadaSku,
-          merchantSku: i.merchantSku
-        }))
-      });
-      notify(res.message, res.ok ? 'success' : 'error');
-      if (res.ok) {
-        await loadLiveProducts(page, filter);
-        await onRefresh();
+    const isActivate = targetState === 'activate';
+    const confirmed = await confirmDialog({
+      title: isActivate ? 'Hepsiburada Ürünlerini Satışa Aç' : 'Hepsiburada Ürünlerini Satışa Kapat',
+      message: `Seçili ${selectedItems.length} Hepsiburada ürününü ${
+        isActivate ? 'satışa açmak' : 'satışa kapatmak'
+      } istediğinize emin misiniz?`,
+      confirmText: isActivate ? 'Satışa Aç' : 'Satışa Kapat',
+      variant: isActivate ? 'primary' : 'warning'
+    });
+    if (!confirmed) return;
+
+    await runOperation(
+      {
+        title: isActivate
+          ? `Hepsiburada Ürünleri Satışa Açılıyor (${selectedItems.length} Adet)`
+          : `Hepsiburada Ürünleri Satışa Kapatılıyor (${selectedItems.length} Adet)`,
+        description: 'Seçili SKU kayıtları Hepsiburada Listing API üzerinden güncelleniyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'toggle_hepsiburada_listings_state',
+            targetState,
+            items: selectedItems.map((i) => ({
+              hepsiburadaSku: i.hepsiburadaSku,
+              merchantSku: i.merchantSku
+            }))
+          });
+          notify(res.message, res.ok ? 'success' : 'error');
+          if (res.ok) {
+            setStage('Canlı Hepsiburada listesi ve panel verileri yenileniyor...');
+            await loadLiveProducts(page, filter);
+            await onRefresh();
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleApprovePreMatch = async () => {
@@ -118,20 +140,39 @@ export default function HepsiburadaLivePanel({
       notify('Lütfen ön eşleşme (PRE_MATCHED) durumundaki ürünleri seçin.', 'error');
       return;
     }
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'approve_hepsiburada_prematch',
-        merchantSkus: preMatchedSkus
-      });
-      notify(res.message, res.ok ? 'success' : 'error');
-      if (res.ok) {
-        await loadLiveProducts(page, filter);
-        await onRefresh();
+
+    const confirmed = await confirmDialog({
+      title: 'Ön Eşleşmeleri Onayla',
+      message: `Seçili ${preMatchedSkus.length} adet ön eşleşmeli (PRE_MATCHED) ürünü Hepsiburada kataloğunda onaylamak istiyor musunuz?`,
+      confirmText: 'Onayla',
+      variant: 'primary'
+    });
+    if (!confirmed) return;
+
+    await runOperation(
+      {
+        title: `Hepsiburada Ön Eşleşmeleri Onaylanıyor (${preMatchedSkus.length} SKU)`,
+        description: 'Hepsiburada MPOP katalog servisine onay iletiliyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'approve_hepsiburada_prematch',
+            merchantSkus: preMatchedSkus
+          });
+          notify(res.message, res.ok ? 'success' : 'error');
+          if (res.ok) {
+            setStage('Canlı Hepsiburada listesi yenileniyor...');
+            await loadLiveProducts(page, filter);
+            await onRefresh();
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleDeletePending = async () => {
@@ -145,41 +186,64 @@ export default function HepsiburadaLivePanel({
       );
       return;
     }
-    if (
-      !window.confirm(
-        `Seçili ${deletableSkus.length} onay bekleyen Hepsiburada katalog ürününü silmek istediğinize emin misiniz?`
-      )
-    ) {
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'delete_pending_hepsiburada_products',
-        merchantSkus: deletableSkus
-      });
-      notify(res.message, res.ok ? 'success' : 'error');
-      if (res.ok) {
-        await loadLiveProducts(page, filter);
-        await onRefresh();
+
+    const confirmed = await confirmDialog({
+      title: 'Onay Bekleyen HB Katalog Ürünlerini Sil',
+      message: `Seçili ${deletableSkus.length} onay bekleyen / reddedilen Hepsiburada katalog ürününü kalıcı olarak silmek istediğinize emin misiniz?`,
+      confirmText: 'Kalıcı Olarak Sil',
+      variant: 'danger'
+    });
+    if (!confirmed) return;
+
+    await runOperation(
+      {
+        title: `Hepsiburada Katalog Ürünleri Siliniyor (${deletableSkus.length} SKU)`,
+        description: 'MPOP delete-process servisi üzerinden kayıtlar kaldırılıyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'delete_pending_hepsiburada_products',
+            merchantSkus: deletableSkus
+          });
+          notify(res.message, res.ok ? 'success' : 'error');
+          if (res.ok) {
+            setStage('Canlı Hepsiburada listesi ve panel verileri yenileniyor...');
+            await loadLiveProducts(page, filter);
+            await onRefresh();
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleReconcileStatuses = async () => {
     if (reconciling) return;
-    setReconciling(true);
-    try {
-      const res = await apiPost('/api/state', { action: 'reconcile_hepsiburada_status' });
-      notify(res.message, res.ok ? 'success' : 'error');
-      if (res.ok) {
-        await onRefresh();
+    await runOperation(
+      {
+        title: 'Hepsiburada Mağaza Durumları Eşitleniyor',
+        description:
+          'Canlı Hepsiburada Listing ve MPOP Katalog kayıtları taranarak yerel ürün durumlarıyla karşılaştırılıyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setReconciling(true);
+        try {
+          const res = await apiPost('/api/state', { action: 'reconcile_hepsiburada_status' });
+          if (res.ok) {
+            setStage('Eşitlenen ürün durumları panele yükleniyor...');
+            await onRefresh();
+          }
+          notify(res.message, res.ok ? 'success' : 'error');
+        } finally {
+          setReconciling(false);
+        }
       }
-    } finally {
-      setReconciling(false);
-    }
+    );
   };
 
   return (
@@ -316,12 +380,27 @@ export default function HepsiburadaLivePanel({
       </div>
 
       {/* Canlı Liste */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="relative bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        {loading && items.length > 0 && (
+          <div className="absolute inset-0 z-10 bg-white/75 backdrop-blur-[1px] flex items-center justify-center p-4">
+            <div className="px-4 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold shadow-lg flex items-center gap-2.5">
+              <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+              Hepsiburada canlı verileri yükleniyor...
+            </div>
+          </div>
+        )}
         {items.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-500">
-            {loading
-              ? 'Hepsiburada canlı verileri yükleniyor...'
-              : 'Bu filtrede Hepsiburada kaydı bulunamadı.'}
+          <div className="p-8 text-center text-sm text-slate-500 flex flex-col items-center justify-center gap-2">
+            {loading ? (
+              <>
+                <Loader2 className="w-6 h-6 animate-spin text-amber-600" />
+                <span className="font-semibold text-slate-700">
+                  Hepsiburada canlı verileri çekiliyor, lütfen bekleyin...
+                </span>
+              </>
+            ) : (
+              'Bu filtrede Hepsiburada kaydı bulunamadı.'
+            )}
           </div>
         ) : (
           <>

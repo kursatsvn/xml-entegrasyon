@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Eye, EyeOff, Lock, Mail, Phone, ShieldCheck, Store, User } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Loader2, Lock, Mail, Phone, ShieldCheck, Store, User } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,12 +14,30 @@ export default function LoginPage() {
   const [phone, setPhone] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!loading || typeof window === 'undefined') return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [loading]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
+    setLoadingStage(
+      mode === 'login'
+        ? 'Kimlik bilgileri doğrulanıyor ve oturum açılıyor...'
+        : 'Yeni mağaza alanınız ve yönetici hesabınız oluşturuluyor...'
+    );
     setError('');
+    let redirected = false;
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
@@ -34,13 +52,18 @@ export default function LoginPage() {
       if (!res.ok || !data.ok) {
         setError(data.message || 'Giriş yapılamadı.');
       } else {
+        redirected = true;
+        setLoadingStage('Başarılı! Yönetim paneliniz hazırlanıyor...');
         router.push('/');
         router.refresh();
       }
     } catch (err: any) {
       setError(err?.message || 'Bağlantı hatası');
     } finally {
-      setLoading(false);
+      if (!redirected) {
+        setLoading(false);
+        setLoadingStage('');
+      }
     }
   }
 
@@ -144,11 +167,12 @@ export default function LoginPage() {
           <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl mb-6">
             <button
               type="button"
+              disabled={loading}
               onClick={() => {
                 setMode('login');
                 setError('');
               }}
-              className={`py-2.5 text-sm font-semibold rounded-lg transition ${
+              className={`py-2.5 text-sm font-semibold rounded-lg transition disabled:opacity-50 ${
                 mode === 'login'
                   ? 'bg-white text-indigo-600 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
@@ -158,11 +182,12 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
+              disabled={loading}
               onClick={() => {
                 setMode('register');
                 setError('');
               }}
-              className={`py-2.5 text-sm font-semibold rounded-lg transition ${
+              className={`py-2.5 text-sm font-semibold rounded-lg transition disabled:opacity-50 ${
                 mode === 'register'
                   ? 'bg-white text-indigo-600 shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
@@ -280,8 +305,9 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold text-sm shadow-md shadow-indigo-600/20 transition cursor-pointer"
+              className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold text-sm shadow-md shadow-indigo-600/20 transition cursor-pointer flex items-center justify-center gap-2"
             >
+              {loading && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
               {loading
                 ? 'İşleniyor...'
                 : mode === 'login'
@@ -289,6 +315,20 @@ export default function LoginPage() {
                 : 'Mağazamı Oluştur ve Başla'}
             </button>
           </form>
+
+          {loading && (
+            <div className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-6 text-center space-y-3">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                </div>
+                <div className="text-base font-extrabold text-slate-900">
+                  {mode === 'login' ? 'Giriş Yapılıyor' : 'Mağazanız Oluşturuluyor'}
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">{loadingStage}</p>
+              </div>
+            </div>
+          )}
 
           {mode === 'login' && (
             <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1.5">

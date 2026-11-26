@@ -8,6 +8,7 @@ import {
   Edit3,
   EyeOff,
   Filter,
+  Loader2,
   Lock,
   PackagePlus,
   Search,
@@ -19,6 +20,8 @@ import { calculateDesi, calculateProfitBreakdown } from '@/lib/pricing-engine';
 import { mergeTenantGeneralSettings } from '@/lib/general-settings';
 import { apiPost } from '@/lib/api-client';
 import { formatTrDate } from '@/lib/date-format';
+import { useOperation } from '@/components/ui/OperationFeedbackContext';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 interface ProductsViewProps {
   products: Product[];
@@ -59,8 +62,37 @@ export default function ProductsView({
     setCurrentPage(1);
   }, [gs.productListPerPage]);
 
+  const { runOperation, confirmDialog, clearAllDirtySources } = useOperation();
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productBaselineJson, setProductBaselineJson] = useState<string>('');
   const [savingProduct, setSavingProduct] = useState(false);
+
+  const isProductDirty =
+    Boolean(editingProduct) && JSON.stringify(editingProduct) !== productBaselineJson;
+  useUnsavedChanges('product-edit-modal', isProductDirty);
+
+  function openProductModalWithDraft(draft: Product) {
+    const clone = JSON.parse(JSON.stringify(draft)) as Product;
+    setEditingProduct(clone);
+    setProductBaselineJson(JSON.stringify(clone));
+  }
+
+  async function requestCloseProductModal() {
+    if (savingProduct) return;
+    if (isProductDirty) {
+      const ok = await confirmDialog({
+        title: 'Kaydedilmemiş Ürün Değişiklikleri',
+        message:
+          'Ürün kartında yaptığınız fiyat veya bilgi düzenlemeleri henüz kaydedilmedi. Kaydetmeden kapatmak istiyor musunuz?',
+        confirmText: 'Kaydetmeden Kapat',
+        cancelText: 'Düzenlemeye Devam Et',
+        variant: 'warning'
+      });
+      if (!ok) return;
+    }
+    setEditingProduct(null);
+    setProductBaselineJson('');
+  }
   const [showProfitModal, setShowProfitModal] = useState(false);
   const [showDesiModal, setShowDesiModal] = useState(false);
 
@@ -159,26 +191,38 @@ export default function ProductsView({
   async function handleSaveProduct(e: React.FormEvent) {
     e.preventDefault();
     if (!editingProduct || savingProduct) return;
-    setSavingProduct(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'save_product',
-        product: editingProduct
-      });
-      if (res.ok) {
-        notify(res.message);
-        setEditingProduct(null);
-        await onRefreshState();
-      } else {
-        notify(res.message || 'Hata oluştu', 'error');
+    await runOperation(
+      {
+        title: `Ürün Kaydediliyor (${editingProduct.stockCode || 'Yeni Ürün'})`,
+        description: 'Ürün bilgileri, fiyat kilidi ve varyant fiyatları veritabanına kaydediliyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setSavingProduct(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'save_product',
+            product: editingProduct
+          });
+          if (res.ok) {
+            setStage('Güncel ürün listesi yenileniyor...');
+            clearAllDirtySources();
+            setEditingProduct(null);
+            setProductBaselineJson('');
+            await onRefreshState();
+            notify(res.message);
+          } else {
+            notify(res.message || 'Hata oluştu', 'error');
+          }
+        } finally {
+          setSavingProduct(false);
+        }
       }
-    } finally {
-      setSavingProduct(false);
-    }
+    );
   }
 
   function openNewProductModal() {
-    setEditingProduct({
+    openProductModalWithDraft({
       id: '',
       tenantId: '',
       xmlSourceId: '',
@@ -529,7 +573,7 @@ export default function ProductsView({
                     </span>
                   </div>
                   <button
-                    onClick={() => setEditingProduct(JSON.parse(JSON.stringify(p)))}
+                    onClick={() => openProductModalWithDraft(p)}
                     className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold min-h-[40px] cursor-pointer"
                   >
                     <Edit3 className="w-3.5 h-3.5" /> DÜZENLE
@@ -693,7 +737,7 @@ export default function ProductsView({
 
                   <td className="py-3.5 px-4 text-right">
                     <button
-                      onClick={() => setEditingProduct(JSON.parse(JSON.stringify(p)))}
+                      onClick={() => openProductModalWithDraft(p)}
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5" /> DÜZENLE
@@ -758,9 +802,11 @@ export default function ProductsView({
                 </p>
               </div>
               <button
-                onClick={() => setEditingProduct(null)}
+                type="button"
+                disabled={savingProduct}
+                onClick={() => void requestCloseProductModal()}
                 aria-label="Kapat"
-                className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 min-w-[40px] min-h-[40px] flex items-center justify-center shrink-0 cursor-pointer"
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40 min-w-[40px] min-h-[40px] flex items-center justify-center shrink-0 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1260,16 +1306,18 @@ export default function ProductsView({
               <div className="sticky bottom-0 bg-white flex items-center justify-end gap-2.5 pt-4 pb-2 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setEditingProduct(null)}
-                  className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold min-h-[44px] cursor-pointer"
+                  disabled={savingProduct}
+                  onClick={() => void requestCloseProductModal()}
+                  className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-sm font-semibold min-h-[44px] cursor-pointer"
                 >
                   Vazgeç
                 </button>
                 <button
                   type="submit"
                   disabled={savingProduct}
-                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-bold min-h-[44px] cursor-pointer"
+                  className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-bold min-h-[44px] cursor-pointer inline-flex items-center justify-center gap-2"
                 >
+                  {savingProduct && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
                   {savingProduct ? 'Kaydediliyor...' : 'KAYDET & GÜNCELLE'}
                 </button>
               </div>

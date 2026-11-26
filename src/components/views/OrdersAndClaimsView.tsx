@@ -5,6 +5,7 @@ import { ClaimItem, Order, Tenant } from '@/types/sopyo';
 import { mergeTenantGeneralSettings } from '@/lib/general-settings';
 import { apiPost } from '@/lib/api-client';
 import { formatTrDateTime } from '@/lib/date-format';
+import { useOperation } from '@/components/ui/OperationFeedbackContext';
 import {
   ShoppingBag,
   RotateCcw,
@@ -15,6 +16,7 @@ import {
   Zap,
   CheckCircle2,
   EyeOff,
+  Loader2,
   Truck,
   X
 } from 'lucide-react';
@@ -36,10 +38,12 @@ export default function OrdersAndClaimsView({
   onRefresh,
   notify
 }: OrdersAndClaimsViewProps) {
+  const { runOperation, confirmDialog, promptDialog, guardNavigation } = useOperation();
   const gs = useMemo(() => mergeTenantGeneralSettings(tenant), [tenant]);
   const [section, setSection] = useState<'orders' | 'claims' | 'reports'>(initialSection);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(false);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [printingOrder, setPrintingOrder] = useState<Order | null>(null);
   const [labelTemplate, setLabelTemplate] = useState<Tenant['cargoLabelTemplate']>(
     tenant.cargoLabelTemplate || 'quad'
@@ -57,24 +61,40 @@ export default function OrdersAndClaimsView({
     setUseMaskedTitleOnLabel(gs.customerInvoiceMaskStatus);
   }, [tenant.cargoLabelTemplate, gs.customerInvoiceMaskStatus]);
 
-  const handlePullOrders = async (simulateNewOrder = false, marketplace: 'trendyol' | 'hepsiburada' = 'trendyol') => {
+  const handlePullOrders = async (
+    simulateNewOrder = false,
+    marketplace: 'trendyol' | 'hepsiburada' = 'trendyol'
+  ) => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'pull_orders_and_deduct_stock',
-        simulateNewOrder,
-        marketplace
-      });
-      if (res.ok) {
-        notify(res.message, 'success');
-        await onRefresh();
-      } else {
-        notify(res.message || 'Sipariş çekme hatası', 'error');
+    await runOperation(
+      {
+        title: simulateNewOrder
+          ? 'Test Siparişi ve Çapraz Stok Düşümü Simüle Ediliyor'
+          : 'Canlı Pazaryeri Siparişleri Çekiliyor',
+        description:
+          'Trendyol ve Hepsiburada OMS sipariş servisleri sorgulanıyor, rezerve sipariş stokları düşülüyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'pull_orders_and_deduct_stock',
+            simulateNewOrder,
+            marketplace
+          });
+          if (res.ok) {
+            setStage('Yeni siparişler ve güncel ürün stokları yükleniyor...');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Sipariş çekme hatası', 'error');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleUpdateOrder = async (
@@ -82,91 +102,153 @@ export default function OrdersAndClaimsView({
     updates: { status?: Order['status']; invoiceStatus?: Order['invoiceStatus']; labelPrinted?: boolean }
   ) => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'update_order',
-        orderId,
-        ...updates
-      });
-      if (res.ok) {
-        notify(res.message, 'success');
-        await onRefresh();
-      } else {
-        notify(res.message || 'Sipariş güncellenemedi.', 'error');
+    const opTitle = updates.invoiceStatus
+      ? 'Sipariş Faturası Kesiliyor'
+      : updates.labelPrinted
+      ? 'Kargo Etiketi Kaydediliyor'
+      : 'Sipariş Durumu Güncelleniyor';
+    await runOperation(
+      {
+        title: opTitle,
+        description: 'Sipariş kaydı veritabanında güncelleniyor...',
+        mode: 'soft'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        setUpdatingOrderId(orderId);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'update_order',
+            orderId,
+            ...updates
+          });
+          if (res.ok) {
+            setStage('Sipariş listesi yenileniyor...');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Sipariş güncellenemedi.', 'error');
+          }
+        } finally {
+          setLoading(false);
+          setUpdatingOrderId(null);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handlePullClaims = async () => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', { action: 'pull_marketplace_claims' });
-      notify(res.message, res.ok ? 'success' : 'error');
-      if (res.ok) await onRefresh();
-    } finally {
-      setLoading(false);
-    }
+    await runOperation(
+      {
+        title: 'Canlı İade ve Değişim Talepleri Çekiliyor',
+        description: 'Hepsiburada OMS Claims servisi üzerinden güncel iade talepleri sorgulanıyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', { action: 'pull_marketplace_claims' });
+          if (res.ok) {
+            setStage('İade talepleri listesi yenileniyor...');
+            await onRefresh();
+          }
+          notify(res.message, res.ok ? 'success' : 'error');
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
   };
 
   const handleResolveHbClaim = async (claim: ClaimItem, decision: 'accept' | 'reject') => {
     if (loading) return;
     let merchantStatement = '';
     if (decision === 'reject') {
-      const input = window.prompt(
-        `Hepsiburada talep #${claim.claimNumber} red gerekçesini girin:`,
-        'Ürün incelemesinde iade koşullarına uygun bulunmadı.'
-      );
+      const input = await promptDialog({
+        title: `Hepsiburada Talep #${claim.claimNumber} Red Gerekçesi`,
+        message: 'Müşteriye ve Hepsiburada inceleme ekibine iletilecek red gerekçesini girin:',
+        defaultValue: 'Ürün incelemesinde iade koşullarına uygun bulunmadı.',
+        placeholder: 'Red gerekçesi yazınız...',
+        confirmText: 'Talebi Reddet'
+      });
       if (input === null) return;
       merchantStatement = input.trim();
     } else {
-      if (!window.confirm(`Hepsiburada talep #${claim.claimNumber} onaylansın mı?`)) return;
+      const ok = await confirmDialog({
+        title: `Hepsiburada Talep #${claim.claimNumber} Onayı`,
+        message: `#${claim.claimNumber} numaralı müşteri iade talebini onaylamak istiyor musunuz?`,
+        confirmText: 'Talebi Onayla',
+        variant: 'primary'
+      });
+      if (!ok) return;
     }
 
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'resolve_hepsiburada_claim',
-        claimId: claim.id,
-        claimNumber: claim.claimNumber,
-        decision,
-        merchantStatement
-      });
-      notify(res.message, res.ok ? 'success' : 'error');
-      if (res.ok) await onRefresh();
-    } finally {
-      setLoading(false);
-    }
+    await runOperation(
+      {
+        title:
+          decision === 'accept'
+            ? `Hepsiburada İade Talebi Onaylanıyor (#${claim.claimNumber})`
+            : `Hepsiburada İade Talebi Reddediliyor (#${claim.claimNumber})`,
+        description: 'Kararınız Hepsiburada OMS servisine iletiliyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'resolve_hepsiburada_claim',
+            claimId: claim.id,
+            claimNumber: claim.claimNumber,
+            decision,
+            merchantStatement
+          });
+          if (res.ok) {
+            setStage('İade listesi güncelleniyor...');
+            await onRefresh();
+          }
+          notify(res.message, res.ok ? 'success' : 'error');
+        } finally {
+          setLoading(false);
+        }
+      }
+    );
   };
 
   const handleFetchHbOfficialLabel = async (packageNumber: string) => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'fetch_hepsiburada_cargo_label',
-        packageNumber
-      });
-      notify(res.message, res.ok ? 'success' : 'error');
-      const labelData = res.data?.labelData ? String(res.data.labelData) : '';
-      if (res.ok && labelData && typeof window !== 'undefined') {
-        const w = window.open('', '_blank', 'noopener,noreferrer');
-        if (w) {
-          if (labelData.startsWith('http')) {
-            w.location.href = labelData;
-          } else {
-            w.document.write(
-              `<iframe src="data:application/pdf;base64,${labelData}" style="border:0;width:100%;height:100vh"></iframe>`
-            );
+    await runOperation(
+      {
+        title: 'Resmi Hepsiburada Kargo Etiketi Alınıyor',
+        description: `Paket #${packageNumber} PDF barkod etiketi hazırlanıyor...`,
+        mode: 'soft'
+      },
+      async () => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'fetch_hepsiburada_cargo_label',
+            packageNumber
+          });
+          notify(res.message, res.ok ? 'success' : 'error');
+          const labelData = res.data?.labelData ? String(res.data.labelData) : '';
+          if (res.ok && labelData && typeof window !== 'undefined') {
+            const w = window.open('', '_blank', 'noopener,noreferrer');
+            if (w) {
+              if (labelData.startsWith('http')) {
+                w.location.href = labelData;
+              } else {
+                w.document.write(
+                  `<iframe src="data:application/pdf;base64,${labelData}" style="border:0;width:100%;height:100vh"></iframe>`
+                );
+              }
+            }
           }
+        } finally {
+          setLoading(false);
         }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const filteredOrders = orders.filter((o) =>
@@ -184,8 +266,8 @@ export default function OrdersAndClaimsView({
       <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-sm no-print">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
           <button
-            onClick={() => setSection('orders')}
-            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition shrink-0 min-h-[40px] ${
+            onClick={() => guardNavigation(() => setSection('orders'))}
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition shrink-0 min-h-[40px] cursor-pointer ${
               section === 'orders'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -195,8 +277,8 @@ export default function OrdersAndClaimsView({
             Siparişler ({orders.length})
           </button>
           <button
-            onClick={() => setSection('claims')}
-            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition shrink-0 min-h-[40px] ${
+            onClick={() => guardNavigation(() => setSection('claims'))}
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition shrink-0 min-h-[40px] cursor-pointer ${
               section === 'claims'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -206,8 +288,8 @@ export default function OrdersAndClaimsView({
             İade Yönetimi ({claims.length})
           </button>
           <button
-            onClick={() => setSection('reports')}
-            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition shrink-0 min-h-[40px] ${
+            onClick={() => guardNavigation(() => setSection('reports'))}
+            className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition shrink-0 min-h-[40px] cursor-pointer ${
               section === 'reports'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -223,15 +305,19 @@ export default function OrdersAndClaimsView({
             <button
               onClick={() => handlePullOrders(false)}
               disabled={loading}
-              className="px-3.5 py-2.5 lg:py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm min-h-[40px]"
+              className="px-3.5 py-2.5 lg:py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm min-h-[40px] cursor-pointer"
             >
-              <DownloadCloud className="w-4 h-4 shrink-0" />
-              Hızlı Sipariş Getir (Canlı API)
+              {loading ? (
+                <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+              ) : (
+                <DownloadCloud className="w-4 h-4 shrink-0" />
+              )}
+              {loading ? 'Siparişler Çekiliyor...' : 'Hızlı Sipariş Getir (Canlı API)'}
             </button>
             <button
               onClick={() => handlePullOrders(true, 'trendyol')}
               disabled={loading}
-              className="px-3.5 py-2.5 lg:py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm min-h-[40px]"
+              className="px-3.5 py-2.5 lg:py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm min-h-[40px] cursor-pointer"
             >
               <Zap className="w-4 h-4 shrink-0" />
               Test Siparişi Simülasyonu
@@ -355,10 +441,11 @@ export default function OrdersAndClaimsView({
                   <div className="flex flex-col sm:flex-row gap-2 pt-1">
                     <select
                       value={ord.status}
+                      disabled={loading}
                       onChange={(e) =>
                         handleUpdateOrder(ord.id, { status: e.target.value as Order['status'] })
                       }
-                      className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white"
+                      className="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white disabled:opacity-50"
                     >
                       <option value="pending">Beklemede / Yeni</option>
                       <option value="ready_to_ship">Gönderime Hazır</option>
@@ -376,14 +463,21 @@ export default function OrdersAndClaimsView({
                       </button>
                       <button
                         onClick={() => handleUpdateOrder(ord.id, { invoiceStatus: 'issued' })}
-                        className={`px-3 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border min-h-[42px] ${
+                        disabled={loading}
+                        className={`px-3 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border min-h-[42px] disabled:opacity-50 ${
                           ord.invoiceStatus === 'issued'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                             : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
                         }`}
                       >
-                        <FileText className="w-3.5 h-3.5" />
-                        {ord.invoiceStatus === 'issued'
+                        {updatingOrderId === ord.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <FileText className="w-3.5 h-3.5" />
+                        )}
+                        {updatingOrderId === ord.id
+                          ? 'İşleniyor...'
+                          : ord.invoiceStatus === 'issued'
                           ? ord.invoiceNumber || 'Faturalandı'
                           : 'Fatura Kes'}
                       </button>
@@ -469,10 +563,11 @@ export default function OrdersAndClaimsView({
                       <td className="py-3.5 px-4">
                         <select
                           value={ord.status}
+                          disabled={loading}
                           onChange={(e) =>
                             handleUpdateOrder(ord.id, { status: e.target.value as Order['status'] })
                           }
-                          className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white"
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-white disabled:opacity-50"
                         >
                           <option value="pending">Beklemede / Yeni</option>
                           <option value="ready_to_ship">Gönderime Hazır</option>
@@ -486,7 +581,7 @@ export default function OrdersAndClaimsView({
                         <div className="flex justify-end gap-1.5">
                           <button
                             onClick={() => setPrintingOrder(ord)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold inline-flex items-center gap-1"
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
                           >
                             <Printer className="w-3.5 h-3.5" />
                             Kargo Fişi
@@ -494,7 +589,7 @@ export default function OrdersAndClaimsView({
                           {gs.showDetailOrderReceipt && (
                             <button
                               onClick={() => setPrintingOrder(ord)}
-                              className="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold inline-flex items-center gap-1"
+                              className="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
                             >
                               <FileText className="w-3.5 h-3.5" />
                               Sipariş Fişi
@@ -504,14 +599,21 @@ export default function OrdersAndClaimsView({
                             onClick={() =>
                               handleUpdateOrder(ord.id, { invoiceStatus: 'issued' })
                             }
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 border ${
+                            disabled={loading}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center gap-1 border disabled:opacity-50 cursor-pointer ${
                               ord.invoiceStatus === 'issued'
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                 : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
                             }`}
                           >
-                            <FileText className="w-3.5 h-3.5" />
-                            {ord.invoiceStatus === 'issued'
+                            {updatingOrderId === ord.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <FileText className="w-3.5 h-3.5" />
+                            )}
+                            {updatingOrderId === ord.id
+                              ? 'İşleniyor...'
+                              : ord.invoiceStatus === 'issued'
                               ? ord.invoiceNumber || 'Faturalandı'
                               : 'Fatura Kes'}
                           </button>
@@ -538,8 +640,12 @@ export default function OrdersAndClaimsView({
               disabled={loading}
               className="min-h-[38px] px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
             >
-              <DownloadCloud className="w-4 h-4 shrink-0" />
-              Canlı İadeleri Getir (Hepsiburada API)
+              {loading ? (
+                <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+              ) : (
+                <DownloadCloud className="w-4 h-4 shrink-0" />
+              )}
+              {loading ? 'İadeler Çekiliyor...' : 'Canlı İadeleri Getir (Hepsiburada API)'}
             </button>
           </div>
 

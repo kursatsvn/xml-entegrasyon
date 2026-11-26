@@ -18,6 +18,8 @@ import {
 import { PriceRuleItem, XmlSource, XmlSyncReport } from '@/types/sopyo';
 import { apiPost } from '@/lib/api-client';
 import { formatTrDateTime } from '@/lib/date-format';
+import { useOperation } from '@/components/ui/OperationFeedbackContext';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 interface XmlViewProps {
   xmlSources: XmlSource[];
@@ -32,9 +34,11 @@ export default function XmlView({
   onRefreshState,
   notify
 }: XmlViewProps) {
+  const { runOperation, confirmDialog, guardNavigation, clearAllDirtySources } = useOperation();
   const [subMode, setSubMode] = useState<'list' | 'wizard' | 'report'>('list');
   const [wizardStep, setWizardStep] = useState<number>(0); // 0..3
   const [editingSource, setEditingSource] = useState<XmlSource | null>(null);
+  const [wizardBaselineJson, setWizardBaselineJson] = useState<string>('');
   const [selectedReportSource, setSelectedReportSource] = useState<XmlSource | null>(null);
   const [activePriceMarketplaceTab, setActivePriceMarketplaceTab] = useState<'Trendyol' | 'Hepsiburada'>('Trendyol');
   const [syncingId, setSyncingId] = useState<string | null>(null);
@@ -43,26 +47,39 @@ export default function XmlView({
   const [syncLimit, setSyncLimit] = useState<number>(0);
   const [runningAiGuard, setRunningAiGuard] = useState(false);
 
+  const isWizardDirty =
+    subMode === 'wizard' &&
+    Boolean(editingSource) &&
+    JSON.stringify(editingSource) !== wizardBaselineJson;
+  useUnsavedChanges('xml-wizard', isWizardDirty);
+
   async function handleRunAiComplianceGuard() {
-    setRunningAiGuard(true);
-    try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'run_ai_compliance_scan' })
-      });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message, 'success');
-        await onRefreshState();
-      } else {
-        notify(data.message || 'AI Katalog taraması başarısız', 'error');
+    if (runningAiGuard) return;
+    await runOperation(
+      {
+        title: 'AI Katalog & İhlal Koruması Çalışıyor',
+        description:
+          'Tüm ürün başlıkları ve açıklamaları yasaklı kelimeler, kategori hataları ve çoklanan kartlar için taranıyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setRunningAiGuard(true);
+        try {
+          const res = await apiPost<{ ok?: boolean; message?: string }>('/api/state', {
+            action: 'run_ai_compliance_scan'
+          });
+          if (res.ok) {
+            setStage('Temizlenen katalog verileri panele yükleniyor...');
+            await onRefreshState();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'AI Katalog taraması başarısız', 'error');
+          }
+        } finally {
+          setRunningAiGuard(false);
+        }
       }
-    } catch (e: any) {
-      notify(e?.message || 'AI tarama hatası', 'error');
-    } finally {
-      setRunningAiGuard(false);
-    }
+    );
   }
   const [inspectingNodes, setInspectingNodes] = useState(false);
   const [detectedNodes, setDetectedNodes] = useState<{ tag: string; count: number }[]>([
@@ -97,8 +114,16 @@ export default function XmlView({
     { tag: 'DegerTanim', count: 10 }
   ]);
 
+  function startWizardWithSource(draft: XmlSource, step = 0) {
+    const snap = JSON.stringify(draft);
+    setEditingSource(draft);
+    setWizardBaselineJson(snap);
+    setWizardStep(step);
+    setSubMode('wizard');
+  }
+
   function openNewXmlWizard() {
-    setEditingSource({
+    const draft: XmlSource = {
       id: '',
       tenantId: '',
       xmlIdNumber: Math.floor(10000 + Math.random() * 90000),
@@ -198,113 +223,161 @@ export default function XmlView({
       status: 'active',
       lastCheckedAt: new Date().toISOString(),
       createdAt: new Date().toISOString()
-    });
-    setWizardStep(0);
-    setSubMode('wizard');
+    };
+    startWizardWithSource(draft, 0);
   }
 
-  function openEditWizard(src: XmlSource) {
-    setEditingSource(JSON.parse(JSON.stringify(src)));
-    setWizardStep(0);
-    setSubMode('wizard');
+  function openEditWizard(src: XmlSource, step = 0) {
+    startWizardWithSource(JSON.parse(JSON.stringify(src)), step);
   }
 
   async function handleInspectXmlNodes(url: string) {
-    if (!url) return;
-    setInspectingNodes(true);
-    try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'inspect_xml_nodes', url })
-      });
-      const data = await res.json();
-      if (data.ok && Array.isArray(data.tags)) {
-        setDetectedNodes(data.tags);
-        notify(
-          `XML başarıyla analiz edildi: ${data.totalProducts} ana ürün, ${data.totalVariants} varyant ve ${data.tags.length} etiket bulundu!`
-        );
-      } else {
-        notify(data.message || 'XML etiketleri okunamadı.', 'error');
+    if (!url || inspectingNodes) return;
+    await runOperation(
+      {
+        title: 'XML Kaynağı Analiz Ediliyor',
+        description: 'Tedarikçi XML bağlantısı okunuyor, ürün ve varyant etiketleri taranıyor...',
+        mode: 'blocking'
+      },
+      async () => {
+        setInspectingNodes(true);
+        try {
+          const res = await apiPost<{
+            ok?: boolean;
+            message?: string;
+            tags?: { tag: string; count: number }[];
+            totalProducts?: number;
+            totalVariants?: number;
+          }>('/api/state', {
+            action: 'inspect_xml_nodes',
+            url
+          });
+          if (res.ok && Array.isArray(res.data?.tags)) {
+            setDetectedNodes(res.data.tags);
+            notify(
+              `XML başarıyla analiz edildi: ${res.data.totalProducts} ana ürün, ${res.data.totalVariants} varyant ve ${res.data.tags.length} etiket bulundu!`
+            );
+          } else {
+            notify(res.message || 'XML etiketleri okunamadı.', 'error');
+          }
+        } finally {
+          setInspectingNodes(false);
+        }
       }
-    } catch (e: any) {
-      notify(e?.message || 'XML analiz hatası', 'error');
-    } finally {
-      setInspectingNodes(false);
-    }
+    );
   }
 
   async function handleSaveWizard() {
     if (!editingSource || savingWizard) return;
-    setSavingWizard(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'save_xml_source',
-        xmlSource: editingSource
-      });
-      if (res.ok) {
-        notify(res.message);
-        await onRefreshState();
-        setSubMode('list');
-      } else {
-        notify(res.message || 'Kaydedilemedi', 'error');
+    await runOperation(
+      {
+        title: 'XML Kaynağı ve Fiyat Kuralları Kaydediliyor',
+        description: 'XML tanımı ve pazaryeri fiyatlandırma kuralları sunucuya kaydediliyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setSavingWizard(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'save_xml_source',
+            xmlSource: editingSource
+          });
+          if (res.ok) {
+            setStage('Güncel ürün fiyatları ve kaynak listesi yükleniyor...');
+            clearAllDirtySources();
+            setWizardBaselineJson(JSON.stringify(editingSource));
+            await onRefreshState();
+            notify(res.message);
+            setSubMode('list');
+          } else {
+            notify(res.message || 'Kaydedilemedi', 'error');
+          }
+        } finally {
+          setSavingWizard(false);
+        }
       }
-    } finally {
-      setSavingWizard(false);
-    }
+    );
   }
 
   async function handleSyncLiveXml(src: XmlSource) {
-    setSyncingId(src.id);
-    try {
-      const res = await fetch('/api/state', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'sync_xml_source',
-          xmlSourceId: src.id,
-          limit: syncLimit
-        })
-      });
-      const data = await res.json();
-      if (data.ok) {
-        notify(data.message);
-        await onRefreshState();
-      } else {
-        notify(data.message || 'XML senkronizasyonu başarısız.', 'error');
+    if (syncingId) return;
+    const limitLabel = syncLimit > 0 ? `İlk ${syncLimit} Ürün` : 'Tüm Ürünler';
+    await runOperation(
+      {
+        title: `Canlı XML Çekiliyor (${src.name} • ${limitLabel})`,
+        description:
+          'Tedarikçi XML verisi indiriliyor, AI yasaklı kelime temizliği, tekilleştirme ve fiyat kuralları uygulanıyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setSyncingId(src.id);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'sync_xml_source',
+            xmlSourceId: src.id,
+            limit: syncLimit
+          });
+          if (res.ok) {
+            setStage('Güncellenen ürünler, kategoriler ve senkronizasyon raporu yükleniyor...');
+            await onRefreshState();
+            notify(res.message);
+          } else {
+            notify(res.message || 'XML senkronizasyonu başarısız.', 'error');
+          }
+        } finally {
+          setSyncingId(null);
+        }
       }
-    } catch (e: any) {
-      notify(e?.message || 'XML çekilirken hata oluştu', 'error');
-    } finally {
-      setSyncingId(null);
-    }
+    );
   }
 
   async function handleDeleteXml(src: XmlSource) {
     if (deletingId) return;
-    const confirmed = window.confirm(
-      `"${src.name}" XML kaynağını silmek istediğinizden emin misiniz?`
-    );
+    const confirmed = await confirmDialog({
+      title: `"${src.name}" XML Kaynağını Sil`,
+      message: `"${src.name}" XML kaynağını sistemden kaldırmak istediğinizden emin misiniz?`,
+      confirmText: 'Evet, Devam Et',
+      cancelText: 'Vazgeç',
+      variant: 'danger'
+    });
     if (!confirmed) return;
-    const deleteProducts = window.confirm(
-      `XML kaynağı ile gelen ürünler de sistemden silinsin mi? (Tamam = Silinsin, İptal = Ürünler Kalsın)`
-    );
-    setDeletingId(src.id);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'delete_xml_source',
-        xmlSourceId: src.id,
-        deleteProducts
-      });
-      if (res.ok) {
-        notify(res.message);
-        await onRefreshState();
-      } else {
-        notify(res.message || 'XML kaynağı silinemedi.', 'error');
+
+    const deleteProducts = await confirmDialog({
+      title: 'XML Ürünleri Ne Olsun?',
+      message: `"${src.name}" kaynağından gelen ürünler de katalogdan silinsin mi?\n\n• "Ürünleri de Sil" seçerseniz kaynaktaki ürünler kaldırılır.\n• "Ürünleri Koru" seçerseniz yalnızca XML bağlantısı silinir.`,
+      confirmText: 'Ürünleri de Sil',
+      cancelText: 'Ürünleri Koru (Yalnızca XML Sil)',
+      variant: 'warning'
+    });
+
+    await runOperation(
+      {
+        title: `"${src.name}" XML Kaynağı Siliniyor`,
+        description: deleteProducts
+          ? 'XML kaynağı ve bağlı ürünleri veritabanından kaldırılıyor...'
+          : 'XML kaynak tanımı kaldırılıyor, mevcut ürünler korunuyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setDeletingId(src.id);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'delete_xml_source',
+            xmlSourceId: src.id,
+            deleteProducts
+          });
+          if (res.ok) {
+            setStage('Panel verileri güncelleniyor...');
+            await onRefreshState();
+            notify(res.message);
+          } else {
+            notify(res.message || 'XML kaynağı silinemedi.', 'error');
+          }
+        } finally {
+          setDeletingId(null);
+        }
       }
-    } finally {
-      setDeletingId(null);
-    }
+    );
   }
 
   function updateMarketplaceRule(
@@ -540,7 +613,15 @@ export default function XmlView({
               : 'Yeni XML Ürün Kaynağı Tanımla'}
           </h1>
           <button
-            onClick={() => setSubMode('list')}
+            onClick={() =>
+              guardNavigation(
+                () => {
+                  setEditingSource(null);
+                  setSubMode('list');
+                },
+                'XML sihirbazında kaydetmediğiniz değişiklikler bulunuyor. Kaydetmeden çıkmak istiyor musunuz?'
+              )
+            }
             className="w-full sm:w-auto min-h-[42px] px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer shrink-0"
           >
             ← XML Ürün Kaynaklarına Dön
@@ -2314,11 +2395,7 @@ export default function XmlView({
                     </button>
 
                     <button
-                      onClick={() => {
-                        setEditingSource(JSON.parse(JSON.stringify(src)));
-                        setWizardStep(2);
-                        setSubMode('wizard');
-                      }}
+                      onClick={() => openEditWizard(src, 2)}
                       title="XML Fiyat Ayarları (% Yüzde + Ekstra TL)"
                       className="flex-1 sm:flex-none min-h-[42px] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold cursor-pointer"
                     >

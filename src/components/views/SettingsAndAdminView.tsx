@@ -13,6 +13,7 @@ import {
   Activity,
   ShieldCheck,
   CheckCircle2,
+  Loader2,
   Save,
   Users,
   Building2,
@@ -21,6 +22,8 @@ import {
 import GeneralSettingsPanel from '@/components/views/GeneralSettingsPanel';
 import { apiPost } from '@/lib/api-client';
 import { formatTrDateTime } from '@/lib/date-format';
+import { useOperation } from '@/components/ui/OperationFeedbackContext';
+import { useIsFormDirty, useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 interface SettingsAndAdminViewProps {
   initialTab?: 'integrations' | 'settings' | 'operations' | 'admin';
@@ -45,6 +48,7 @@ export default function SettingsAndAdminView({
   onRefresh,
   notify
 }: SettingsAndAdminViewProps) {
+  const { runOperation, guardNavigation, clearAllDirtySources } = useOperation();
   const [tab, setTab] = useState<'integrations' | 'settings' | 'operations' | 'admin'>(initialTab);
   const [loading, setLoading] = useState(false);
 
@@ -138,7 +142,7 @@ export default function SettingsAndAdminView({
       marketplace: 'hepsiburada' as const,
       storeName: tenant.name,
       supplierOrMerchantId: '',
-      apiKey: '',
+      apiKey: 'kodanka_dev',
       apiSecret: '',
       isActive: true,
       autoConfirmOrders: true,
@@ -159,65 +163,100 @@ export default function SettingsAndAdminView({
     setHbForm(nextHb);
   }, [tenant.id, tenant.name, marketplaceAccounts]);
 
+  const isTyDirty = useIsFormDirty(tyForm, tyExisting, tab === 'integrations');
+  const isHbDirty = useIsFormDirty(hbForm, hbExisting, tab === 'integrations');
+  const isTenantDirty = useIsFormDirty(tenantForm, tenant, tab === 'settings');
+  useUnsavedChanges('settings-and-integrations', isTyDirty || isHbDirty || isTenantDirty);
+
   const handleSaveMarketplace = async (account: MarketplaceAccount) => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'save_marketplace_account',
-        account
-      });
-      notify(res.message, res.ok ? 'success' : 'error');
-      if (res.ok) {
-        await onRefresh();
+    const channelLabel = account.marketplace === 'trendyol' ? 'Trendyol' : 'Hepsiburada';
+    await runOperation(
+      {
+        title: `${channelLabel} API Ayarları Kaydediliyor ve Test Ediliyor`,
+        description: `Canlı ${channelLabel} API sunucusuna kimlik doğrulama ve bağlantı testi yapılıyor...`,
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'save_marketplace_account',
+            account
+          });
+          if (res.ok) {
+            setStage('Güncel mağaza bağlantı durumu yükleniyor...');
+            clearAllDirtySources();
+            await onRefresh();
+          }
+          notify(res.message, res.ok ? 'success' : 'error');
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleSaveTenantSettings = async () => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'update_tenant_settings',
-        settings: tenantForm
-      });
-      if (res.ok) {
-        notify(res.message, 'success');
-        await onRefresh();
-      } else {
-        notify(res.message || 'Genel ayarlar kaydedilemedi.', 'error');
+    await runOperation(
+      {
+        title: 'Genel Mağaza Ayarları Kaydediliyor',
+        description:
+          'Firma bilgileri, fatura maskeleme, kargo etiketi ve ürün listesi ayarlarınız kaydediliyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'update_tenant_settings',
+            settings: tenantForm
+          });
+          if (res.ok) {
+            setStage('Güncel mağaza ayarları panele yükleniyor...');
+            clearAllDirtySources();
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Genel ayarlar kaydedilemedi.', 'error');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleSwitchTenant = async (targetTenantId: string) => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'switch_tenant',
-          targetTenantId
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        notify(data.message || 'Aktif mağaza değiştirildi.', 'success');
-        await onRefresh();
-      } else {
-        notify(data?.message || 'Mağaza değiştirilemedi.', 'error');
-      }
-    } catch {
-      notify('Mağaza değiştirme sırasında bağlantı hatası oluştu.', 'error');
-    } finally {
-      setLoading(false);
-    }
+    if (loading) return;
+    guardNavigation(() => {
+      void runOperation(
+        {
+          title: 'Aktif Mağaza Değiştiriliyor',
+          description: 'Seçilen mağaza oturumu ve katalog verileri yükleniyor...',
+          mode: 'blocking'
+        },
+        async ({ setStage }) => {
+          setLoading(true);
+          try {
+            const res = await apiPost('/api/auth', {
+              action: 'switch_tenant',
+              targetTenantId
+            });
+            if (res.ok) {
+              setStage('Yeni mağaza verileri yükleniyor...');
+              await onRefresh();
+              notify(res.message || 'Aktif mağaza değiştirildi.', 'success');
+            } else {
+              notify(res.message || 'Mağaza değiştirilemedi.', 'error');
+            }
+          } finally {
+            setLoading(false);
+          }
+        }
+      );
+    });
   };
 
   return (
@@ -226,7 +265,7 @@ export default function SettingsAndAdminView({
       <div className="bg-white rounded-xl border border-slate-200 p-2.5 sm:p-4 shadow-sm">
         <div className="flex overflow-x-auto no-scrollbar items-center gap-2 pb-0.5">
           <button
-            onClick={() => setTab('integrations')}
+            onClick={() => guardNavigation(() => setTab('integrations'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'integrations'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -237,7 +276,7 @@ export default function SettingsAndAdminView({
             Pazaryeri API Entegrasyonları
           </button>
           <button
-            onClick={() => setTab('settings')}
+            onClick={() => guardNavigation(() => setTab('settings'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'settings'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -248,7 +287,7 @@ export default function SettingsAndAdminView({
             Genel Ayarlar &amp; Gizli Paketleme
           </button>
           <button
-            onClick={() => setTab('operations')}
+            onClick={() => guardNavigation(() => setTab('operations'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               tab === 'operations'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -260,7 +299,7 @@ export default function SettingsAndAdminView({
           </button>
           {isSuperAdmin && (
             <button
-              onClick={() => setTab('admin')}
+              onClick={() => guardNavigation(() => setTab('admin'))}
               className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
                 tab === 'admin'
                   ? 'bg-purple-600 text-white shadow-sm'
@@ -385,10 +424,14 @@ export default function SettingsAndAdminView({
                 <button
                   onClick={() => handleSaveMarketplace(tyForm)}
                   disabled={loading}
-                  className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
-                  <Save className="w-4 h-4 shrink-0" />
-                  Trendyol Ayarlarını Kaydet &amp; Test Et
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 shrink-0" />
+                  )}
+                  {loading ? 'Test Ediliyor...' : 'Trendyol Ayarlarını Kaydet & Test Et'}
                 </button>
               </div>
             </div>
@@ -521,10 +564,14 @@ export default function SettingsAndAdminView({
                 <button
                   onClick={() => handleSaveMarketplace(hbForm)}
                   disabled={loading}
-                  className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
-                  <Save className="w-4 h-4 shrink-0" />
-                  Hepsiburada Ayarlarını Kaydet &amp; Test Et
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 shrink-0" />
+                  )}
+                  {loading ? 'Test Ediliyor...' : 'Hepsiburada Ayarlarını Kaydet & Test Et'}
                 </button>
               </div>
             </div>
@@ -619,10 +666,15 @@ export default function SettingsAndAdminView({
                     {t.id !== tenant.id && (
                       <button
                         onClick={() => handleSwitchTenant(t.id)}
-                        className="w-full sm:w-auto min-h-[40px] px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                        disabled={loading}
+                        className="w-full sm:w-auto min-h-[40px] px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                       >
-                        <ArrowRightLeft className="w-3.5 h-3.5" />
-                        Mağazaya Geç
+                        {loading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <ArrowRightLeft className="w-3.5 h-3.5" />
+                        )}
+                        {loading ? 'Geçiliyor...' : 'Mağazaya Geç'}
                       </button>
                     )}
                   </div>

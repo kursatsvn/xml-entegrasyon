@@ -9,6 +9,8 @@ import {
 } from '@/types/sopyo';
 import { MARKETPLACE_CATEGORY_CATALOG } from '@/lib/category-matcher';
 import { apiPost } from '@/lib/api-client';
+import { useOperation } from '@/components/ui/OperationFeedbackContext';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -20,7 +22,8 @@ import {
   Sliders,
   Tag,
   X,
-  Save
+  Save,
+  Loader2
 } from 'lucide-react';
 
 interface CatalogMappingsViewProps {
@@ -42,6 +45,7 @@ export default function CatalogMappingsView({
   onRefresh,
   notify
 }: CatalogMappingsViewProps) {
+  const { runOperation, confirmDialog, guardNavigation, clearAllDirtySources } = useOperation();
   const [section, setSection] = useState<'categories' | 'brands' | 'variants' | 'tags'>(
     initialSection
   );
@@ -49,6 +53,7 @@ export default function CatalogMappingsView({
   const [statusFilter, setStatusFilter] = useState<'all' | 'mapped' | 'unmapped'>('all');
   const [loading, setLoading] = useState(false);
   const [editingCat, setEditingCat] = useState<CategoryMapping | null>(null);
+  const [catBaselineJson, setCatBaselineJson] = useState<string>('');
   const [defaultBrandInput, setDefaultBrandInput] = useState("Aria's Closet");
   const [hbSearchQuery, setHbSearchQuery] = useState('');
   const [hbSearchLoading, setHbSearchLoading] = useState(false);
@@ -57,27 +62,64 @@ export default function CatalogMappingsView({
   >([]);
   const [hbAttrLoading, setHbAttrLoading] = useState(false);
 
+  const isCatDirty = Boolean(editingCat) && JSON.stringify(editingCat) !== catBaselineJson;
+  useUnsavedChanges('category-edit-modal', isCatDirty);
+
+  const openCategoryModal = (cat: CategoryMapping) => {
+    const clone = JSON.parse(JSON.stringify(cat)) as CategoryMapping;
+    setEditingCat(clone);
+    setCatBaselineJson(JSON.stringify(clone));
+    setHbSearchQuery('');
+    setHbSearchResults([]);
+  };
+
+  const requestCloseCategoryModal = async () => {
+    if (loading || hbAttrLoading || hbSearchLoading) return;
+    if (isCatDirty) {
+      const ok = await confirmDialog({
+        title: 'Kaydedilmemiş Kategori Eşleştirmesi',
+        message:
+          'Bu kategoride yaptığınız eşleştirme değişiklikleri henüz kaydedilmedi. Kaydetmeden kapatmak istiyor musunuz?',
+        confirmText: 'Kaydetmeden Kapat',
+        cancelText: 'Düzenlemeye Devam Et',
+        variant: 'warning'
+      });
+      if (!ok) return;
+    }
+    setEditingCat(null);
+    setCatBaselineJson('');
+  };
+
   const handleSearchHbCategories = async () => {
     if (hbSearchLoading) return;
-    setHbSearchLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'search_hepsiburada_categories',
-        query: hbSearchQuery || editingCat?.name || '',
-        limit: 40
-      });
-      if (res.ok) {
-        const list = res.data?.categories || [];
-        setHbSearchResults(list);
-        if (list.length === 0) {
-          notify('Hepsiburada canlı kategorilerinde eşleşen sonuç bulunamadı.', 'error');
+    await runOperation(
+      {
+        title: 'Canlı Hepsiburada Kategorileri Aranıyor',
+        description: 'MPOP yaprak kategori ağacı sorgulanıyor...',
+        mode: 'soft'
+      },
+      async () => {
+        setHbSearchLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'search_hepsiburada_categories',
+            query: hbSearchQuery || editingCat?.name || '',
+            limit: 40
+          });
+          if (res.ok) {
+            const list = res.data?.categories || [];
+            setHbSearchResults(list);
+            if (list.length === 0) {
+              notify('Hepsiburada canlı kategorilerinde eşleşen sonuç bulunamadı.', 'error');
+            }
+          } else {
+            notify(res.message || 'Hepsiburada kategorileri çekilemedi.', 'error');
+          }
+        } finally {
+          setHbSearchLoading(false);
         }
-      } else {
-        notify(res.message || 'Hepsiburada kategorileri çekilemedi.', 'error');
       }
-    } finally {
-      setHbSearchLoading(false);
-    }
+    );
   };
 
   const handleSelectLiveHbCategory = async (catId: number, displayName: string) => {
@@ -88,35 +130,44 @@ export default function CatalogMappingsView({
       hepsiburadaCategoryName: displayName,
       hepsiburadaStatus: 'mapped'
     });
-    setHbAttrLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'fetch_hepsiburada_category_attributes',
-        categoryId: catId
-      });
-      if (res.ok && Array.isArray(res.data?.attributes)) {
-        const mandatoryAttrs = res.data.attributes
-          .filter((a: any) => !a.isBase && !a.isVariant && a.mandatory)
-          .slice(0, 12)
-          .map((a: any) => ({
-            attributeName: String(a.id || a.name),
-            mappedValue: a.name === 'Cinsiyet' ? 'Kadın' : '',
-            required: true
-          }));
-        if (mandatoryAttrs.length > 0) {
-          setEditingCat((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  hepsiburadaAttributes: mandatoryAttrs
-                }
-              : prev
-          );
+    await runOperation(
+      {
+        title: 'Kategori Zorunlu Özellikleri Çekiliyor',
+        description: `Hepsiburada #${catId} kategori şeması okunuyor...`,
+        mode: 'soft'
+      },
+      async () => {
+        setHbAttrLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'fetch_hepsiburada_category_attributes',
+            categoryId: catId
+          });
+          if (res.ok && Array.isArray(res.data?.attributes)) {
+            const mandatoryAttrs = res.data.attributes
+              .filter((a: any) => !a.isBase && !a.isVariant && a.mandatory)
+              .slice(0, 12)
+              .map((a: any) => ({
+                attributeName: String(a.id || a.name),
+                mappedValue: a.name === 'Cinsiyet' ? 'Kadın' : '',
+                required: true
+              }));
+            if (mandatoryAttrs.length > 0) {
+              setEditingCat((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      hepsiburadaAttributes: mandatoryAttrs
+                    }
+                  : prev
+              );
+            }
+          }
+        } finally {
+          setHbAttrLoading(false);
         }
       }
-    } finally {
-      setHbAttrLoading(false);
-    }
+    );
   };
 
   React.useEffect(() => {
@@ -125,73 +176,117 @@ export default function CatalogMappingsView({
 
   const handleAutoMatchCategories = async () => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', { action: 'auto_match_all_categories' });
-      if (res.ok) {
-        notify(res.message, 'success');
-        await onRefresh();
-      } else {
-        notify(res.message || 'Hata oluştu', 'error');
+    await runOperation(
+      {
+        title: 'Tüm Kategoriler Otomatik Eşitleniyor',
+        description:
+          'Canlı Hepsiburada MPOP yaprak kategorileri ve Trendyol kategori şablonları taranarak otomatik eşleştiriliyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', { action: 'auto_match_all_categories' });
+          if (res.ok) {
+            setStage('Eşitlenen kategori listesi yenileniyor...');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Hata oluştu', 'error');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleSaveSingleCategory = async () => {
-    if (!editingCat || loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'save_category_mapping',
-        category: editingCat
-      });
-      if (res.ok) {
-        notify(res.message, 'success');
-        setEditingCat(null);
-        await onRefresh();
-      } else {
-        notify(res.message || 'Kategori eşleştirmesi kaydedilemedi.', 'error');
+    if (!editingCat || loading || hbAttrLoading) return;
+    await runOperation(
+      {
+        title: `Kategori Kaydediliyor (${editingCat.name})`,
+        description: 'Trendyol ve Hepsiburada kategori eşleştirmesi veritabanına yazılıyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'save_category_mapping',
+            category: editingCat
+          });
+          if (res.ok) {
+            setStage('Kategori listesi güncelleniyor...');
+            clearAllDirtySources();
+            setEditingCat(null);
+            setCatBaselineJson('');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Kategori eşleştirmesi kaydedilemedi.', 'error');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleAutoMatchBrands = async () => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', {
-        action: 'auto_match_all_brands',
-        defaultBrandName: defaultBrandInput
-      });
-      if (res.ok) {
-        notify(res.message, 'success');
-        await onRefresh();
-      } else {
-        notify(res.message || 'Markalar eşitlenemedi.', 'error');
+    await runOperation(
+      {
+        title: 'Tüm Markalar Otomatik Eşitleniyor',
+        description: `XML markaları "${defaultBrandInput}" varsayılan mağaza markası ile Trendyol & Hepsiburada için eşitleniyor...`,
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', {
+            action: 'auto_match_all_brands',
+            defaultBrandName: defaultBrandInput
+          });
+          if (res.ok) {
+            setStage('Marka listesi yenileniyor...');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Markalar eşitlenemedi.', 'error');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const handleAutoMatchVariants = async () => {
     if (loading) return;
-    setLoading(true);
-    try {
-      const res = await apiPost('/api/state', { action: 'auto_match_all_variants' });
-      if (res.ok) {
-        notify(res.message, 'success');
-        await onRefresh();
-      } else {
-        notify(res.message || 'Seçenek grupları eşitlenemedi.', 'error');
+    await runOperation(
+      {
+        title: 'Renk ve Beden Seçenek Grupları Eşitleniyor',
+        description:
+          'XML varyant seçenekleri ve "Görsel" renk koruması Trendyol & Hepsiburada için eşitleniyor...',
+        mode: 'blocking'
+      },
+      async ({ setStage }) => {
+        setLoading(true);
+        try {
+          const res = await apiPost('/api/state', { action: 'auto_match_all_variants' });
+          if (res.ok) {
+            setStage('Varyant grupları yenileniyor...');
+            await onRefresh();
+            notify(res.message, 'success');
+          } else {
+            notify(res.message || 'Seçenek grupları eşitlenemedi.', 'error');
+          }
+        } finally {
+          setLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   const renderStatusBadge = (
@@ -247,7 +342,7 @@ export default function CatalogMappingsView({
       <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shadow-sm">
         <div className="flex overflow-x-auto no-scrollbar items-center gap-2 pb-0.5">
           <button
-            onClick={() => setSection('categories')}
+            onClick={() => guardNavigation(() => setSection('categories'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               section === 'categories'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -258,7 +353,7 @@ export default function CatalogMappingsView({
             Kategoriler ({categories.length})
           </button>
           <button
-            onClick={() => setSection('brands')}
+            onClick={() => guardNavigation(() => setSection('brands'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               section === 'brands'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -269,7 +364,7 @@ export default function CatalogMappingsView({
             Markalar ({brands.length})
           </button>
           <button
-            onClick={() => setSection('variants')}
+            onClick={() => guardNavigation(() => setSection('variants'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               section === 'variants'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -280,7 +375,7 @@ export default function CatalogMappingsView({
             Varyantlar ({variantGroups.length})
           </button>
           <button
-            onClick={() => setSection('tags')}
+            onClick={() => guardNavigation(() => setSection('tags'))}
             className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
               section === 'tags'
                 ? 'bg-blue-600 text-white shadow-sm'
@@ -298,8 +393,12 @@ export default function CatalogMappingsView({
             disabled={loading}
             className="w-full lg:w-auto min-h-[44px] px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer shrink-0"
           >
-            <Sparkles className="w-4 h-4 shrink-0" />
-            Tüm Kategorileri Otomatik Eşitle
+            {loading ? (
+              <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4 shrink-0" />
+            )}
+            {loading ? 'Kategoriler Eşitleniyor...' : 'Tüm Kategorileri Otomatik Eşitle'}
           </button>
         )}
       </div>
@@ -366,7 +465,7 @@ export default function CatalogMappingsView({
                   </div>
                 )}
                 <button
-                  onClick={() => setEditingCat({ ...cat })}
+                  onClick={() => openCategoryModal(cat)}
                   className="w-full min-h-[42px] px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
                 >
                   Kategoriyi Eşitle
@@ -422,8 +521,8 @@ export default function CatalogMappingsView({
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <button
-                        onClick={() => setEditingCat({ ...cat })}
-                        className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+                        onClick={() => openCategoryModal(cat)}
+                        className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer"
                       >
                         Eşitle
                       </button>
@@ -460,10 +559,14 @@ export default function CatalogMappingsView({
               <button
                 onClick={handleAutoMatchBrands}
                 disabled={loading}
-                className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer shrink-0"
               >
-                <Sparkles className="w-4 h-4 shrink-0" />
-                Tüm Markaları Eşitle
+                {loading ? (
+                  <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 shrink-0" />
+                )}
+                {loading ? 'Eşitleniyor...' : 'Tüm Markaları Eşitle'}
               </button>
             </div>
           </div>
@@ -580,10 +683,10 @@ export default function CatalogMappingsView({
             <button
               onClick={handleAutoMatchVariants}
               disabled={loading}
-              className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold flex items-center gap-2"
+              className="px-4 py-2 min-h-[42px] rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-sm font-semibold flex items-center gap-2 cursor-pointer"
             >
-              <Sparkles className="w-4 h-4" />
-              Seçenek Gruplarını Otomatik Eşitle
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {loading ? 'Eşitleniyor...' : 'Seçenek Gruplarını Otomatik Eşitle'}
             </button>
           </div>
 
@@ -699,8 +802,9 @@ export default function CatalogMappingsView({
                 <p className="text-xs text-slate-300 mt-0.5 truncate">{editingCat.xmlCategoryTree}</p>
               </div>
               <button
-                onClick={() => setEditingCat(null)}
-                className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 cursor-pointer shrink-0"
+                onClick={() => void requestCloseCategoryModal()}
+                disabled={loading || hbAttrLoading}
+                className="p-2 rounded-lg hover:bg-slate-800 disabled:opacity-40 text-slate-300 cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -826,7 +930,10 @@ export default function CatalogMappingsView({
 
                   <div className="space-y-1.5 pt-1">
                     {hbAttrLoading && (
-                      <div className="text-[11px] text-amber-800">Zorunlu özellikler yükleniyor...</div>
+                      <div className="text-[11px] font-semibold text-amber-800 flex items-center gap-1.5 bg-amber-100/70 px-2.5 py-1.5 rounded-lg">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                        Zorunlu kategori özellikleri çekiliyor, lütfen bekleyin...
+                      </div>
                     )}
                     {editingCat.hepsiburadaAttributes.map((attr, i) => (
                       <div key={i} className="flex items-center justify-between gap-2 text-xs">
@@ -851,18 +958,27 @@ export default function CatalogMappingsView({
 
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col-reverse sm:flex-row justify-end gap-2 shrink-0 pb-safe">
               <button
-                onClick={() => setEditingCat(null)}
-                className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium cursor-pointer"
+                onClick={() => void requestCloseCategoryModal()}
+                disabled={loading || hbAttrLoading}
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2 rounded-lg border border-slate-300 disabled:opacity-50 text-slate-700 text-sm font-medium cursor-pointer"
               >
                 Vazgeç
               </button>
               <button
                 onClick={handleSaveSingleCategory}
-                disabled={loading}
-                className="w-full sm:w-auto min-h-[44px] px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                disabled={loading || hbAttrLoading || hbSearchLoading}
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Save className="w-4 h-4" />
-                Eşleştirmeyi Kaydet
+                {loading || hbAttrLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                {hbAttrLoading
+                  ? 'Özellikler Bekleniyor...'
+                  : loading
+                  ? 'Kaydediliyor...'
+                  : 'Eşleştirmeyi Kaydet'}
               </button>
             </div>
           </div>

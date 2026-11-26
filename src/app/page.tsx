@@ -4,6 +4,10 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { formatTrTime } from '@/lib/date-format';
+import {
+  OperationFeedbackProvider,
+  useOperation
+} from '@/components/ui/OperationFeedbackContext';
 
 function ViewLoader() {
   return (
@@ -117,23 +121,82 @@ interface StatePayload {
 }
 
 export default function SopyoCloneApp() {
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
+  const notify = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      setToast((prev) => (prev?.msg === msg ? null : prev));
+    }, 4500);
+  }, []);
+
+  return (
+    <OperationFeedbackProvider onBlockedAttempt={(msg) => notify(msg, 'error')}>
+      {/* Sağ Üst Bildirim Toast (En Üst Katman z-[90], Mobil + iOS Notch uyumlu) */}
+      {toast && (
+        <div
+          className={`fixed top-safe-offset inset-x-3 sm:inset-x-auto sm:top-5 sm:right-5 z-[90] sm:max-w-md px-4 py-3.5 rounded-xl shadow-2xl border flex items-center gap-3 text-sm font-semibold transition-all no-print ${
+            toast.type === 'success'
+              ? 'bg-emerald-950 text-white border-emerald-700'
+              : 'bg-rose-950 text-white border-rose-700'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+          )}
+          <span className="leading-snug">{toast.msg}</span>
+        </div>
+      )}
+      <SopyoDashboardShell notify={notify} />
+    </OperationFeedbackProvider>
+  );
+}
+
+function SopyoDashboardShell({
+  notify
+}: {
+  notify: (msg: string, type?: 'success' | 'error') => void;
+}) {
   const router = useRouter();
+  const { runOperation, guardNavigation, isBusy } = useOperation();
   const [route, setRoute] = useState<ActiveRoute>('dashboard');
   const [data, setData] = useState<StatePayload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showIosInstallHint, setShowIosInstallHint] = useState(false);
 
-  const navigateTo = useCallback((target: ActiveRoute) => {
-    setRoute(target);
-    setMobileMenuOpen(false);
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, []);
+  const navigateTo = useCallback(
+    (target: ActiveRoute) => {
+      if (target === route) {
+        setMobileMenuOpen(false);
+        return;
+      }
+      guardNavigation(() => {
+        setRoute(target);
+        setMobileMenuOpen(false);
+        if (typeof window !== 'undefined') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      });
+    },
+    [guardNavigation, route]
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -178,26 +241,6 @@ export default function SopyoCloneApp() {
     }
   };
 
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (toastTimerRef.current) {
-        clearTimeout(toastTimerRef.current);
-      }
-    };
-  }, []);
-
-  const notify = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ msg, type });
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = setTimeout(() => {
-      setToast((prev) => (prev?.msg === msg ? null : prev));
-    }, 4500);
-  }, []);
-
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const fetchState = useCallback(async () => {
@@ -229,38 +272,61 @@ export default function SopyoCloneApp() {
   }, [fetchState]);
 
   const handleLogout = async () => {
-    try {
-      await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'logout' })
-      });
-    } catch (e) {
-      console.error('Logout error:', e);
-    } finally {
-      router.push('/login');
-      router.refresh();
-    }
+    guardNavigation(() => {
+      void runOperation(
+        {
+          title: 'Güvenli Çıkış Yapılıyor',
+          description: 'Oturumunuz sonlandırılıyor, lütfen bekleyin...',
+          mode: 'blocking'
+        },
+        async () => {
+          try {
+            await fetch('/api/auth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'logout' })
+            });
+          } catch (e) {
+            console.error('Logout error:', e);
+          }
+          router.push('/login');
+          router.refresh();
+        }
+      );
+    });
   };
 
   const handleQuickSwitchTenant = async (targetTenantId: string) => {
-    try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'switch_tenant', targetTenantId })
-      });
-      const json = await res.json();
-      if (res.ok && json.ok) {
-        notify(json.message || 'Aktif mağaza değiştirildi.', 'success');
-        await fetchState();
-      } else {
-        notify(json?.message || 'Mağaza değiştirilemedi.', 'error');
-      }
-    } catch (e) {
-      console.error('Switch tenant error:', e);
-      notify('Mağaza değiştirme sırasında bağlantı hatası oluştu.', 'error');
-    }
+    if (!targetTenantId || targetTenantId === data?.tenant?.id) return;
+    guardNavigation(() => {
+      void runOperation(
+        {
+          title: 'Aktif Mağaza Değiştiriliyor',
+          description: 'Seçilen mağaza oturumu ve katalog verileri yükleniyor...',
+          mode: 'blocking'
+        },
+        async ({ setStage }) => {
+          try {
+            const res = await fetch('/api/auth', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'switch_tenant', targetTenantId })
+            });
+            const json = await res.json();
+            if (res.ok && json.ok) {
+              setStage('Yeni mağazanın ürünleri ve siparişleri getiriliyor...');
+              await fetchState();
+              notify(json.message || 'Aktif mağaza değiştirildi.', 'success');
+            } else {
+              notify(json?.message || 'Mağaza değiştirilemedi.', 'error');
+            }
+          } catch (e) {
+            console.error('Switch tenant error:', e);
+            notify('Mağaza değiştirme sırasında bağlantı hatası oluştu.', 'error');
+          }
+        }
+      );
+    });
   };
 
   if (loading || !data) {
@@ -435,24 +501,6 @@ export default function SopyoCloneApp() {
         className="fixed top-0 inset-x-0 h-safe-top bg-white z-[55] lg:hidden pointer-events-none no-print"
       />
 
-      {/* Sağ Üst Bildirim Toast (Mobil + iOS Notch uyumlu) */}
-      {toast && (
-        <div
-          className={`fixed top-safe-offset inset-x-3 sm:inset-x-auto sm:top-5 sm:right-5 z-[60] sm:max-w-md px-4 py-3.5 rounded-xl shadow-2xl border flex items-center gap-3 text-sm font-semibold transition-all no-print ${
-            toast.type === 'success'
-              ? 'bg-emerald-950 text-white border-emerald-700'
-              : 'bg-rose-950 text-white border-rose-700'
-          }`}
-        >
-          {toast.type === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
-          )}
-          <span className="leading-snug">{toast.msg}</span>
-        </div>
-      )}
-
       {/* Mobil Sol Menü Arka Plan Karartması */}
       {mobileMenuOpen && (
         <div
@@ -500,8 +548,9 @@ export default function SopyoCloneApp() {
           {data.allTenants.length > 1 ? (
             <select
               value={data.tenant.id}
+              disabled={isBusy}
               onChange={(e) => handleQuickSwitchTenant(e.target.value)}
-              className="w-full px-2.5 py-2 rounded-lg !bg-slate-800 border border-slate-700 !text-white text-xs font-bold"
+              className="w-full px-2.5 py-2 rounded-lg !bg-slate-800 border border-slate-700 !text-white text-xs font-bold disabled:opacity-50"
             >
               {data.allTenants.map((t) => (
                 <option key={t.id} value={t.id} className="bg-slate-800 text-white">
@@ -656,8 +705,9 @@ export default function SopyoCloneApp() {
                 <span className="md:hidden">XML</span>
               </button>
               <button
-                onClick={() => router.push('/login')}
-                className="hidden sm:inline-flex px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold"
+                onClick={() => guardNavigation(() => router.push('/login'))}
+                disabled={isBusy}
+                className="hidden sm:inline-flex px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold disabled:opacity-50"
               >
                 Hesap / Yeni Mağaza Kaydı
               </button>
@@ -779,7 +829,7 @@ export default function SopyoCloneApp() {
                       Son Siparişler & Çapraz Stok Düşümü
                     </h3>
                     <button
-                      onClick={() => setRoute('orders')}
+                      onClick={() => navigateTo('orders')}
                       className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
                     >
                       Tüm Siparişler <ChevronRight className="w-3.5 h-3.5" />
@@ -818,7 +868,7 @@ export default function SopyoCloneApp() {
                       Son İşlem Merkezi Kayıtları
                     </h3>
                     <button
-                      onClick={() => setRoute('operations')}
+                      onClick={() => navigateTo('operations')}
                       className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
                     >
                       Tüm Kayıtlar <ChevronRight className="w-3.5 h-3.5" />
