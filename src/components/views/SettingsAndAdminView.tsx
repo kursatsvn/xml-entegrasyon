@@ -442,14 +442,18 @@ export default function SettingsAndAdminView({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Entegratör Kullanıcı Adı
+                    Entegratör Kullanıcı Adı (User-Agent)
                   </label>
                   <input
                     type="text"
                     value={hbForm.apiKey}
                     onChange={(e) => setHbForm({ ...hbForm, apiKey: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs"
+                    placeholder="Örn: kodanka_dev"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs bg-white text-slate-900"
                   />
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                    Hepsiburada panelindeki `_dev` uzantılı entegratör adı (`User-Agent`).
+                  </span>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">
@@ -459,12 +463,30 @@ export default function SettingsAndAdminView({
                     type="password"
                     value={hbForm.apiSecret}
                     onChange={(e) => setHbForm({ ...hbForm, apiSecret: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 font-mono text-xs bg-white text-slate-900"
                   />
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                    Basic Auth otomatik `Merchant ID : Servis Anahtarı` ile gönderilir.
+                  </span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
+                    API Ortamı
+                  </label>
+                  <select
+                    value={hbForm.environment || 'production'}
+                    onChange={(e) =>
+                      setHbForm({ ...hbForm, environment: e.target.value as 'production' | 'sit' })
+                    }
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-semibold"
+                  >
+                    <option value="production">Canlı Mağaza (Production)</option>
+                    <option value="sit">Test Ortamı (SIT)</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">
                     Varsayılan Sevk Süresi (Saat)
@@ -475,7 +497,7 @@ export default function SettingsAndAdminView({
                     onChange={(e) =>
                       setHbForm({ ...hbForm, dispatchTimeHours: Number(e.target.value) })
                     }
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900"
                   />
                 </div>
                 <div>
@@ -487,7 +509,7 @@ export default function SettingsAndAdminView({
                     onChange={(e) =>
                       setHbForm({ ...hbForm, hbOrderPullStatus: e.target.value as any })
                     }
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white"
+                    className="w-full px-3 py-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs font-semibold"
                   >
                     <option value="packageable">Paketlenebilir Siparişler</option>
                     <option value="ready_to_ship">Gönderime Hazır Siparişler</option>

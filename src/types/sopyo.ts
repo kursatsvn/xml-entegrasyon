@@ -140,6 +140,7 @@ export interface MarketplaceAccount {
   id: string;
   tenantId: string;
   marketplace: MarketplaceType;
+  environment?: 'production' | 'sit';
   storeName: string;
   supplierOrMerchantId: string;
   apiKey: string;
@@ -257,6 +258,7 @@ export interface ProductVariant {
   hepsiburadaSalePrice: number;
   color: string;
   size: string;
+  hepsiburadaSku?: string;
   attributes: { name: string; value: string }[];
 }
 
@@ -421,6 +423,7 @@ export interface Order {
   cargoCompany: string;
   cargoTrackingNumber: string;
   cargoBarcode: string;
+  packageNumber?: string;
   totalAmount: number;
   commissionAmount: number;
   shippingCost: number;

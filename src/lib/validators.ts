@@ -249,6 +249,7 @@ const SaveMarketplaceAccountSchema = z.object({
     .object({
       id: z.string().max(160).optional(),
       marketplace: MarketplaceSlugSchema,
+      environment: z.enum(['production', 'sit']).optional().default('production'),
       storeName: z.string().trim().min(1, 'Mağaza adı zorunludur.').max(150),
       supplierOrMerchantId: z.string().trim().max(150).default(''),
       apiKey: z.string().max(300).default(''),
@@ -272,7 +273,8 @@ const SaveMarketplaceAccountSchema = z.object({
 
 const BulkPublishSchema = z.object({
   action: z.literal('bulk_publish'),
-  marketplace: MarketplaceTargetSchema.optional()
+  marketplace: MarketplaceTargetSchema.optional(),
+  limit: z.coerce.number().int().min(0).max(50000).optional().default(0)
 });
 
 const BulkUpdatePriceStockSchema = z.object({
@@ -390,6 +392,78 @@ const RunAiComplianceScanSchema = z.object({
   action: z.literal('run_ai_compliance_scan')
 });
 
+const SearchHepsiburadaCategoriesSchema = z.object({
+  action: z.literal('search_hepsiburada_categories'),
+  query: z.string().max(200).optional().default(''),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(40)
+});
+
+const FetchHepsiburadaCategoryAttributesSchema = z.object({
+  action: z.literal('fetch_hepsiburada_category_attributes'),
+  categoryId: z.coerce.number().int().min(1, 'Geçerli bir Hepsiburada kategori ID giriniz.')
+});
+
+const FetchLiveHepsiburadaSchema = z.object({
+  action: z.literal('fetch_live_hepsiburada_products'),
+  page: z.coerce.number().int().min(0).max(10000).optional().default(0),
+  size: z.coerce.number().int().min(1).max(200).optional().default(50),
+  filter: z
+    .enum(['all', 'on_sale', 'passive', 'locked', 'waiting', 'rejected'])
+    .optional()
+    .default('all')
+});
+
+const ToggleHepsiburadaListingsStateSchema = z.object({
+  action: z.literal('toggle_hepsiburada_listings_state'),
+  items: z
+    .array(
+      z.object({
+        hepsiburadaSku: z.string().max(120).optional().default(''),
+        merchantSku: z.string().trim().min(1).max(160)
+      })
+    )
+    .min(1, 'En az bir ürün seçilmelidir.')
+    .max(500),
+  targetState: z.enum(['activate', 'deactivate'])
+});
+
+const DeletePendingHepsiburadaSchema = z.object({
+  action: z.literal('delete_pending_hepsiburada_products'),
+  merchantSkus: z.array(z.string().trim().min(1).max(160)).min(1).max(1000)
+});
+
+const ApproveHepsiburadaPreMatchSchema = z.object({
+  action: z.literal('approve_hepsiburada_prematch'),
+  merchantSkus: z.array(z.string().trim().min(1).max(160)).min(1).max(1000)
+});
+
+const CheckHepsiburadaImportStatusSchema = z.object({
+  action: z.literal('check_hepsiburada_import_status'),
+  trackingId: z.string().trim().min(1, 'Tracking ID zorunludur.').max(200)
+});
+
+const ReconcileHepsiburadaStatusSchema = z.object({
+  action: z.literal('reconcile_hepsiburada_status')
+});
+
+const PullMarketplaceClaimsSchema = z.object({
+  action: z.literal('pull_marketplace_claims')
+});
+
+const ResolveHepsiburadaClaimSchema = z.object({
+  action: z.literal('resolve_hepsiburada_claim'),
+  claimId: z.string().max(160).optional(),
+  claimNumber: z.string().trim().min(1, 'Talep numarası zorunludur.').max(120),
+  decision: z.enum(['accept', 'reject']),
+  rejectionReason: z.string().max(200).optional(),
+  merchantStatement: z.string().max(1000).optional()
+});
+
+const FetchHepsiburadaCargoLabelSchema = z.object({
+  action: z.literal('fetch_hepsiburada_cargo_label'),
+  packageNumber: z.string().trim().min(1, 'Paket numarası zorunludur.').max(120)
+});
+
 export const StateActionSchema = z.discriminatedUnion('action', [
   InspectXmlNodesSchema,
   SaveXmlSourceSchema,
@@ -413,7 +487,18 @@ export const StateActionSchema = z.discriminatedUnion('action', [
   ArchiveLiveTrendyolSchema,
   DeleteLiveTrendyolSchema,
   AdminUpdateTenantSchema,
-  RunAiComplianceScanSchema
+  RunAiComplianceScanSchema,
+  SearchHepsiburadaCategoriesSchema,
+  FetchHepsiburadaCategoryAttributesSchema,
+  FetchLiveHepsiburadaSchema,
+  ToggleHepsiburadaListingsStateSchema,
+  DeletePendingHepsiburadaSchema,
+  ApproveHepsiburadaPreMatchSchema,
+  CheckHepsiburadaImportStatusSchema,
+  ReconcileHepsiburadaStatusSchema,
+  PullMarketplaceClaimsSchema,
+  ResolveHepsiburadaClaimSchema,
+  FetchHepsiburadaCargoLabelSchema
 ]);
 
 export function formatZodError(error: z.ZodError): string {

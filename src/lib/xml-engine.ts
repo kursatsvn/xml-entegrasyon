@@ -41,6 +41,76 @@ function parseNumber(val: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function readMappedValue(
+  node: Record<string, any> | undefined | null,
+  customTag: string | undefined,
+  fallbacks: string[]
+): unknown {
+  if (!node || typeof node !== 'object') return undefined;
+  const trimmed = (customTag || '').trim();
+  if (trimmed && node[trimmed] !== undefined && node[trimmed] !== null && node[trimmed] !== '') {
+    return node[trimmed];
+  }
+  for (const key of fallbacks) {
+    if (node[key] !== undefined && node[key] !== null && node[key] !== '') {
+      return node[key];
+    }
+  }
+  return undefined;
+}
+
+function extractRawProductsByMapping(
+  parsed: Record<string, any>,
+  productNodeTag?: string
+): Record<string, any>[] {
+  const defaultList =
+    parsed?.Root?.Urunler?.Urun || parsed?.Urunler?.Urun || parsed?.products?.product;
+  if (defaultList) return asArray<Record<string, any>>(defaultList);
+
+  const trimmed = (productNodeTag || '').trim();
+  if (!trimmed) return [];
+
+  // Kökten 1-3 seviye derinlikte custom productNode etiketini ara
+  const queue: unknown[] = [parsed];
+  let depth = 0;
+  while (queue.length > 0 && depth < 4) {
+    const levelSize = queue.length;
+    for (let i = 0; i < levelSize; i++) {
+      const curr = queue.shift();
+      if (!curr || typeof curr !== 'object') continue;
+      const rec = curr as Record<string, unknown>;
+      if (rec[trimmed] !== undefined) {
+        return asArray<Record<string, any>>(rec[trimmed] as any);
+      }
+      for (const v of Object.values(rec)) {
+        if (v && typeof v === 'object') queue.push(v);
+      }
+    }
+    depth++;
+  }
+  return [];
+}
+
+function applyTaxModeToBasePrice(
+  rawPrice: number,
+  taxIncludedMode: XmlSource['taxIncludedMode'],
+  xmlVatRate: number,
+  fixedTaxRate: number
+): number {
+  if (!rawPrice || rawPrice <= 0) return 0;
+  // 0: Fiyatlara KDV Dahil (varsayılan, Ticimax akışı birebir korunur)
+  if ((taxIncludedMode ?? 0) === 0) return rawPrice;
+  // 1: KDV Hariç -> XML KDV etiketini uygula
+  if (taxIncludedMode === 1 && xmlVatRate > 0) {
+    return Number((rawPrice * (1 + xmlVatRate / 100)).toFixed(2));
+  }
+  // 2: KDV Hariç -> Sabit KDV oranını uygula
+  if (taxIncludedMode === 2 && fixedTaxRate > 0) {
+    return Number((rawPrice * (1 + fixedTaxRate / 100)).toFixed(2));
+  }
+  return rawPrice;
+}
+
 /**
  * Sopyo Step 3 (getXMLNodes.php) karşılığı: XML içindeki etiketleri ve adetlerini döner
  */
@@ -98,9 +168,8 @@ export async function syncXmlFeedProducts(params: {
 
   const xmlText = await safeFetchXmlText(xmlSource.url);
   const parsed = parser.parse(xmlText);
-  const rawProducts = asArray<Record<string, any>>(
-    parsed?.Root?.Urunler?.Urun || parsed?.Urunler?.Urun || parsed?.products?.product
-  );
+  const tagMap = xmlSource.customTagMapping;
+  const rawProducts = extractRawProductsByMapping(parsed, tagMap?.productNode);
 
   const existingByCode = new Map<string, Product>();
   for (const ep of existingProducts) {
@@ -124,12 +193,24 @@ export async function syncXmlFeedProducts(params: {
 
   for (let prodIdx = 0; prodIdx < sliceToProcess.length; prodIdx++) {
     const rawProd = sliceToProcess[prodIdx];
-    const externalId = String(rawProd.UrunKartiID || rawProd.id || `${prodIdx + 1}`);
-    const rawTitle = String(rawProd.UrunAdi || rawProd.name || 'İsimsiz Ürün');
-    const rawDescriptionHtml = String(rawProd.Aciklama || rawProd.OnYazi || '');
-    const brandName = String(rawProd.Marka || "Aria's Closet");
-    const categoryName = String(rawProd.Kategori || 'Genel');
-    const categoryTree = String(rawProd.KategoriTree || categoryName);
+    const externalId = String(
+      readMappedValue(rawProd, tagMap?.externalId, ['UrunKartiID', 'id']) || `${prodIdx + 1}`
+    );
+    const rawTitle = String(
+      readMappedValue(rawProd, tagMap?.title, ['UrunAdi', 'name']) || 'İsimsiz Ürün'
+    );
+    const rawDescriptionHtml = String(
+      readMappedValue(rawProd, tagMap?.description, ['Aciklama', 'OnYazi']) || ''
+    );
+    const brandName = String(
+      readMappedValue(rawProd, tagMap?.brand, ['Marka']) || "Aria's Closet"
+    );
+    const categoryName = String(
+      readMappedValue(rawProd, tagMap?.category, ['Kategori']) || 'Genel'
+    );
+    const categoryTree = String(
+      readMappedValue(rawProd, tagMap?.categoryTree, ['KategoriTree']) || categoryName
+    );
     const productUrl = String(rawProd.UrunUrl || '');
 
     // AI Katalog & İhlal Koruması: Yasaklı kelimeleri her XML güncellemesinde otomatik temizle
@@ -142,11 +223,25 @@ export async function syncXmlFeedProducts(params: {
     const title = aiSanitized.cleanTitle;
     const descriptionHtml = sanitizeRichHtml(aiSanitized.cleanDescriptionHtml);
 
-    const rawImages = asArray<string>(rawProd?.Resimler?.Resim).map(String).filter(Boolean);
-    const rawVariants = asArray<Record<string, any>>(rawProd?.UrunSecenek?.Secenek);
+    const mappedImagesRaw = readMappedValue(rawProd, tagMap?.images, ['Resimler']);
+    const rawImages = asArray<string>(
+      typeof mappedImagesRaw === 'object' && mappedImagesRaw !== null && 'Resim' in (mappedImagesRaw as Record<string, unknown>)
+        ? (mappedImagesRaw as Record<string, any>).Resim
+        : (mappedImagesRaw as any)
+    )
+      .map(String)
+      .filter(Boolean);
+    const mappedVariantsRaw = readMappedValue(rawProd, tagMap?.variants, ['UrunSecenek']);
+    const rawVariants = asArray<Record<string, any>>(
+      typeof mappedVariantsRaw === 'object' && mappedVariantsRaw !== null && 'Secenek' in (mappedVariantsRaw as Record<string, unknown>)
+        ? (mappedVariantsRaw as Record<string, any>).Secenek
+        : (mappedVariantsRaw as any)
+    );
 
     const firstVariant = rawVariants[0] || rawProd;
-    const rawBaseSku = String(firstVariant?.StokKodu || externalId || '0000');
+    const rawBaseSku = String(
+      readMappedValue(firstVariant, tagMap?.sku, ['StokKodu']) || externalId || '0000'
+    );
     const prefix = xmlSource.stockCodePrefix || '';
     const baseStockCode = rawBaseSku.startsWith(prefix) ? rawBaseSku : `${prefix}${rawBaseSku}`;
     const stockCode = seenStockCodes.has(baseStockCode)
@@ -164,20 +259,27 @@ export async function syncXmlFeedProducts(params: {
 
     for (let idx = 0; idx < (rawVariants.length || 1); idx++) {
       const rv = rawVariants[idx] || rawProd;
-      const extVarId = String(rv.VaryasyonID || `${externalId}-${idx + 1}`);
-      const varSkuRaw = String(rv.StokKodu || rawBaseSku);
+      const extVarId = String(
+        readMappedValue(rv, tagMap?.variantId, ['VaryasyonID']) || `${externalId}-${idx + 1}`
+      );
+      const varSkuRaw = String(
+        readMappedValue(rv, tagMap?.sku, ['StokKodu']) || rawBaseSku
+      );
       const varSku =
         rawVariants.length > 1
           ? `${prefix}${varSkuRaw}-${extVarId}`
           : stockCode;
 
-      const rawBarcode = String(rv.Barkod || '');
+      const rawBarcode = String(readMappedValue(rv, tagMap?.barcode, ['Barkod']) || '');
       const barcode =
         xmlSource.generateBarcode || !rawBarcode
           ? generateUniqueEan13(`${xmlSource.tenantId}-${stockCode}-${extVarId}`)
           : rawBarcode;
 
-      const rawXmlStock = Math.max(0, Math.floor(parseNumber(rv.StokAdedi)));
+      const rawXmlStock = Math.max(
+        0,
+        Math.floor(parseNumber(readMappedValue(rv, tagMap?.stock, ['StokAdedi'])))
+      );
       // Kritik stok kontrolü: <= criticalStockAmount ise 0 kabul et
       const effectiveXmlStock =
         xmlSource.criticalStockEnabled && rawXmlStock <= xmlSource.criticalStockAmount
@@ -190,9 +292,36 @@ export async function syncXmlFeedProducts(params: {
       const reservedStock = existingVariant?.reservedStock || 0;
       const netStock = Math.max(0, effectiveXmlStock - reservedStock);
 
-      const rawSalePriceTagVal = parseNumber(rv[xmlSource.salePriceTag || 'SatisFiyati'] ?? rv.SatisFiyati);
-      const rawBuyingPriceVal = parseNumber(rv[xmlSource.buyingPriceTag || 'SatisFiyati'] ?? rv.AlisFiyati ?? rawSalePriceTagVal);
-      const rawMarketPriceVal = parseNumber(rv[xmlSource.marketPriceTag || 'IndirimliFiyat'] ?? rv.IndirimliFiyat ?? rawSalePriceTagVal);
+      const variantXmlVat = parseNumber(
+        readMappedValue(rv, tagMap?.vatRate, ['KdvOrani']) ??
+          readMappedValue(rawProd, tagMap?.vatRate, ['KdvOrani'])
+      );
+      const rawSalePriceTagVal = applyTaxModeToBasePrice(
+        parseNumber(
+          readMappedValue(rv, xmlSource.salePriceTag || tagMap?.salePrice, ['SatisFiyati'])
+        ),
+        xmlSource.taxIncludedMode,
+        variantXmlVat,
+        xmlSource.fixedTaxRate || 20
+      );
+      const rawBuyingPriceVal = applyTaxModeToBasePrice(
+        parseNumber(
+          readMappedValue(rv, xmlSource.buyingPriceTag || tagMap?.buyingPrice, ['AlisFiyati', 'SatisFiyati']) ??
+            rawSalePriceTagVal
+        ),
+        xmlSource.taxIncludedMode,
+        variantXmlVat,
+        xmlSource.fixedTaxRate || 20
+      );
+      const rawMarketPriceVal = applyTaxModeToBasePrice(
+        parseNumber(
+          readMappedValue(rv, xmlSource.marketPriceTag || tagMap?.marketPrice, ['IndirimliFiyat']) ??
+            rawSalePriceTagVal
+        ),
+        xmlSource.taxIncludedMode,
+        variantXmlVat,
+        xmlSource.fixedTaxRate || 20
+      );
 
       // Eğer kullanıcı 0 TL'lik ürüne elle fiyat girdiyse (xmlPriceLock=true) ve XML'de hala 0 TL ise, kullanıcının girdiği fiyatı koru!
       const preserveManualPrice =

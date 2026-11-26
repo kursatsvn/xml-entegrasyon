@@ -14,22 +14,18 @@ import {
 } from '@/lib/category-matcher';
 import { sanitizeProductContent } from '@/lib/ai-sanitizer';
 import { sanitizeRichHtml } from '@/lib/html-sanitizer';
+import {
+  publishProductsToHepsiburada,
+  pullHepsiburadaOrders,
+  syncHepsiburadaInventoryAndPrice,
+  testHepsiburadaConnection
+} from '@/lib/hepsiburada-api';
 
 function getTrendyolAuthHeaders(account: MarketplaceAccount) {
   const token = Buffer.from(`${account.apiKey}:${account.apiSecret}`).toString('base64');
   return {
     Authorization: `Basic ${token}`,
     'User-Agent': `${account.supplierOrMerchantId} - SelfIntegration`,
-    'Content-Type': 'application/json'
-  };
-}
-
-function getHepsiburadaAuthHeaders(account: MarketplaceAccount) {
-  const user = account.apiKey || account.supplierOrMerchantId;
-  const token = Buffer.from(`${user}:${account.apiSecret}`).toString('base64');
-  return {
-    Authorization: `Basic ${token}`,
-    'User-Agent': `${account.storeName || 'LuneRose'}_SelfIntegration`,
     'Content-Type': 'application/json'
   };
 }
@@ -42,44 +38,31 @@ export async function testMarketplaceConnection(account: MarketplaceAccount): Pr
     return { ok: false, message: 'Satıcı/Mağaza ID ve API Secret/Servis Anahtarı zorunludur.' };
   }
 
+  if (account.marketplace === 'hepsiburada') {
+    return testHepsiburadaConnection(account);
+  }
+
   try {
-    if (account.marketplace === 'trendyol') {
-      const url = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products?size=1`;
-      const res = await fetch(url, {
-        headers: getTrendyolAuthHeaders(account),
-        signal: AbortSignal.timeout(8000)
-      });
-      if (res.ok) {
-        return {
-          ok: true,
-          message: `Trendyol API bağlantısı başarılı! (Mağaza: ${account.storeName}, Supplier ID: ${account.supplierOrMerchantId})`
-        };
-      }
+    const url = `https://apigw.trendyol.com/integration/product/sellers/${account.supplierOrMerchantId}/products?size=1`;
+    const res = await fetch(url, {
+      headers: getTrendyolAuthHeaders(account),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000)
+    });
+    if (res.ok) {
       return {
         ok: true,
-        message: `Trendyol API kimlik bilgileri kaydedildi ve doğrulandı (Supplier ID: ${account.supplierOrMerchantId}, Durum: HTTP ${res.status}).`
-      };
-    } else {
-      const url = `https://listing-external.hepsiburada.com/listings/merchantid/${account.supplierOrMerchantId}?limit=1`;
-      const res = await fetch(url, {
-        headers: getHepsiburadaAuthHeaders(account),
-        signal: AbortSignal.timeout(8000)
-      });
-      if (res.ok) {
-        return {
-          ok: true,
-          message: `Hepsiburada Merchant API bağlantısı başarılı! (Merchant ID: ${account.supplierOrMerchantId})`
-        };
-      }
-      return {
-        ok: true,
-        message: `Hepsiburada API kimlik bilgileri kaydedildi ve doğrulandı (Merchant ID: ${account.supplierOrMerchantId}, Durum: HTTP ${res.status}).`
+        message: `Trendyol API bağlantısı başarılı! (Mağaza: ${account.storeName}, Supplier ID: ${account.supplierOrMerchantId})`
       };
     }
+    return {
+      ok: false,
+      message: `Trendyol API bağlantı doğrulaması başarısız (Supplier ID: ${account.supplierOrMerchantId}, HTTP ${res.status}). API Key/Secret bilgilerini kontrol edin.`
+    };
   } catch {
     return {
-      ok: true,
-      message: `${account.marketplace === 'trendyol' ? 'Trendyol' : 'Hepsiburada'} API bilgileri doğrulandı ve aktif edildi.`
+      ok: false,
+      message: 'Trendyol API sunucusuna bağlanılamadı veya istek zaman aşımına uğradı.'
     };
   }
 }
@@ -87,6 +70,7 @@ export async function testMarketplaceConnection(account: MarketplaceAccount): Pr
 export async function syncPriceAndInventoryToMarketplace(params: {
   account: MarketplaceAccount;
   products: Product[];
+  useMinPrice?: boolean;
 }): Promise<{
   remoteBatchId: string;
   attemptedCount: number;
@@ -94,7 +78,12 @@ export async function syncPriceAndInventoryToMarketplace(params: {
   errorCount: number;
   errors: { stockCode: string; title: string; marketplace: string; message: string }[];
 }> {
-  const { account, products } = params;
+  const { account, products, useMinPrice } = params;
+
+  if (account.marketplace === 'hepsiburada') {
+    return syncHepsiburadaInventoryAndPrice({ account, products, useMinPrice });
+  }
+
   const itemsPayload: any[] = [];
   const errors: { stockCode: string; title: string; marketplace: string; message: string }[] = [];
 
@@ -104,7 +93,7 @@ export async function syncPriceAndInventoryToMarketplace(params: {
         errors.push({
           stockCode: prod.stockCode,
           title: prod.title,
-          marketplace: account.marketplace === 'trendyol' ? 'Trendyol' : 'Hepsiburada',
+          marketplace: 'Trendyol',
           message: 'Varyant barkodu eksik.'
         });
         continue;
@@ -114,37 +103,25 @@ export async function syncPriceAndInventoryToMarketplace(params: {
         errors.push({
           stockCode: prod.stockCode,
           title: `${prod.title}${v.size ? ` (${v.size})` : ''}`,
-          marketplace: account.marketplace === 'trendyol' ? 'Trendyol' : 'Hepsiburada',
+          marketplace: 'Trendyol',
           message: '⚠️ XML fiyatı 0,00 TL olduğu için gönderilmedi! Lütfen Ürünler sayfasından satış fiyatı giriniz.'
         });
         continue;
       }
 
-      if (account.marketplace === 'trendyol') {
-        itemsPayload.push({
-          barcode: v.barcode,
-          quantity: prod.status === 'active' ? Math.min(19999, Math.max(0, Number(v.netStock ?? 0))) : 0,
-          salePrice: v.trendyolSalePrice || prod.trendyolSalePrice,
-          listPrice: prod.trendyolListPrice || Number(((v.trendyolSalePrice || prod.trendyolSalePrice) * 1.15).toFixed(2))
-        });
-      } else {
-        itemsPayload.push({
-          merchantSku: v.sku,
-          Barcode: v.barcode,
-          AvailableStock: prod.status === 'active' ? v.netStock : 0,
-          Price: v.hepsiburadaSalePrice || prod.hepsiburadaSalePrice,
-          DispatchTime: account.dispatchTimeHours || 24
-        });
-      }
+      itemsPayload.push({
+        barcode: v.barcode,
+        quantity: prod.status === 'active' ? Math.min(19999, Math.max(0, Number(v.netStock ?? 0))) : 0,
+        salePrice: v.trendyolSalePrice || prod.trendyolSalePrice,
+        listPrice: prod.trendyolListPrice || Number(((v.trendyolSalePrice || prod.trendyolSalePrice) * 1.15).toFixed(2))
+      });
     }
   }
 
-  let remoteBatchId = `${account.marketplace.toUpperCase()}-BATCH-${Date.now()}`;
-
-  const marketplaceLabel = account.marketplace === 'trendyol' ? 'Trendyol' : 'Hepsiburada';
+  let remoteBatchId = `TRENDYOL-BATCH-${Date.now()}`;
 
   try {
-    if (account.marketplace === 'trendyol' && itemsPayload.length > 0) {
+    if (itemsPayload.length > 0) {
       const url = `https://apigw.trendyol.com/integration/inventory/sellers/${account.supplierOrMerchantId}/products/price-and-inventory`;
       const res = await fetch(url, {
         method: 'POST',
@@ -160,37 +137,17 @@ export async function syncPriceAndInventoryToMarketplace(params: {
         errors.push({
           stockCode: 'SYNC-HTTP',
           title: `Trendyol Stok/Fiyat API Hatası (HTTP ${res.status})`,
-          marketplace: marketplaceLabel,
-          message: errBody.slice(0, 200) || `HTTP ${res.status}`
-        });
-      }
-    } else if (account.marketplace === 'hepsiburada' && itemsPayload.length > 0) {
-      const url = `https://listing-external.hepsiburada.com/listings/merchantid/${account.supplierOrMerchantId}/inventory-uploads`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: getHepsiburadaAuthHeaders(account),
-        body: JSON.stringify({ listings: itemsPayload.slice(0, 1000) }),
-        signal: AbortSignal.timeout(12000)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.id || data?.ticketId) remoteBatchId = data.id || data.ticketId;
-      } else {
-        const errBody = await res.text().catch(() => '');
-        errors.push({
-          stockCode: 'SYNC-HTTP',
-          title: `Hepsiburada Stok/Fiyat API Hatası (HTTP ${res.status})`,
-          marketplace: marketplaceLabel,
+          marketplace: 'Trendyol',
           message: errBody.slice(0, 200) || `HTTP ${res.status}`
         });
       }
     }
   } catch (err: unknown) {
-    console.error(`[syncPriceAndInventoryToMarketplace ${account.marketplace} error]`, err);
+    console.error('[syncPriceAndInventoryToMarketplace trendyol error]', err);
     errors.push({
       stockCode: 'SYNC-NETWORK',
-      title: `${marketplaceLabel} Bağlantı / Zaman Aşımı Hatası`,
-      marketplace: marketplaceLabel,
+      title: 'Trendyol Bağlantı / Zaman Aşımı Hatası',
+      marketplace: 'Trendyol',
       message: 'Pazaryeri API isteği zaman aşımına uğradı veya bağlantı kurulamadı.'
     });
   }
@@ -209,6 +166,8 @@ export async function publishProductsToMarketplace(params: {
   products: Product[];
   categories: CategoryMapping[];
   brands: BrandMapping[];
+  useMarketDesc?: boolean;
+  useMinPrice?: boolean;
 }): Promise<{
   remoteBatchId: string;
   attemptedCount: number;
@@ -217,13 +176,25 @@ export async function publishProductsToMarketplace(params: {
   errors: { stockCode: string; title: string; marketplace: string; message: string }[];
   syncedProductIds: string[];
 }> {
-  const { account, products, categories, brands } = params;
+  const { account, products, categories, brands, useMarketDesc, useMinPrice } = params;
+
+  if (account.marketplace === 'hepsiburada') {
+    return publishProductsToHepsiburada({
+      account,
+      products,
+      categories,
+      brands,
+      useMarketDesc,
+      useMinPrice
+    });
+  }
+
   const catMap = new Map(categories.map((c) => [c.name, c]));
   const brandMap = new Map(brands.map((b) => [b.name, b]));
 
   const errors: { stockCode: string; title: string; marketplace: string; message: string }[] = [];
   const syncedProductIds: string[] = [];
-  const marketplaceLabel = account.marketplace === 'trendyol' ? 'Trendyol' : 'Hepsiburada';
+  const marketplaceLabel = 'Trendyol';
 
   const validItems: any[] = [];
   const barcodeToProductMap = new Map<string, { id: string; stockCode: string; title: string }>();
@@ -231,18 +202,6 @@ export async function publishProductsToMarketplace(params: {
   for (const prod of products) {
     const cat = catMap.get(prod.categoryName);
     const brand = brandMap.get(prod.brandName);
-
-    if (account.marketplace === 'hepsiburada') {
-      if (!cat || cat.hepsiburadaStatus === 'unmapped' || !cat.hepsiburadaCategoryId) {
-        errors.push({
-          stockCode: prod.stockCode,
-          title: prod.title,
-          marketplace: marketplaceLabel,
-          message: `Hepsiburada kategorisi eşitlenmedi (${prod.categoryName}).`
-        });
-        continue;
-      }
-    }
 
     if (!prod.images || prod.images.length === 0) {
       errors.push({
@@ -475,7 +434,14 @@ export async function publishProductsToMarketplace(params: {
   };
 }
 
-export async function pullOrdersFromMarketplace(account: MarketplaceAccount): Promise<Partial<Order>[]> {
+export async function pullOrdersFromMarketplace(
+  account: MarketplaceAccount,
+  options?: { includePaymentAwaiting?: boolean }
+): Promise<Partial<Order>[]> {
+  if (account.marketplace === 'hepsiburada') {
+    return pullHepsiburadaOrders(account, options);
+  }
+
   try {
     if (account.marketplace === 'trendyol') {
       const url = `https://apigw.trendyol.com/integration/order/sellers/${account.supplierOrMerchantId}/orders?size=50&orderByField=PackageLastModifiedDate&orderByDirection=DESC`;

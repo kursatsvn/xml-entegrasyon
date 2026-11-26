@@ -11,10 +11,10 @@
 | Kategori | Kritik | Yüksek | Orta | Düşük | Toplam | Tamamlanan |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **1. Tasarım, Renk ve UI/UX (Tailwind / CSS)** | 0 | 2 | 3 | 1 | **6** | `6 / 6` *(Faz 5 tamamlandı)* |
-| **2. Next.js & React Bugları, Mantık ve Runtime** | 1 | 5 | 4 | 0 | **10** | `8 / 10` *(2.7 & 2.8b/c kullanıcı talebiyle HB dokümanı sonrasına ertelendi)* |
+| **2. Next.js & React Bugları, Mantık ve Runtime** | 1 | 5 | 4 | 0 | **10** | `10 / 10` *(Faz 1–6 tamamlandı)* |
 | **3. Supabase & Next.js Güvenlik Açıkları** | 8 | 2 | 0 | 0 | **10** | `10 / 10` *(Faz 1 & Faz 2 tamamlandı)* |
 | **4. Hata Yönetimi ve Performans Darboğazları** | 2 | 2 | 1 | 0 | **5** | `5 / 5` *(Faz 3 & Faz 5 tamamlandı)* |
-| **TOPLAM ANA BULGU GRUBU (44 Alt Madde)** | **11** | **11** | **8** | **1** | **31 Grup (44 Madde)** | **Faz 1–5 Tamamlandı (`29 / 31` Grup; `2` Ertelenen HB/XML)** |
+| **TOPLAM ANA BULGU GRUBU (44 Alt Madde)** | **11** | **11** | **8** | **1** | **31 Grup (44 Madde)** | **`31 / 31` (%100 Tamamlandı)** |
 
 ---
 
@@ -23,8 +23,9 @@
 - [x] **Faz 1 — Acil Güvenlik Yamaları (Canlı Sistem Koruması)** *(Tamamlandı: 25.11.2026 — `FAZ_1_ACIL_GUVENLIK_PLANI.md`)*
 - [x] **Faz 2 — Kimlik Doğrulama (`@supabase/ssr`), RLS Sıkılaştırma ve Zod Doğrulama** *(Tamamlandı: 25.11.2026 — `FAZ_2_AUTH_RLS_ZOD_PLANI.md`)*
 - [x] **Faz 3 — Veri Mimarisi, Performans ve Hata Yönetimi Dönüşümü** *(Tamamlandı: 26.11.2026 — `FAZ_3_VERI_PERFORMANS_HATA_PLANI.md`)*
-- [x] **Faz 4 — Güvenli UI State, Tarih/Saat ve Kiracı Dinamizmi** *(Tamamlandı: 26.11.2026 — `FAZ_4_UI_STATE_IS_MANTIGI_PLANI.md`; Hepsiburada API `2.7.a/b` ve XML motoru `2.8.b/c` kullanıcı talebiyle resmi Hepsiburada dokümantasyonu sonrasına ertelendi)*
+- [x] **Faz 4 — Güvenli UI State, Tarih/Saat ve Kiracı Dinamizmi** *(Tamamlandı: 26.11.2026 — `FAZ_4_UI_STATE_IS_MANTIGI_PLANI.md`)*
 - [x] **Faz 5 — Next.js App Router Bölünmesi ve UI/UX Standartlaştırma** *(Tamamlandı: 26.11.2026 — `FAZ_5_TASARIM_UI_UX_APP_ROUTER_PLANI.md`)*
+- [x] **Faz 6 — Hepsiburada API Tam Entegrasyonu (Trendyol Birebir Özellik Eşitliği)** *(Tamamlandı: 26.11.2026 — `FAZ_6_HEPSIBURADA_API_TAM_ENTEGRASYON_PLANI.md`)*
 
 ---
 
@@ -124,23 +125,23 @@
 - **Sorun:** İstemci `targetTenantId` gönderirken `/api/auth` `body.tenantId` okumakta ve `message` döndürmemektedir; mağaza değiştirme özelliği hiçbir zaman çalışmamaktadır.
 - **Çözüm Önerisi:** Sunucuda `targetTenantId` parametresini doğrulayarak okuyun, hedef mağazanın varlığını kontrol edin ve `message` alanı döndürün.
 
-### [ ] 2.7. Hepsiburada Ürün Gönderimi, Sipariş Çekme ve Bağlantı Testinde Sahte Başarı *(ERTELENDİ — Kullanıcı Hepsiburada API dokümantasyonu yükledikten sonra yapılacak; yalnızca UI rozeti `2.7.c` güncellendi)*
-- **Önem Derecesi:** `[KRİTİK]` • **Hedef Faz:** Ertelendi (Hepsiburada API Dokümantasyonu Sonrası)
-- **Dosya ve Satır:** `src/lib/marketplace-api.ts` (Satır: 57-83, 182-449, 451-502), `src/components/views/SettingsAndAdminView.tsx` (Satır: 236-238, 348-350)
+### [x] 2.7. Hepsiburada Ürün Gönderimi, Sipariş Çekme ve Bağlantı Testinde Sahte Başarı *(Tamamlandı — Faz 6: `FAZ_6_HEPSIBURADA_API_TAM_ENTEGRASYON_PLANI.md`)*
+- **Önem Derecesi:** `[KRİTİK]` • **Hedef Faz:** Faz 6 *(Tamamlandı)*
+- **Dosya ve Satır:** `src/lib/hepsiburada-client.ts`, `src/lib/hepsiburada-catalog.ts`, `src/lib/hepsiburada-api.ts`, `src/lib/marketplace-api.ts`, `src/components/views/SettingsAndAdminView.tsx`
 - **Sorun:**
-  - [ ] **2.7.a:** `publishProductsToMarketplace` Hepsiburada için hiçbir HTTP isteği atmadan ürünleri `'synced'` olarak işaretlemektedir. *(Ertelendi)*
-  - [ ] **2.7.b:** `pullOrdersFromMarketplace` Hepsiburada için hiçbir çağrı yapmadan `[]` dönmektedir. *(Ertelendi)*
-  - [ ] **2.7.c:** `testMarketplaceConnection` `401/500` veya ağ hatasında bile `{ ok: true }` dönmekte *(ertelendi)*; UI sabit `"Bağlı"` rozeti gerçek `connectionStatus` değerine bağlandı *(tamamlandı)*.
+  - [x] **2.7.a:** `publishProductsToMarketplace` Hepsiburada için resmi MPOP `POST /product/api/products/import` (`multipart/form-data`) + `GET /product/api/products/status/{trackingId}` hata takibine geçirildi.
+  - [x] **2.7.b:** `pullOrdersFromMarketplace` Hepsiburada için resmi OMS `/packages`, `/orders` ve `/orders/.../paymentawaiting` uçlarına + çapraz stok düşmeye bağlandı.
+  - [x] **2.7.c:** `testMarketplaceConnection` hem Trendyol hem Hepsiburada için yalnızca gerçek HTTP `200` durumunda `{ ok: true }` dönecek şekilde düzeltildi; UI rozeti gerçek `connectionStatus` değerine bağlandı.
 - **Çözüm Önerisi:** Hepsiburada katalog/sipariş API çağrılarını gerçek uç noktalarla tamamlayın; bağlantı testinde yalnızca `res.ok` durumunda `ok: true` döndürün ve rozeti `connectionStatus` değerine bağlayın.
 
-### [ ] 2.8. Supabase Şema Uyumsuzluğu (`minPrice` & `marketplaceDescriptions`) ve İşlevsiz XML Kuralları *(2.8.a ve 2.8.d tamamlandı; 2.8.b ve 2.8.c canlı satış güvenliği için ertelendi)*
-- **Önem Derecesi:** `[YÜKSEK]` • **Hedef Faz:** Faz 3 (`2.8.a`) & Faz 4 (`2.8.d`) — `2.8.b/c` Ertelendi
-- **Dosya ve Satır:** `src/components/views/ProductsView.tsx` (Satır: 1111-1175), `supabase/migrations/0002_server_rpc_bridge.sql` (Satır: 337-380, 722-771), `src/components/views/XmlView.tsx` (Satır: 354-355, 447-468, 1179-1205), `src/lib/xml-engine.ts` (Satır: 140-193, 317), `src/app/api/state/route.ts` (Satır: 488)
+### [x] 2.8. Supabase Şema Uyumsuzluğu (`minPrice` & `marketplaceDescriptions`) ve İşlevsiz XML Kuralları *(Tamamlandı)*
+- **Önem Derecesi:** `[YÜKSEK]` • **Hedef Faz:** Faz 3 (`2.8.a`), Faz 4 (`2.8.d`) & Faz 6 (`2.8.b/c`) *(Tamamlandı)*
+- **Dosya ve Satır:** `src/components/views/ProductsView.tsx`, `supabase/migrations/0007_phase3_perf_and_schema.sql`, `src/components/views/XmlView.tsx`, `src/lib/xml-engine.ts`, `src/app/api/cron/sync/route.ts`
 - **Sorun:**
-  - [x] **2.8.a:** `minPrice` ve `marketplaceDescriptions` alanları Supabase `public.products` tablosunda olmadığı için kaydedildiğinde kaybolmaktadır.
-  - [ ] **2.8.b:** `XmlView.tsx:1183` "Değişken Fiyat Kuralı" (`priceRuleType === 2`) için kural tablosu olmadığından ürünler %0 marjla hesaplanmaktadır. *(Ertelendi — XML fiyat motoruna dokunulmadı)*
-  - [ ] **2.8.c:** `customTagMapping`, `taxIncludedMode` ve `autoPublishChannels` ayarları arka uçta yoksayılmaktadır. *(Ertelendi — XML motoruna dokunulmadı)*
-  - [x] **2.8.d:** `XmlView.tsx:355, 449, 467` rapor yoksa başka XML kaynağının raporunu ve sahte SKU kodlarını göstermektedir. *(Faz 4'te düzeltildi)*
+  - [x] **2.8.a:** `minPrice` ve `marketplaceDescriptions` alanları Supabase `public.products` tablosuna eklendi.
+  - [x] **2.8.b:** `XmlView.tsx` içine "Değişken Fiyat Kuralı (`priceRuleType === 2`)" kural tablosu (ekle/düzenle/sil + mobil kart görünümü) eklendi.
+  - [x] **2.8.c:** `xml-engine.ts` içine `customTagMapping` okuyucusu ve `taxIncludedMode` (`0/1/2`) KDV hesaplaması; `cron/sync/route.ts` içine `autoPublishChannels` filtresi bağlandı.
+  - [x] **2.8.d:** `XmlView.tsx` sahte rapor fallback'leri temizlendi.
 - **Çözüm Önerisi:** Eksik sütunlar için migration ekleyin; `priceRuleType === 2` tablosunu ve XML motorundaki etiket/KDV/kanal filtrelerini devreye alın; sahte rapor fallback'lerini temizleyin.
 
 ### [x] 2.9. Cache & Revalidation Eksiklikleri, `GET` Üzerinden DB Yazma ve Eşzamanlı Veri Ezilmesi (Lost Update)

@@ -59,25 +59,44 @@ export async function GET(req: NextRequest) {
       );
       const tenantCats = db.categories.filter((c) => c.tenantId === tenant.id);
       const tenantBrands = db.brands.filter((b) => b.tenantId === tenant.id);
+      const autoPublishChannelSet = new Set<string>(
+        sources
+          .filter((s) => s.autoPublishEnabled)
+          .flatMap((s) => s.autoPublishChannels || [])
+      );
 
       for (const acc of accounts) {
         try {
-          await pullOrdersFromMarketplace(acc);
-          await syncPriceAndInventoryToMarketplace({ account: acc, products: tenantProducts });
+          await pullOrdersFromMarketplace(acc, {
+            includePaymentAwaiting: Boolean(tenant.generalSettings?.customerHBWaitingOrderStatus)
+          });
+          await syncPriceAndInventoryToMarketplace({
+            account: acc,
+            products: tenantProducts,
+            useMinPrice: Boolean(tenant.generalSettings?.customerUseMinPrice)
+          });
 
-          const newUnsent = tenantProducts.filter(
-            (p) =>
-              (acc.marketplace === 'trendyol' &&
-                (p.trendyolSyncStatus === 'not_sent' || p.trendyolSyncStatus === 'pending')) ||
-              (acc.marketplace === 'hepsiburada' &&
-                (p.hepsiburadaSyncStatus === 'not_sent' || p.hepsiburadaSyncStatus === 'pending'))
-          );
+          const channelTitle = acc.marketplace === 'trendyol' ? 'Trendyol' : 'Hepsiburada';
+          const canAutoPublishChannel =
+            sources.length === 0 || autoPublishChannelSet.has(channelTitle);
+
+          const newUnsent = canAutoPublishChannel
+            ? tenantProducts.filter(
+                (p) =>
+                  (acc.marketplace === 'trendyol' &&
+                    (p.trendyolSyncStatus === 'not_sent' || p.trendyolSyncStatus === 'pending')) ||
+                  (acc.marketplace === 'hepsiburada' &&
+                    (p.hepsiburadaSyncStatus === 'not_sent' || p.hepsiburadaSyncStatus === 'pending'))
+              )
+            : [];
           if (newUnsent.length > 0) {
             const pubRes = await publishProductsToMarketplace({
               account: acc,
               products: newUnsent,
               categories: tenantCats,
-              brands: tenantBrands
+              brands: tenantBrands,
+              useMarketDesc: Boolean(tenant.generalSettings?.customerUseMarketDesc),
+              useMinPrice: Boolean(tenant.generalSettings?.customerUseMinPrice)
             });
             const syncedSet = new Set(pubRes.syncedProductIds);
             for (const p of db.products) {

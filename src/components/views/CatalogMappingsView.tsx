@@ -50,6 +50,74 @@ export default function CatalogMappingsView({
   const [loading, setLoading] = useState(false);
   const [editingCat, setEditingCat] = useState<CategoryMapping | null>(null);
   const [defaultBrandInput, setDefaultBrandInput] = useState("Aria's Closet");
+  const [hbSearchQuery, setHbSearchQuery] = useState('');
+  const [hbSearchLoading, setHbSearchLoading] = useState(false);
+  const [hbSearchResults, setHbSearchResults] = useState<
+    { categoryId: number; name: string; displayName: string }[]
+  >([]);
+  const [hbAttrLoading, setHbAttrLoading] = useState(false);
+
+  const handleSearchHbCategories = async () => {
+    if (hbSearchLoading) return;
+    setHbSearchLoading(true);
+    try {
+      const res = await apiPost('/api/state', {
+        action: 'search_hepsiburada_categories',
+        query: hbSearchQuery || editingCat?.name || '',
+        limit: 40
+      });
+      if (res.ok) {
+        const list = res.data?.categories || [];
+        setHbSearchResults(list);
+        if (list.length === 0) {
+          notify('Hepsiburada canlı kategorilerinde eşleşen sonuç bulunamadı.', 'error');
+        }
+      } else {
+        notify(res.message || 'Hepsiburada kategorileri çekilemedi.', 'error');
+      }
+    } finally {
+      setHbSearchLoading(false);
+    }
+  };
+
+  const handleSelectLiveHbCategory = async (catId: number, displayName: string) => {
+    if (!editingCat) return;
+    setEditingCat({
+      ...editingCat,
+      hepsiburadaCategoryId: String(catId),
+      hepsiburadaCategoryName: displayName,
+      hepsiburadaStatus: 'mapped'
+    });
+    setHbAttrLoading(true);
+    try {
+      const res = await apiPost('/api/state', {
+        action: 'fetch_hepsiburada_category_attributes',
+        categoryId: catId
+      });
+      if (res.ok && Array.isArray(res.data?.attributes)) {
+        const mandatoryAttrs = res.data.attributes
+          .filter((a: any) => !a.isBase && !a.isVariant && a.mandatory)
+          .slice(0, 12)
+          .map((a: any) => ({
+            attributeName: String(a.id || a.name),
+            mappedValue: a.name === 'Cinsiyet' ? 'Kadın' : '',
+            required: true
+          }));
+        if (mandatoryAttrs.length > 0) {
+          setEditingCat((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  hepsiburadaAttributes: mandatoryAttrs
+                }
+              : prev
+          );
+        }
+      }
+    } finally {
+      setHbAttrLoading(false);
+    }
+  };
 
   React.useEffect(() => {
     setSection(initialSection);
@@ -692,18 +760,88 @@ export default function CatalogMappingsView({
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200 space-y-2">
-                  <div className="text-xs font-bold text-amber-900 uppercase">
-                    Hepsiburada Kategori & Zorunlu Özellikler
+                <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-bold text-amber-900 uppercase">
+                      Hepsiburada Canlı MPOP Kategori &amp; Özellikler
+                    </div>
+                    {editingCat.hepsiburadaCategoryId &&
+                      /^\d+$/.test(editingCat.hepsiburadaCategoryId) && (
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-[11px] font-bold">
+                          ID: {editingCat.hepsiburadaCategoryId}
+                        </span>
+                      )}
                   </div>
+
+                  {(!editingCat.hepsiburadaCategoryId ||
+                    !/^\d+$/.test(editingCat.hepsiburadaCategoryId)) && (
+                    <div className="text-[11px] px-2.5 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 font-semibold">
+                      Gerçek sayısal Hepsiburada yaprak kategori ID seçilmedi. Aşağıdan canlı arayın.
+                    </div>
+                  )}
+
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={hbSearchQuery}
+                      onChange={(e) => setHbSearchQuery(e.target.value)}
+                      placeholder={`Örn: ${editingCat.name}`}
+                      className="flex-1 min-w-0 px-2.5 py-2 rounded-lg border border-amber-300 text-xs bg-white text-slate-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSearchHbCategories}
+                      disabled={hbSearchLoading}
+                      className="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold shrink-0 cursor-pointer"
+                    >
+                      {hbSearchLoading ? 'Aranıyor...' : 'Canlı HB Ara'}
+                    </button>
+                  </div>
+
+                  {hbSearchResults.length > 0 && (
+                    <select
+                      value={editingCat.hepsiburadaCategoryId || ''}
+                      onChange={(e) => {
+                        const chosen = hbSearchResults.find(
+                          (c) => String(c.categoryId) === e.target.value
+                        );
+                        if (chosen) {
+                          handleSelectLiveHbCategory(chosen.categoryId, chosen.displayName);
+                        }
+                      }}
+                      className="w-full px-2.5 py-2 rounded-lg border border-amber-300 text-xs bg-white text-slate-900 font-semibold"
+                    >
+                      <option value="">-- Canlı HB Yaprak Kategorisi Seç ({hbSearchResults.length}) --</option>
+                      {hbSearchResults.map((c) => (
+                        <option key={c.categoryId} value={c.categoryId}>
+                          #{c.categoryId} — {c.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
                   <div className="text-xs font-semibold text-slate-800">
                     {editingCat.hepsiburadaCategoryName || 'Seçilmedi'}
                   </div>
-                  <div className="space-y-1.5 pt-2">
+
+                  <div className="space-y-1.5 pt-1">
+                    {hbAttrLoading && (
+                      <div className="text-[11px] text-amber-800">Zorunlu özellikler yükleniyor...</div>
+                    )}
                     {editingCat.hepsiburadaAttributes.map((attr, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-slate-600">{attr.attributeName}:</span>
-                        <span className="font-semibold text-slate-900">{attr.mappedValue}</span>
+                      <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-slate-600 truncate">{attr.attributeName}:</span>
+                        <input
+                          type="text"
+                          value={attr.mappedValue}
+                          onChange={(e) => {
+                            const next = [...editingCat.hepsiburadaAttributes];
+                            next[i] = { ...next[i], mappedValue: e.target.value };
+                            setEditingCat({ ...editingCat, hepsiburadaAttributes: next });
+                          }}
+                          placeholder="Değer girin"
+                          className="w-36 px-2 py-1 rounded border border-amber-300 text-xs bg-white text-slate-900 font-medium"
+                        />
                       </div>
                     ))}
                   </div>

@@ -357,6 +357,40 @@ export default function XmlView({
     setEditingSource(copy);
   }
 
+  function updateDynamicRule(
+    idx: number,
+    field: keyof PriceRuleItem,
+    val: string | number
+  ) {
+    if (!editingSource) return;
+    const list = [...(editingSource.dynamicPriceRules || [])];
+    list[idx] = {
+      ...list[idx],
+      [field]: field === 'ruleType' || field === 'ruleOperationType' ? val : Number(val)
+    };
+    setEditingSource({ ...editingSource, dynamicPriceRules: list });
+  }
+
+  function addDynamicRuleRow() {
+    if (!editingSource) return;
+    const list = [...(editingSource.dynamicPriceRules || [])];
+    list.push({
+      ruleMinPrice: 0,
+      ruleMaxPrice: 999999,
+      ruleType: 'increase',
+      ruleOperationType: 'percent',
+      ruleAmount: 100,
+      ruleExtraPrice: 0
+    });
+    setEditingSource({ ...editingSource, dynamicPriceRules: list });
+  }
+
+  function removeDynamicRuleRow(idx: number) {
+    if (!editingSource) return;
+    const list = (editingSource.dynamicPriceRules || []).filter((_, i) => i !== idx);
+    setEditingSource({ ...editingSource, dynamicPriceRules: list });
+  }
+
   if (subMode === 'report' && selectedReportSource) {
     const rep = xmlReports.find((r) => r.xmlSourceId === selectedReportSource.id) || null;
 
@@ -1207,7 +1241,25 @@ export default function XmlView({
                             type="radio"
                             checked={editingSource.priceRuleType === opt.val}
                             onChange={() =>
-                              setEditingSource({ ...editingSource, priceRuleType: opt.val as any })
+                              setEditingSource({
+                                ...editingSource,
+                                priceRuleType: opt.val as any,
+                                dynamicPriceRules:
+                                  opt.val === 2 &&
+                                  (!editingSource.dynamicPriceRules ||
+                                    editingSource.dynamicPriceRules.length === 0)
+                                    ? [
+                                        {
+                                          ruleMinPrice: 0,
+                                          ruleMaxPrice: 999999,
+                                          ruleType: 'increase',
+                                          ruleOperationType: 'percent',
+                                          ruleAmount: 100,
+                                          ruleExtraPrice: 0
+                                        }
+                                      ]
+                                    : editingSource.dynamicPriceRules
+                              })
                             }
                             className="w-4 h-4 accent-blue-600 shrink-0"
                           />
@@ -1299,6 +1351,229 @@ export default function XmlView({
                               }
                               className="w-full px-3 py-2.5 rounded-lg border border-slate-300"
                             />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Değişken Fiyat Kuralları Tablosu (priceRuleType === 2 - Tüm Pazaryerlerine Ortak Aralık) */}
+                    {editingSource.priceRuleType === 2 && (
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-700 uppercase">
+                          Değişken Fiyat Aralıkları (Tüm Kanallar İçin Ortak)
+                        </div>
+                        <div className="p-3 sm:p-4 space-y-4">
+                          {/* Mobil Kural Kartları */}
+                          <div className="md:hidden space-y-3">
+                            {(editingSource.dynamicPriceRules || []).map((rule, idx) => (
+                              <div
+                                key={idx}
+                                className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5 text-xs"
+                              >
+                                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                                  <span className="font-bold text-slate-700">
+                                    Değişken Kural #{idx + 1}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeDynamicRuleRow(idx)}
+                                    className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold cursor-pointer inline-flex items-center gap-1"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" /> Sil
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                      Fiyat &gt;= (₺)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      value={rule.ruleMinPrice}
+                                      onChange={(e) =>
+                                        updateDynamicRule(idx, 'ruleMinPrice', e.target.value)
+                                      }
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                      &lt; Fiyat (₺)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      value={rule.ruleMaxPrice}
+                                      onChange={(e) =>
+                                        updateDynamicRule(idx, 'ruleMaxPrice', e.target.value)
+                                      }
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                      Kural Tipi
+                                    </label>
+                                    <select
+                                      value={rule.ruleType}
+                                      onChange={(e) =>
+                                        updateDynamicRule(idx, 'ruleType', e.target.value)
+                                      }
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+                                    >
+                                      <option value="increase">Fiyat Artışı</option>
+                                      <option value="discount">İndirim</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                      İşlem Tipi
+                                    </label>
+                                    <select
+                                      value={rule.ruleOperationType}
+                                      onChange={(e) =>
+                                        updateDynamicRule(idx, 'ruleOperationType', e.target.value)
+                                      }
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+                                    >
+                                      <option value="percent">Yüzdelik(%)</option>
+                                      <option value="price">Fiyat (₺)</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                      İşlem Miktarı
+                                    </label>
+                                    <input
+                                      type="number"
+                                      value={rule.ruleAmount}
+                                      onChange={(e) =>
+                                        updateDynamicRule(idx, 'ruleAmount', e.target.value)
+                                      }
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                      Ek Fiyat (₺)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      value={rule.ruleExtraPrice}
+                                      onChange={(e) =>
+                                        updateDynamicRule(idx, 'ruleExtraPrice', e.target.value)
+                                      }
+                                      className="w-full px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Masaüstü Tablo */}
+                          <div className="hidden md:block overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="border-b border-slate-200 uppercase text-slate-500">
+                                  <th className="py-2 px-2">FİYAT &gt;=</th>
+                                  <th className="py-2 px-2">&lt; FİYAT</th>
+                                  <th className="py-2 px-2">KURAL TİPİ</th>
+                                  <th className="py-2 px-2">İŞLEM TİPİ</th>
+                                  <th className="py-2 px-2">İŞLEM MİKTARI</th>
+                                  <th className="py-2 px-2">EK FİYAT (TL)</th>
+                                  <th className="py-2 px-2 text-right">SİL</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {(editingSource.dynamicPriceRules || []).map((rule, idx) => (
+                                  <tr key={idx}>
+                                    <td className="py-2 px-1">
+                                      <input
+                                        type="number"
+                                        value={rule.ruleMinPrice}
+                                        onChange={(e) =>
+                                          updateDynamicRule(idx, 'ruleMinPrice', e.target.value)
+                                        }
+                                        className="w-24 px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                                      />
+                                    </td>
+                                    <td className="py-2 px-1">
+                                      <input
+                                        type="number"
+                                        value={rule.ruleMaxPrice}
+                                        onChange={(e) =>
+                                          updateDynamicRule(idx, 'ruleMaxPrice', e.target.value)
+                                        }
+                                        className="w-28 px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                                      />
+                                    </td>
+                                    <td className="py-2 px-1">
+                                      <select
+                                        value={rule.ruleType}
+                                        onChange={(e) =>
+                                          updateDynamicRule(idx, 'ruleType', e.target.value)
+                                        }
+                                        className="px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                                      >
+                                        <option value="increase">Fiyat Artışı</option>
+                                        <option value="discount">İndirim</option>
+                                      </select>
+                                    </td>
+                                    <td className="py-2 px-1">
+                                      <select
+                                        value={rule.ruleOperationType}
+                                        onChange={(e) =>
+                                          updateDynamicRule(idx, 'ruleOperationType', e.target.value)
+                                        }
+                                        className="px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                                      >
+                                        <option value="percent">Yüzdelik(%)</option>
+                                        <option value="price">Fiyat</option>
+                                      </select>
+                                    </td>
+                                    <td className="py-2 px-1">
+                                      <input
+                                        type="number"
+                                        value={rule.ruleAmount}
+                                        onChange={(e) =>
+                                          updateDynamicRule(idx, 'ruleAmount', e.target.value)
+                                        }
+                                        className="w-24 px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                                      />
+                                    </td>
+                                    <td className="py-2 px-1">
+                                      <input
+                                        type="number"
+                                        value={rule.ruleExtraPrice}
+                                        onChange={(e) =>
+                                          updateDynamicRule(idx, 'ruleExtraPrice', e.target.value)
+                                        }
+                                        className="w-24 px-2 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                                      />
+                                    </td>
+                                    <td className="py-2 px-1 text-right">
+                                      <button
+                                        type="button"
+                                        onClick={() => removeDynamicRuleRow(idx)}
+                                        className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={addDynamicRuleRow}
+                              className="w-full sm:w-auto min-h-[42px] inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4" /> YENİ SATIR EKLE
+                            </button>
                           </div>
                         </div>
                       </div>

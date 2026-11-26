@@ -100,6 +100,75 @@ export default function OrdersAndClaimsView({
     }
   };
 
+  const handlePullClaims = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const res = await apiPost('/api/state', { action: 'pull_marketplace_claims' });
+      notify(res.message, res.ok ? 'success' : 'error');
+      if (res.ok) await onRefresh();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResolveHbClaim = async (claim: ClaimItem, decision: 'accept' | 'reject') => {
+    if (loading) return;
+    let merchantStatement = '';
+    if (decision === 'reject') {
+      const input = window.prompt(
+        `Hepsiburada talep #${claim.claimNumber} red gerekçesini girin:`,
+        'Ürün incelemesinde iade koşullarına uygun bulunmadı.'
+      );
+      if (input === null) return;
+      merchantStatement = input.trim();
+    } else {
+      if (!window.confirm(`Hepsiburada talep #${claim.claimNumber} onaylansın mı?`)) return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await apiPost('/api/state', {
+        action: 'resolve_hepsiburada_claim',
+        claimId: claim.id,
+        claimNumber: claim.claimNumber,
+        decision,
+        merchantStatement
+      });
+      notify(res.message, res.ok ? 'success' : 'error');
+      if (res.ok) await onRefresh();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFetchHbOfficialLabel = async (packageNumber: string) => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const res = await apiPost('/api/state', {
+        action: 'fetch_hepsiburada_cargo_label',
+        packageNumber
+      });
+      notify(res.message, res.ok ? 'success' : 'error');
+      const labelData = res.data?.labelData ? String(res.data.labelData) : '';
+      if (res.ok && labelData && typeof window !== 'undefined') {
+        const w = window.open('', '_blank', 'noopener,noreferrer');
+        if (w) {
+          if (labelData.startsWith('http')) {
+            w.location.href = labelData;
+          } else {
+            w.document.write(
+              `<iframe src="data:application/pdf;base64,${labelData}" style="border:0;width:100%;height:100vh"></iframe>`
+            );
+          }
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredOrders = orders.filter((o) =>
     statusFilter === 'all' ? true : o.status === statusFilter
   );
@@ -460,8 +529,18 @@ export default function OrdersAndClaimsView({
       {/* 2. İADE YÖNETİMİ */}
       {section === 'claims' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-4 bg-slate-50 border-b border-slate-200 font-bold text-slate-800 text-sm">
-            Müşteri İade ve Değişim Talepleri (Trendyol & Hepsiburada)
+          <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+            <span className="font-bold text-slate-800 text-sm">
+              Müşteri İade ve Değişim Talepleri (Trendyol &amp; Hepsiburada)
+            </span>
+            <button
+              onClick={handlePullClaims}
+              disabled={loading}
+              className="min-h-[38px] px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <DownloadCloud className="w-4 h-4 shrink-0" />
+              Canlı İadeleri Getir (Hepsiburada API)
+            </button>
           </div>
 
           {claims.length === 0 ? (
@@ -512,6 +591,24 @@ export default function OrdersAndClaimsView({
                         {c.amount.toFixed(2)} TL
                       </span>
                     </div>
+                    {c.marketplace === 'hepsiburada' && c.status === 'pending' && (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button
+                          onClick={() => handleResolveHbClaim(c, 'accept')}
+                          disabled={loading}
+                          className="min-h-[38px] px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer"
+                        >
+                          Onayla (HB)
+                        </button>
+                        <button
+                          onClick={() => handleResolveHbClaim(c, 'reject')}
+                          disabled={loading}
+                          className="min-h-[38px] px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer"
+                        >
+                          Reddet (HB)
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -526,7 +623,7 @@ export default function OrdersAndClaimsView({
                       <th className="py-3.5 px-4">MÜŞTERİ & ÜRÜN</th>
                       <th className="py-3.5 px-4">İADE NEDENİ</th>
                       <th className="py-3.5 px-4">TUTAR</th>
-                      <th className="py-3.5 px-4">DURUM</th>
+                      <th className="py-3.5 px-4">DURUM & İŞLEM</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 text-sm">
@@ -550,21 +647,41 @@ export default function OrdersAndClaimsView({
                           {c.amount.toFixed(2)} TL
                         </td>
                         <td className="py-3.5 px-4">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                              c.status === 'approved'
-                                ? 'bg-emerald-50 text-emerald-700'
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                c.status === 'approved'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : c.status === 'rejected'
+                                  ? 'bg-rose-50 text-rose-700'
+                                  : 'bg-amber-50 text-amber-700'
+                              }`}
+                            >
+                              {c.status === 'approved'
+                                ? 'Onaylandı'
                                 : c.status === 'rejected'
-                                ? 'bg-rose-50 text-rose-700'
-                                : 'bg-amber-50 text-amber-700'
-                            }`}
-                          >
-                            {c.status === 'approved'
-                              ? 'Onaylandı'
-                              : c.status === 'rejected'
-                              ? 'Reddedildi'
-                              : 'Bekliyor'}
-                          </span>
+                                ? 'Reddedildi'
+                                : 'Bekliyor'}
+                            </span>
+                            {c.marketplace === 'hepsiburada' && c.status === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => handleResolveHbClaim(c, 'accept')}
+                                  disabled={loading}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer"
+                                >
+                                  Onayla
+                                </button>
+                                <button
+                                  onClick={() => handleResolveHbClaim(c, 'reject')}
+                                  disabled={loading}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer"
+                                >
+                                  Reddet
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -812,13 +929,23 @@ export default function OrdersAndClaimsView({
               </div>
             </div>
 
-            <div className="sticky bottom-0 p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2 no-print">
+            <div className="sticky bottom-0 p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-end gap-2 no-print">
               <button
                 onClick={() => setPrintingOrder(null)}
                 className="flex-1 sm:flex-none px-4 py-2.5 rounded-lg border border-slate-300 bg-white text-xs font-semibold min-h-[42px]"
               >
                 Kapat
               </button>
+              {printingOrder.marketplace === 'hepsiburada' && printingOrder.packageNumber && (
+                <button
+                  onClick={() => handleFetchHbOfficialLabel(printingOrder.packageNumber!)}
+                  disabled={loading}
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-xs font-semibold flex items-center justify-center gap-1.5 min-h-[42px] cursor-pointer"
+                >
+                  <DownloadCloud className="w-4 h-4" />
+                  Resmi HB PDF Etiketi
+                </button>
+              )}
               <button
                 onClick={async () => {
                   await handleUpdateOrder(printingOrder.id, { labelPrinted: true });

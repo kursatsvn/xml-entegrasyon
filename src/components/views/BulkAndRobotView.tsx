@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { PriceRobotItem, Product, SyncBatch, XmlSource } from '@/types/sopyo';
 import { apiPost } from '@/lib/api-client';
+import { formatTrDateTime } from '@/lib/date-format';
+import HepsiburadaLivePanel from '@/components/views/HepsiburadaLivePanel';
 import {
   Send,
   RefreshCw,
@@ -40,7 +42,7 @@ interface LiveTrendyolItem {
 }
 
 interface BulkAndRobotViewProps {
-  initialTab?: 'publish' | 'update' | 'diff' | 'robot' | 'trendyol_live';
+  initialTab?: 'publish' | 'update' | 'diff' | 'robot' | 'trendyol_live' | 'hepsiburada_live';
   batches: SyncBatch[];
   products: Product[];
   priceRobotItems: PriceRobotItem[];
@@ -58,12 +60,13 @@ export default function BulkAndRobotView({
   onRefresh,
   notify
 }: BulkAndRobotViewProps) {
-  const [tab, setTab] = useState<'publish' | 'update' | 'diff' | 'robot' | 'trendyol_live'>(
-    initialTab
-  );
+  const [tab, setTab] = useState<
+    'publish' | 'update' | 'diff' | 'robot' | 'trendyol_live' | 'hepsiburada_live'
+  >(initialTab);
   const [selectedMarketplace, setSelectedMarketplace] = useState<
     'Tümü' | 'Trendyol' | 'Hepsiburada'
   >('Tümü');
+  const [publishLimit, setPublishLimit] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [selectedBatchErrors, setSelectedBatchErrors] = useState<SyncBatch | null>(null);
   const [showAddRobotModal, setShowAddRobotModal] = useState(false);
@@ -310,7 +313,8 @@ export default function BulkAndRobotView({
     try {
       const res = await apiPost('/api/state', {
         action: 'bulk_publish',
-        marketplace: selectedMarketplace
+        marketplace: selectedMarketplace,
+        limit: publishLimit
       });
       if (res.ok) {
         notify(res.message, 'success');
@@ -318,6 +322,21 @@ export default function BulkAndRobotView({
       } else {
         notify(res.message || 'Gönderim hatası', 'error');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCheckHbTracking = async (trackingId: string) => {
+    if (loading || !trackingId) return;
+    setLoading(true);
+    try {
+      const cleanId = trackingId.split('|').map((s) => s.trim()).find(Boolean) || trackingId;
+      const res = await apiPost('/api/state', {
+        action: 'check_hepsiburada_import_status',
+        trackingId: cleanId
+      });
+      notify(res.message, res.ok ? 'success' : 'error');
     } finally {
       setLoading(false);
     }
@@ -442,8 +461,24 @@ export default function BulkAndRobotView({
             <Trash2 className="w-4 h-4 shrink-0" />
             Trendyol Canlı &amp; Silme (API)
           </button>
+          <button
+            onClick={() => setTab('hepsiburada_live')}
+            className={`shrink-0 whitespace-nowrap min-h-[40px] px-3.5 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transition cursor-pointer ${
+              tab === 'hepsiburada_live'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+            }`}
+          >
+            <CloudDownload className="w-4 h-4 shrink-0" />
+            Hepsiburada Canlı &amp; Yönetim (API)
+          </button>
         </div>
       </div>
+
+      {/* 6. HEPSİBURADA CANLI ÜRÜNLERİ GÖRÜNTÜLE, SATIŞA AÇ/KAPAT, ÖN EŞLEŞME ONAYLA & SİL */}
+      {tab === 'hepsiburada_live' && (
+        <HepsiburadaLivePanel onRefresh={onRefresh} notify={notify} />
+      )}
 
       {/* 5. TRENDYOL CANLI ÜRÜNLERİ GÖRÜNTÜLE & SİL (1. ADIM ARŞİVLE -> 2. ADIM KALICI SİL) */}
       {tab === 'trendyol_live' && (
@@ -1131,11 +1166,21 @@ export default function BulkAndRobotView({
               <select
                 value={selectedMarketplace}
                 onChange={(e) => setSelectedMarketplace(e.target.value as any)}
-                className="w-full sm:w-auto px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white"
+                className="w-full sm:w-auto px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white text-slate-900"
               >
                 <option value="Tümü">Trendyol + Hepsiburada (Tümü)</option>
                 <option value="Trendyol">Sadece Trendyol</option>
                 <option value="Hepsiburada">Sadece Hepsiburada</option>
+              </select>
+              <select
+                value={publishLimit}
+                onChange={(e) => setPublishLimit(Number(e.target.value))}
+                className="w-full sm:w-auto px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white text-slate-900"
+              >
+                <option value={0}>Tüm Ürünler</option>
+                <option value={1}>1 Ürün (Canlı Test)</option>
+                <option value={10}>İlk 10 Ürün</option>
+                <option value={50}>İlk 50 Ürün</option>
               </select>
               <button
                 onClick={handleBulkPublish}
@@ -1143,7 +1188,11 @@ export default function BulkAndRobotView({
                 className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 <Send className="w-4 h-4 shrink-0" />
-                {loading ? 'Gönderiliyor...' : 'Toplu Ürün Gönderimini Başlat'}
+                {loading
+                  ? 'Gönderiliyor...'
+                  : publishLimit > 0
+                  ? `${publishLimit} Ürünü Test Gönder`
+                  : 'Toplu Ürün Gönderimini Başlat'}
               </button>
             </div>
           </div>
@@ -1241,22 +1290,35 @@ export default function BulkAndRobotView({
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-xs text-slate-500">
-                        {new Date(b.createdAt).toLocaleString('tr-TR')}
+                        {formatTrDateTime(b.createdAt)}
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        {b.errors && b.errors.length > 0 ? (
-                          <button
-                            onClick={() => setSelectedBatchErrors(b)}
-                            className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold inline-flex items-center gap-1.5"
-                          >
-                            <FileWarning className="w-3.5 h-3.5" />
-                            Hata Raporu ({b.errors.length})
-                          </button>
-                        ) : (
-                          <span className="text-xs text-emerald-600 font-semibold inline-flex items-center gap-1">
-                            <CheckCircle2 className="w-4 h-4" /> Hatasız Tamamlandı
-                          </span>
-                        )}
+                        <div className="inline-flex items-center justify-end gap-2">
+                          {b.marketplace === 'Hepsiburada' &&
+                            b.remoteBatchId &&
+                            !b.remoteBatchId.startsWith('HEPSIBURADA-') && (
+                              <button
+                                onClick={() => handleCheckHbTracking(b.remoteBatchId)}
+                                disabled={loading}
+                                className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold cursor-pointer"
+                              >
+                                Tracking Sorgula
+                              </button>
+                            )}
+                          {b.errors && b.errors.length > 0 ? (
+                            <button
+                              onClick={() => setSelectedBatchErrors(b)}
+                              className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <FileWarning className="w-3.5 h-3.5" />
+                              Hata Raporu ({b.errors.length})
+                            </button>
+                          ) : (
+                            <span className="text-xs text-emerald-600 font-semibold inline-flex items-center gap-1">
+                              <CheckCircle2 className="w-4 h-4" /> Hatasız Tamamlandı
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

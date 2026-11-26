@@ -22,6 +22,26 @@ import {
   testMarketplaceConnection
 } from '@/lib/marketplace-api';
 import {
+  approveHepsiburadaPreMatch,
+  checkHepsiburadaImportStatus,
+  deletePendingHepsiburadaProducts,
+  fetchHepsiburadaBuyboxOrders,
+  fetchHepsiburadaCargoLabel,
+  fetchLiveHepsiburadaProducts,
+  pullHepsiburadaClaims,
+  reconcileHepsiburadaProductStatuses,
+  resolveHepsiburadaClaim,
+  syncHepsiburadaInventoryAndPrice,
+  toggleHepsiburadaListingsState
+} from '@/lib/hepsiburada-api';
+import {
+  fetchHepsiburadaCategoryAttributes,
+  fetchHepsiburadaLeafCategories,
+  findBestHepsiburadaCategoryMatch,
+  searchHepsiburadaCategories
+} from '@/lib/hepsiburada-catalog';
+import { parseHepsiburadaCategoryId } from '@/lib/hepsiburada-client';
+import {
   CategoryMapping,
   MarketplaceAccount,
   Order,
@@ -705,18 +725,75 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, message: 'Ürün bilgileri kaydedildi.' });
     }
 
-    // 6. Tüm Kategorileri Tek Tıkla Otomatik Eşitle (Trendyol & Hepsiburada)
+    // 6. Tüm Kategorileri Tek Tıkla Otomatik Eşitle (Trendyol & Canlı Hepsiburada MPOP)
     if (action === 'auto_match_all_categories') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      let hbLeafCategories: Awaited<ReturnType<typeof fetchHepsiburadaLeafCategories>>['categories'] = [];
+      if (hbAcc?.supplierOrMerchantId && hbAcc?.apiSecret) {
+        const hbCatRes = await fetchHepsiburadaLeafCategories(hbAcc, { maxPages: 6 });
+        if (hbCatRes.ok) {
+          hbLeafCategories = hbCatRes.categories;
+        }
+      }
+
       let matchedCount = 0;
+      let hbRealMatchedCount = 0;
       db.categories = db.categories.map((cat) => {
         if (cat.tenantId !== tenantId) return cat;
         matchedCount++;
-        return enrichCategoryMappingWithAutoMatch(cat);
+        const enriched = enrichCategoryMappingWithAutoMatch(cat);
+
+        // Eğer halihazırda gerçek sayısal bir Hepsiburada kategori ID varsa koru
+        if (parseHepsiburadaCategoryId(cat.hepsiburadaCategoryId)) {
+          hbRealMatchedCount++;
+          return {
+            ...enriched,
+            hepsiburadaCategoryId: cat.hepsiburadaCategoryId,
+            hepsiburadaCategoryName: cat.hepsiburadaCategoryName,
+            hepsiburadaStatus: 'mapped' as const,
+            hepsiburadaAttributes:
+              cat.hepsiburadaAttributes.length > 0
+                ? cat.hepsiburadaAttributes
+                : enriched.hepsiburadaAttributes
+          };
+        }
+
+        // Canlı Hepsiburada MPOP yaprak kategorilerinden eşleştir
+        if (hbLeafCategories.length > 0) {
+          const bestHb = findBestHepsiburadaCategoryMatch(
+            cat.name,
+            cat.xmlCategoryTree,
+            hbLeafCategories
+          );
+          if (bestHb) {
+            hbRealMatchedCount++;
+            return {
+              ...enriched,
+              hepsiburadaCategoryId: String(bestHb.categoryId),
+              hepsiburadaCategoryName: bestHb.displayName,
+              hepsiburadaStatus: 'mapped' as const
+            };
+          }
+        }
+
+        // Gerçek sayısal HB kategorisi eşleşmediyse eski sahte HB-60000... ID'sini mapped sayma
+        return {
+          ...enriched,
+          hepsiburadaCategoryId: '',
+          hepsiburadaCategoryName: '',
+          hepsiburadaStatus: 'unmapped' as const
+        };
       });
+
       await writeDbAsync(db, { skipProducts: true });
       return NextResponse.json({
         ok: true,
-        message: `${matchedCount} kategori Trendyol ve Hepsiburada kategori ağacı ve zorunlu özellikleriyle otomatik eşitlendi!`
+        message:
+          hbLeafCategories.length > 0
+            ? `${matchedCount} kategori Trendyol ile, ${hbRealMatchedCount} kategori canlı Hepsiburada MPOP yaprak kategorileriyle otomatik eşitlendi!`
+            : `${matchedCount} kategori Trendyol ile eşitlendi. Hepsiburada canlı kategori eşleştirme için önce Hepsiburada API bilgilerini doğrulayın.`
       });
     }
 
@@ -823,10 +900,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 11. Toplu Ürün Gönderimi (Trendyol & Hepsiburada)
+    // 11. Toplu Ürün Gönderimi (Trendyol & Hepsiburada + Kontrollü Test Limiti)
     if (action === 'bulk_publish') {
       const targetMarketplace = (body.marketplace || 'Tümü') as 'Trendyol' | 'Hepsiburada' | 'Tümü';
-      const tenantProducts = db.products.filter((p) => p.tenantId === tenantId);
+      const publishLimit = Number(body.limit || 0);
+      const currentTenant = db.tenants.find((t) => t.id === tenantId);
+      const tenantGs = currentTenant ? mergeTenantGeneralSettings(currentTenant) : null;
+      const allTenantProducts = db.products.filter((p) => p.tenantId === tenantId);
       const tenantCategories = db.categories.filter((c) => c.tenantId === tenantId);
       const tenantBrands = db.brands.filter((b) => b.tenantId === tenantId);
       const accounts = db.marketplaceAccounts.filter(
@@ -837,18 +917,51 @@ export async function POST(req: NextRequest) {
             m.marketplace.toLowerCase() === targetMarketplace.toLowerCase())
       );
 
+      if (accounts.length === 0) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message: `${targetMarketplace} için aktif bir pazaryeri API hesabı bulunamadı.`
+          },
+          { status: 400 }
+        );
+      }
+
       let totalAttempted = 0;
       let totalSuccess = 0;
       let totalError = 0;
       const allErrors: { stockCode: string; title: string; marketplace: string; message: string }[] = [];
-      let remoteBatchIds: string[] = [];
+      const remoteBatchIds: string[] = [];
+      const modifiedProdIds = new Set<string>();
 
       for (const acc of accounts) {
+        let productsForAcc = allTenantProducts;
+        if (publishLimit > 0) {
+          // Test / sınırlı gönderimde önce fiyatı > 0 ve henüz gönderilmemiş ürünleri önceliklendir
+          const prioritized = [...allTenantProducts].sort((a, b) => {
+            const aEligible = a.salePrice > 0 && a.status === 'active' ? 0 : 1;
+            const bEligible = b.salePrice > 0 && b.status === 'active' ? 0 : 1;
+            if (aEligible !== bEligible) return aEligible - bEligible;
+            const aUnsent =
+              (acc.marketplace === 'trendyol' ? a.trendyolSyncStatus : a.hepsiburadaSyncStatus) !== 'synced'
+                ? 0
+                : 1;
+            const bUnsent =
+              (acc.marketplace === 'trendyol' ? b.trendyolSyncStatus : b.hepsiburadaSyncStatus) !== 'synced'
+                ? 0
+                : 1;
+            return aUnsent - bUnsent;
+          });
+          productsForAcc = prioritized.slice(0, publishLimit);
+        }
+
         const res = await publishProductsToMarketplace({
           account: acc,
-          products: tenantProducts,
+          products: productsForAcc,
           categories: tenantCategories,
-          brands: tenantBrands
+          brands: tenantBrands,
+          useMarketDesc: Boolean(tenantGs?.customerUseMarketDesc),
+          useMinPrice: Boolean(tenantGs?.customerUseMinPrice)
         });
         totalAttempted = Math.max(totalAttempted, res.attemptedCount);
         totalSuccess = Math.max(totalSuccess, res.successCount);
@@ -857,8 +970,10 @@ export async function POST(req: NextRequest) {
         remoteBatchIds.push(res.remoteBatchId);
 
         const syncedSet = new Set(res.syncedProductIds);
+        const targetedIds = new Set(productsForAcc.map((p) => p.id));
         for (const p of db.products) {
-          if (p.tenantId !== tenantId) continue;
+          if (p.tenantId !== tenantId || !targetedIds.has(p.id)) continue;
+          modifiedProdIds.add(p.id);
           if (acc.marketplace === 'trendyol') {
             p.trendyolSyncStatus = syncedSet.has(p.id) ? 'synced' : 'error';
             const err = res.errors.find((e) => e.stockCode === p.stockCode);
@@ -876,12 +991,12 @@ export async function POST(req: NextRequest) {
         tenantId,
         batchNumber: 803255 + db.syncBatches.length,
         marketplace: targetMarketplace,
-        operationType: 'TÜM ÜRÜNLER',
+        operationType: publishLimit > 0 ? `KONTROLLÜ GÖNDERİM (${publishLimit} ÜRÜN)` : 'TÜM ÜRÜNLER',
         remoteBatchId: remoteBatchIds.join(' | ') || `BATCH-${Date.now()}`,
-        attemptedCount: tenantProducts.length,
+        attemptedCount: totalAttempted,
         successCount: totalSuccess,
         errorCount: allErrors.length,
-        status: 'completed' as const,
+        status: allErrors.length > 0 && totalSuccess === 0 ? ('failed' as const) : ('completed' as const),
         createdAt: new Date().toISOString(),
         errors: allErrors
       };
@@ -898,7 +1013,12 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString()
       });
 
-      await writeDbAsync(db);
+      await writeDbAsync(
+        db,
+        modifiedProdIds.size > 0
+          ? { onlyProductIds: Array.from(modifiedProdIds) }
+          : { skipProducts: true }
+      );
       return NextResponse.json({
         ok: true,
         message: `Toplu ürün gönderimi tamamlandı (#${newBatch.batchNumber}): ${totalSuccess} ürün aktarıldı, ${allErrors.length} hata döndü.`,
@@ -909,6 +1029,8 @@ export async function POST(req: NextRequest) {
     // 12. Toplu Stok & Fiyat Güncelleme
     if (action === 'bulk_update_price_stock') {
       const targetMarketplace = (body.marketplace || 'Tümü') as 'Trendyol' | 'Hepsiburada' | 'Tümü';
+      const currentTenant = db.tenants.find((t) => t.id === tenantId);
+      const tenantGs = currentTenant ? mergeTenantGeneralSettings(currentTenant) : null;
       const tenantProducts = db.products.filter((p) => p.tenantId === tenantId);
       const accounts = db.marketplaceAccounts.filter(
         (m) =>
@@ -924,7 +1046,8 @@ export async function POST(req: NextRequest) {
       for (const acc of accounts) {
         const res = await syncPriceAndInventoryToMarketplace({
           account: acc,
-          products: tenantProducts
+          products: tenantProducts,
+          useMinPrice: Boolean(tenantGs?.customerUseMinPrice)
         });
         batchIds.push(res.remoteBatchId);
         totalSuccess = Math.max(totalSuccess, res.successCount);
@@ -971,11 +1094,16 @@ export async function POST(req: NextRequest) {
 
     // 13. Sipariş Çekme + Otomatik Çapraz Pazaryeri Stoktan Düşme
     if (action === 'pull_orders_and_deduct_stock') {
+      const currentTenant = db.tenants.find((t) => t.id === tenantId);
+      const tenantGs = currentTenant ? mergeTenantGeneralSettings(currentTenant) : null;
       const accounts = db.marketplaceAccounts.filter((m) => m.tenantId === tenantId && m.isActive);
       let newOrdersCount = 0;
+      const affectedProductsByChannel: { sourceMarketplace: string; product: Product }[] = [];
 
       for (const acc of accounts) {
-        const pulled = await pullOrdersFromMarketplace(acc);
+        const pulled = await pullOrdersFromMarketplace(acc, {
+          includePaymentAwaiting: Boolean(tenantGs?.customerHBWaitingOrderStatus)
+        });
         for (const po of pulled) {
           if (!po.orderNumber) continue;
           const exists = db.orders.some(
@@ -1003,12 +1131,14 @@ export async function POST(req: NextRequest) {
                     v.netStock = Math.max(0, v.xmlStock - v.reservedStock);
                   }
                 }
+                affectedProductsByChannel.push({ sourceMarketplace: acc.marketplace, product: prod });
               }
             }
             db.orders.unshift({
               id: `ord-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               tenantId,
               orderNumber: po.orderNumber,
+              packageNumber: po.packageNumber,
               marketplace: acc.marketplace,
               customerName: po.customerName || 'Müşteri',
               customerEmail: po.customerEmail || '',
@@ -1108,7 +1238,30 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      await writeDbAsync(db);
+      // Gerçek siparişten düşülen stokları karşı pazaryerine anında ilet
+      if (affectedProductsByChannel.length > 0) {
+        for (const otherAcc of accounts) {
+          const toSync = affectedProductsByChannel
+            .filter((x) => x.sourceMarketplace !== otherAcc.marketplace)
+            .map((x) => x.product);
+          if (toSync.length > 0) {
+            await syncPriceAndInventoryToMarketplace({
+              account: otherAcc,
+              products: toSync,
+              useMinPrice: Boolean(tenantGs?.customerUseMinPrice)
+            });
+          }
+        }
+      }
+
+      await writeDbAsync(
+        db,
+        affectedProductsByChannel.length > 0
+          ? { onlyProductIds: Array.from(new Set(affectedProductsByChannel.map((x) => x.product.id))) }
+          : body.simulateNewOrder
+          ? undefined
+          : { skipProducts: true }
+      );
       return NextResponse.json({
         ok: true,
         message:
@@ -1246,34 +1399,96 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 16. Rekabet Robotu Çalıştır / Ekle
+    // 16. Rekabet Robotu Çalıştır (Hepsiburada Canlı Buybox API + Dip Fiyat Koruması)
     if (action === 'run_price_robot') {
       let updatedCount = 0;
       const modifiedProdIds: string[] = [];
-      for (const item of db.priceRobotItems) {
-        if (item.tenantId !== tenantId || !item.isActive) continue;
-        if (item.buyboxPrice < item.currentPrice) {
-          const target = Math.max(item.minFloorPrice, Number((item.buyboxPrice - item.stepAmount).toFixed(2)));
-          item.currentPrice = target;
-          item.buyboxRank = target <= item.buyboxPrice ? 1 : 2;
-          item.lastCheckedAt = new Date().toISOString();
-          updatedCount++;
+      const hbProductsToSync: Product[] = [];
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada' && m.isActive
+      );
 
-          const prod = db.products.find((p) => p.id === item.productId && p.tenantId === tenantId);
-          if (prod) {
-            if (item.marketplace === 'trendyol') prod.trendyolSalePrice = target;
-            else prod.hepsiburadaSalePrice = target;
-            modifiedProdIds.push(prod.id);
+      // Hepsiburada aktif robot kalemleri için canlı Buybox verisini çek
+      const hbBuyboxMap = new Map<string, { rank: number; winningPrice: number; merchantName?: string }>();
+      const activeHbRobotItems = db.priceRobotItems.filter(
+        (i) => i.tenantId === tenantId && i.isActive && i.marketplace === 'hepsiburada'
+      );
+      if (hbAcc?.supplierOrMerchantId && hbAcc?.apiSecret && activeHbRobotItems.length > 0) {
+        const candidateSkus: string[] = [];
+        for (const rItem of activeHbRobotItems) {
+          const p = db.products.find((pr) => pr.id === rItem.productId && pr.tenantId === tenantId);
+          const hbSku = p?.variants.find((v) => v.hepsiburadaSku)?.hepsiburadaSku || rItem.marketplaceSkuOrUrl;
+          if (hbSku && /^HB/i.test(hbSku)) candidateSkus.push(hbSku);
+        }
+        if (candidateSkus.length > 0) {
+          const bbRes = await fetchHepsiburadaBuyboxOrders({ account: hbAcc, hbSkus: candidateSkus });
+          if (bbRes.ok) {
+            for (const o of bbRes.orders) {
+              hbBuyboxMap.set(o.sku.toUpperCase(), o);
+            }
           }
         }
       }
+
+      for (const item of db.priceRobotItems) {
+        if (item.tenantId !== tenantId || !item.isActive) continue;
+        const prod = db.products.find((p) => p.id === item.productId && p.tenantId === tenantId);
+
+        if (item.marketplace === 'hepsiburada') {
+          const hbSku =
+            prod?.variants.find((v) => v.hepsiburadaSku)?.hepsiburadaSku || item.marketplaceSkuOrUrl;
+          const liveBb = hbSku ? hbBuyboxMap.get(hbSku.toUpperCase()) : undefined;
+          if (liveBb && liveBb.winningPrice > 0) {
+            item.buyboxPrice = liveBb.winningPrice;
+            item.buyboxRank = liveBb.rank;
+            if (liveBb.merchantName) item.competitorStore = liveBb.merchantName;
+          }
+        }
+
+        const effectiveFloor = Math.max(item.minFloorPrice, prod?.minPrice || 0);
+        if (item.buyboxPrice > 0 && item.buyboxPrice < item.currentPrice) {
+          const target = Math.max(
+            effectiveFloor,
+            Number((item.buyboxPrice - item.stepAmount).toFixed(2))
+          );
+          if (target !== item.currentPrice) {
+            item.currentPrice = target;
+            item.buyboxRank = target <= item.buyboxPrice ? 1 : item.buyboxRank || 2;
+            item.lastCheckedAt = new Date().toISOString();
+            updatedCount++;
+
+            if (prod) {
+              if (item.marketplace === 'trendyol') {
+                prod.trendyolSalePrice = target;
+              } else {
+                prod.hepsiburadaSalePrice = target;
+                for (const v of prod.variants) {
+                  v.hepsiburadaSalePrice = target;
+                }
+                hbProductsToSync.push(prod);
+              }
+              modifiedProdIds.push(prod.id);
+            }
+          }
+        }
+      }
+
+      // Güncellenen Hepsiburada Buybox fiyatlarını canlı Listing API'sine bas
+      if (hbAcc?.supplierOrMerchantId && hbAcc?.apiSecret && hbProductsToSync.length > 0) {
+        await syncHepsiburadaInventoryAndPrice({
+          account: hbAcc,
+          products: hbProductsToSync,
+          useMinPrice: true
+        });
+      }
+
       await writeDbAsync(
         db,
         modifiedProdIds.length > 0 ? { onlyProductIds: modifiedProdIds } : { skipProducts: true }
       );
       return NextResponse.json({
         ok: true,
-        message: `Fiyat Rekabet Robotu çalıştırıldı: ${updatedCount} üründe dip fiyat korunarak Buybox fiyatı optimize edildi!`
+        message: `Fiyat Rekabet Robotu çalıştırıldı: ${updatedCount} üründe dip fiyat korunarak Buybox fiyatı optimize edildi${hbProductsToSync.length > 0 ? ` (${hbProductsToSync.length} ürün canlı Hepsiburada'ya iletildi)` : ''}!`
       });
     }
 
@@ -1452,6 +1667,324 @@ export async function POST(req: NextRequest) {
         sanitizedLog: scanResult.sanitizedLog.slice(0, 25),
         message: `🛡️ AI İhlal Koruma & Tekilleştirme Tamamlandı: ${scanResult.sanitizedCount} ürünün yasaklı kelimeleri temizlendi, ${scanResult.duplicateRemovedCount} çoklanan ürün tekilleştirildi, ${scanResult.prohibitedBlockedCount} satışı yasak ürün engellendi. Toplam ${scanResult.products.length} temiz ürün aktif!`
       });
+    }
+
+    // 22. Hepsiburada Canlı MPOP Kategori Arama
+    if (action === 'search_hepsiburada_categories') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      if (!hbAcc || !hbAcc.supplierOrMerchantId || !hbAcc.apiSecret) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              'Önce Entegrasyonlar sekmesinden mağazanıza ait Hepsiburada Merchant ID ve Servis Anahtarını kaydedin.'
+          },
+          { status: 400 }
+        );
+      }
+      const res = await searchHepsiburadaCategories(
+        hbAcc,
+        String(body.query || ''),
+        Number(body.limit || 40)
+      );
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
+    }
+
+    // 23. Hepsiburada Seçili Kategori Zorunlu & Varyant Özelliklerini Çek
+    if (action === 'fetch_hepsiburada_category_attributes') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      if (!hbAcc || !hbAcc.supplierOrMerchantId || !hbAcc.apiSecret) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              'Önce Entegrasyonlar sekmesinden mağazanıza ait Hepsiburada API bilgilerini kaydedin.'
+          },
+          { status: 400 }
+        );
+      }
+      const res = await fetchHepsiburadaCategoryAttributes(hbAcc, Number(body.categoryId));
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
+    }
+
+    // 24. Canlı Hepsiburada Ürünlerini & Sayaçlarını Listele (Kiracı İzolasyonlu)
+    if (action === 'fetch_live_hepsiburada_products') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      if (!hbAcc || !hbAcc.supplierOrMerchantId || !hbAcc.apiSecret) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              'Bu işlem için önce Entegrasyonlar sekmesinden mağazanıza ait Hepsiburada Merchant ID, Entegratör Kullanıcı Adı ve Servis Anahtarını kaydedin.'
+          },
+          { status: 400 }
+        );
+      }
+      const result = await fetchLiveHepsiburadaProducts({
+        account: hbAcc,
+        page: Number(body.page || 0),
+        size: Number(body.size || 50),
+        filter: body.filter || 'all'
+      });
+      return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+    }
+
+    // 25. Canlı Hepsiburada Ürünlerini Satışa Aç / Kapat (Activate / Deactivate)
+    if (action === 'toggle_hepsiburada_listings_state') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      if (!hbAcc || !hbAcc.supplierOrMerchantId || !hbAcc.apiSecret) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message: 'Hepsiburada API bilgileri eksik.'
+          },
+          { status: 400 }
+        );
+      }
+      const result = await toggleHepsiburadaListingsState({
+        account: hbAcc,
+        items: Array.isArray(body.items) ? body.items : [],
+        targetState: body.targetState
+      });
+      db.operationLogs.unshift({
+        id: `op-${Date.now()}`,
+        tenantId,
+        type: 'marketplace_publish',
+        channel: `Hepsiburada API (${String(body.targetState).toUpperCase()})`,
+        summary: `Hepsiburada Satış Durumu Güncelleme: ${result.processedCount} ürün işlendi`,
+        status: result.ok ? 'success' : 'error',
+        details: result.message,
+        createdAt: new Date().toISOString()
+      });
+      await writeDbAsync(db, { skipProducts: true });
+      return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+    }
+
+    // 26. Hepsiburada Onay Bekleyen Katalog Ürünlerini Sil (MPOP delete-process)
+    if (action === 'delete_pending_hepsiburada_products') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      if (!hbAcc || !hbAcc.supplierOrMerchantId || !hbAcc.apiSecret) {
+        return NextResponse.json(
+          { ok: false, message: 'Hepsiburada API bilgileri eksik.' },
+          { status: 400 }
+        );
+      }
+      const result = await deletePendingHepsiburadaProducts({
+        account: hbAcc,
+        merchantSkus: Array.isArray(body.merchantSkus) ? body.merchantSkus : []
+      });
+      db.operationLogs.unshift({
+        id: `op-${Date.now()}`,
+        tenantId,
+        type: 'marketplace_publish',
+        channel: 'Hepsiburada API (DELETE)',
+        summary: `Hepsiburada Onay Bekleyen Ürün Silme: ${result.deletedCount} SKU`,
+        status: result.ok ? 'success' : 'error',
+        details: result.message,
+        createdAt: new Date().toISOString()
+      });
+      await writeDbAsync(db, { skipProducts: true });
+      return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+    }
+
+    // 27. Hepsiburada Ön Eşleşmeli (PRE_MATCHED) Ürünleri Onayla
+    if (action === 'approve_hepsiburada_prematch') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      if (!hbAcc || !hbAcc.supplierOrMerchantId || !hbAcc.apiSecret) {
+        return NextResponse.json(
+          { ok: false, message: 'Hepsiburada API bilgileri eksik.' },
+          { status: 400 }
+        );
+      }
+      const result = await approveHepsiburadaPreMatch({
+        account: hbAcc,
+        merchantSkus: Array.isArray(body.merchantSkus) ? body.merchantSkus : []
+      });
+      db.operationLogs.unshift({
+        id: `op-${Date.now()}`,
+        tenantId,
+        type: 'marketplace_publish',
+        channel: 'Hepsiburada API (PRE_MATCH)',
+        summary: `Hepsiburada Ön Eşleşme Onayı: ${result.approvedCount} SKU`,
+        status: result.ok ? 'success' : 'error',
+        details: result.message,
+        createdAt: new Date().toISOString()
+      });
+      await writeDbAsync(db, { skipProducts: true });
+      return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+    }
+
+    // 28. Hepsiburada Batch / Tracking ID Durum Sorgula
+    if (action === 'check_hepsiburada_import_status') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      if (!hbAcc || !hbAcc.supplierOrMerchantId || !hbAcc.apiSecret) {
+        return NextResponse.json(
+          { ok: false, message: 'Hepsiburada API bilgileri eksik.' },
+          { status: 400 }
+        );
+      }
+      const res = await checkHepsiburadaImportStatus(hbAcc, String(body.trackingId || ''));
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
+    }
+
+    // 29. Hepsiburada Gönderim Durumlarını Canlı Mağaza ile Eşitle (Salt-Okunur HB GET -> Yerel DB Hizalama)
+    if (action === 'reconcile_hepsiburada_status') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      if (!hbAcc || !hbAcc.supplierOrMerchantId || !hbAcc.apiSecret) {
+        return NextResponse.json(
+          { ok: false, message: 'Hepsiburada API bilgileri eksik.' },
+          { status: 400 }
+        );
+      }
+      const tenantProducts = db.products.filter((p) => p.tenantId === tenantId);
+      const res = await reconcileHepsiburadaProductStatuses({
+        account: hbAcc,
+        products: tenantProducts
+      });
+      if (res.ok && res.updatedProductIds.length > 0) {
+        await writeDbAsync(db, { onlyProductIds: res.updatedProductIds });
+      }
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
+    }
+
+    // 30. Canlı Pazaryeri İade / Talep (Claims) Çekme
+    if (action === 'pull_marketplace_claims') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada' && m.isActive
+      );
+      let addedCount = 0;
+      let updatedCount = 0;
+      if (hbAcc?.supplierOrMerchantId && hbAcc?.apiSecret) {
+        const pulledClaims = await pullHepsiburadaClaims(hbAcc);
+        for (const pc of pulledClaims) {
+          if (!pc.claimNumber) continue;
+          const existing = db.claims.find(
+            (c) =>
+              c.tenantId === tenantId &&
+              c.marketplace === 'hepsiburada' &&
+              c.claimNumber === pc.claimNumber
+          );
+          if (existing) {
+            if (pc.status && existing.status !== pc.status) {
+              existing.status = pc.status;
+              updatedCount++;
+            }
+          } else {
+            db.claims.unshift({
+              id: `clm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              tenantId,
+              claimNumber: pc.claimNumber,
+              orderNumber: pc.orderNumber || '',
+              marketplace: 'hepsiburada',
+              customerName: pc.customerName || 'Hepsiburada Müşterisi',
+              productTitle: pc.productTitle || 'İade Ürünü',
+              sku: pc.sku || '',
+              quantity: pc.quantity || 1,
+              reason: pc.reason || 'Müşteri Talebi',
+              status: pc.status || 'pending',
+              restockOnApprove: true,
+              amount: pc.amount || 0,
+              claimDate: pc.claimDate || new Date().toISOString()
+            });
+            addedCount++;
+          }
+        }
+      }
+      if (addedCount > 0 || updatedCount > 0) {
+        db.operationLogs.unshift({
+          id: `op-claim-${Date.now()}`,
+          tenantId,
+          type: 'claim_sync',
+          channel: 'Hepsiburada OMS Claims',
+          summary: `İade/Talep Senkronizasyonu: ${addedCount} yeni, ${updatedCount} güncellendi`,
+          status: 'success',
+          details: 'Hepsiburada OMS talep listesi canlı API üzerinden güncellendi.',
+          createdAt: new Date().toISOString()
+        });
+        await writeDbAsync(db, { skipProducts: true });
+      }
+      return NextResponse.json({
+        ok: true,
+        addedCount,
+        updatedCount,
+        message:
+          addedCount > 0 || updatedCount > 0
+            ? `Hepsiburada iade talepleri güncellendi: ${addedCount} yeni, ${updatedCount} durum değişikliği.`
+            : 'Hepsiburada iade ve değişim talepleri kontrol edildi; tüm kayıtlar güncel.'
+      });
+    }
+
+    // 31. Hepsiburada İade / Değişim Talebini Onayla / Reddet
+    if (action === 'resolve_hepsiburada_claim') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      if (!hbAcc || !hbAcc.supplierOrMerchantId || !hbAcc.apiSecret) {
+        return NextResponse.json(
+          { ok: false, message: 'Hepsiburada API bilgileri eksik.' },
+          { status: 400 }
+        );
+      }
+      const res = await resolveHepsiburadaClaim({
+        account: hbAcc,
+        claimNumber: String(body.claimNumber),
+        decision: body.decision,
+        rejectionReason: body.rejectionReason,
+        merchantStatement: body.merchantStatement
+      });
+      if (res.ok) {
+        const claim = db.claims.find(
+          (c) =>
+            c.tenantId === tenantId &&
+            (c.id === body.claimId || c.claimNumber === String(body.claimNumber))
+        );
+        if (claim) {
+          claim.status = body.decision === 'accept' ? 'approved' : 'rejected';
+        }
+        db.operationLogs.unshift({
+          id: `op-clm-${Date.now()}`,
+          tenantId,
+          type: 'claim_sync',
+          channel: 'Hepsiburada OMS Claims',
+          summary: res.message,
+          status: 'success',
+          details: `Talep #${body.claimNumber} -> ${body.decision}`,
+          createdAt: new Date().toISOString()
+        });
+        await writeDbAsync(db, { skipProducts: true });
+      }
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
+    }
+
+    // 32. Hepsiburada Resmi Kargo Etiketi Çekme (OMS Labels)
+    if (action === 'fetch_hepsiburada_cargo_label') {
+      const hbAcc = db.marketplaceAccounts.find(
+        (m) => m.tenantId === tenantId && m.marketplace === 'hepsiburada'
+      );
+      if (!hbAcc || !hbAcc.supplierOrMerchantId || !hbAcc.apiSecret) {
+        return NextResponse.json(
+          { ok: false, message: 'Hepsiburada API bilgileri eksik.' },
+          { status: 400 }
+        );
+      }
+      const res = await fetchHepsiburadaCargoLabel(hbAcc, String(body.packageNumber));
+      return NextResponse.json(res, { status: res.ok ? 200 : 400 });
     }
 
     return NextResponse.json({ ok: false, message: 'Bilinmeyen işlem' }, { status: 400 });
