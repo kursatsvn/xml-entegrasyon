@@ -681,6 +681,12 @@ export function autoMatchCategory(
   categoryName: string,
   xmlCategoryTree: string
 ): MarketplaceCategoryOption {
+  const leafNorm = (categoryName || '').toLocaleLowerCase('tr-TR');
+  for (const option of MARKETPLACE_CATEGORY_CATALOG) {
+    if (option.keywords.some((kw) => leafNorm.includes(kw.toLocaleLowerCase('tr-TR')))) {
+      return option;
+    }
+  }
   const combined = `${categoryName} ${xmlCategoryTree}`.toLocaleLowerCase('tr-TR');
   for (const option of MARKETPLACE_CATEGORY_CATALOG) {
     if (option.keywords.some((kw) => combined.includes(kw.toLocaleLowerCase('tr-TR')))) {

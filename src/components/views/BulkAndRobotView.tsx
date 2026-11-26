@@ -67,6 +67,7 @@ export default function BulkAndRobotView({
     'Tümü' | 'Trendyol' | 'Hepsiburada'
   >('Tümü');
   const [publishLimit, setPublishLimit] = useState<number>(0);
+  const [onlyUnsent, setOnlyUnsent] = useState<boolean>(false);
   const [loading, setLoading] = useState(false);
   const [selectedBatchErrors, setSelectedBatchErrors] = useState<SyncBatch | null>(null);
   const [showAddRobotModal, setShowAddRobotModal] = useState(false);
@@ -314,7 +315,8 @@ export default function BulkAndRobotView({
       const res = await apiPost('/api/state', {
         action: 'bulk_publish',
         marketplace: selectedMarketplace,
-        limit: publishLimit
+        limit: publishLimit,
+        onlyUnsent
       });
       if (res.ok) {
         notify(res.message, 'success');
@@ -331,7 +333,11 @@ export default function BulkAndRobotView({
     if (loading || !trackingId) return;
     setLoading(true);
     try {
-      const cleanId = trackingId.split('|').map((s) => s.trim()).find(Boolean) || trackingId;
+      const cleanId =
+        trackingId
+          .split('|')
+          .map((s) => s.split(' (')[0].trim())
+          .find(Boolean) || trackingId;
       const res = await apiPost('/api/state', {
         action: 'check_hepsiburada_import_status',
         trackingId: cleanId
@@ -1152,49 +1158,82 @@ export default function BulkAndRobotView({
             );
           })()}
 
-          <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
-                Pazaryerlerine Toplu Ürün Gönderimi Başlat
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Kategorisi, markası ve varyant seçenekleri eşitlenmiş ürünleri Trendyol ve
-                Hepsiburada mağazalarınıza toplu olarak gönderir.
-              </p>
+          <div className="bg-white rounded-xl border border-slate-200 p-4 sm:p-6 shadow-sm flex flex-col gap-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Pazaryerlerine Toplu Ürün Gönderimi Başlat
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Kategorisi, markası ve varyant seçenekleri eşitlenmiş ürünleri Trendyol ve
+                  Hepsiburada mağazalarınıza toplu olarak gönderir.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
+                <select
+                  value={selectedMarketplace}
+                  onChange={(e) => setSelectedMarketplace(e.target.value as any)}
+                  className="w-full sm:w-auto px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white text-slate-900"
+                >
+                  <option value="Tümü">Trendyol + Hepsiburada (Tümü)</option>
+                  <option value="Trendyol">Sadece Trendyol</option>
+                  <option value="Hepsiburada">Sadece Hepsiburada</option>
+                </select>
+                <select
+                  value={publishLimit}
+                  onChange={(e) => setPublishLimit(Number(e.target.value))}
+                  className="w-full sm:w-auto px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white text-slate-900"
+                >
+                  <option value={0}>Tüm Uygun Ürünler</option>
+                  <option value={1}>1 Ürün (Canlı Test)</option>
+                  <option value={10}>İlk 10 Ürün</option>
+                  <option value={50}>İlk 50 Ürün</option>
+                  <option value={250}>İlk 250 Ürün</option>
+                </select>
+                <button
+                  onClick={handleBulkPublish}
+                  disabled={loading}
+                  className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  <Send className="w-4 h-4 shrink-0" />
+                  {loading
+                    ? 'Gönderiliyor...'
+                    : publishLimit > 0
+                    ? `${publishLimit} Ürünü Test Gönder`
+                    : onlyUnsent
+                    ? 'Eksik / Hatalıları Gönder'
+                    : 'Toplu Ürün Gönderimini Başlat'}
+                </button>
+              </div>
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto">
-              <select
-                value={selectedMarketplace}
-                onChange={(e) => setSelectedMarketplace(e.target.value as any)}
-                className="w-full sm:w-auto px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white text-slate-900"
-              >
-                <option value="Tümü">Trendyol + Hepsiburada (Tümü)</option>
-                <option value="Trendyol">Sadece Trendyol</option>
-                <option value="Hepsiburada">Sadece Hepsiburada</option>
-              </select>
-              <select
-                value={publishLimit}
-                onChange={(e) => setPublishLimit(Number(e.target.value))}
-                className="w-full sm:w-auto px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium bg-white text-slate-900"
-              >
-                <option value={0}>Tüm Ürünler</option>
-                <option value={1}>1 Ürün (Canlı Test)</option>
-                <option value={10}>İlk 10 Ürün</option>
-                <option value={50}>İlk 50 Ürün</option>
-              </select>
-              <button
-                onClick={handleBulkPublish}
-                disabled={loading}
-                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
-              >
-                <Send className="w-4 h-4 shrink-0" />
-                {loading
-                  ? 'Gönderiliyor...'
-                  : publishLimit > 0
-                  ? `${publishLimit} Ürünü Test Gönder`
-                  : 'Toplu Ürün Gönderimini Başlat'}
-              </button>
-            </div>
+
+            {(() => {
+              const activeProds = products.filter((p) => p.status === 'active');
+              const hbUnsentCount = activeProds.filter((p) => p.hepsiburadaSyncStatus !== 'synced').length;
+              const tyUnsentCount = activeProds.filter((p) => p.trendyolSyncStatus !== 'synced').length;
+              const targetUnsentCount =
+                selectedMarketplace === 'Hepsiburada'
+                  ? hbUnsentCount
+                  : selectedMarketplace === 'Trendyol'
+                  ? tyUnsentCount
+                  : activeProds.filter(
+                      (p) => p.hepsiburadaSyncStatus !== 'synced' || p.trendyolSyncStatus !== 'synced'
+                    ).length;
+              return (
+                <label className="flex items-center gap-2.5 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2.5 cursor-pointer select-none w-fit">
+                  <input
+                    type="checkbox"
+                    checked={onlyUnsent}
+                    onChange={(e) => setOnlyUnsent(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 cursor-pointer"
+                  />
+                  <span>
+                    Sadece henüz gönderilmemiş veya hatalı aktif ürünleri gönder (
+                    <strong className="text-blue-700">{targetUnsentCount}</strong> ürün)
+                  </span>
+                </label>
+              );
+            })()}
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

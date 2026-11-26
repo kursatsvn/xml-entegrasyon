@@ -274,7 +274,8 @@ const SaveMarketplaceAccountSchema = z.object({
 const BulkPublishSchema = z.object({
   action: z.literal('bulk_publish'),
   marketplace: MarketplaceTargetSchema.optional(),
-  limit: z.coerce.number().int().min(0).max(50000).optional().default(0)
+  limit: z.coerce.number().int().min(0).max(50000).optional().default(0),
+  onlyUnsent: z.boolean().optional().default(false)
 });
 
 const BulkUpdatePriceStockSchema = z.object({

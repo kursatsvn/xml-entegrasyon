@@ -747,13 +747,20 @@ export async function POST(req: NextRequest) {
 
         // Eğer halihazırda gerçek sayısal ve doğru cinsiyet/alanda bir Hepsiburada kategori ID varsa koru
         const existingHbNameLower = (cat.hepsiburadaCategoryName || '').toLocaleLowerCase('tr-TR');
+        const nameLower = (cat.name || '').toLocaleLowerCase('tr-TR');
         const xmlLower = `${cat.name} ${cat.xmlCategoryTree}`.toLocaleLowerCase('tr-TR');
         const isXmlErkek = /\berkek\b/.test(xmlLower);
         const isXmlBebek = /\b(bebek|çocuk|cocuk)\b/.test(xmlLower);
+        const isXmlHamile = /\b(hamile|lohusa|emzirme)\b/.test(xmlLower);
         const hasWrongHbSegment =
+          !existingHbNameLower.startsWith('giyim') ||
+          existingHbNameLower.includes('taraftar') ||
+          existingHbNameLower.includes('spor outdoor') ||
           (!isXmlBebek && (existingHbNameLower.includes('bebek') || existingHbNameLower.includes('çocuk'))) ||
+          (!isXmlHamile && (existingHbNameLower.includes('hamile') || existingHbNameLower.includes('lohusa'))) ||
           (!isXmlErkek && existingHbNameLower.includes('erkek')) ||
           (isXmlErkek && existingHbNameLower.includes('kadın')) ||
+          (nameLower.includes('pijama') && !existingHbNameLower.includes('pijama')) ||
           existingHbNameLower.includes('mobilya') ||
           existingHbNameLower.includes('ev dekorasyon');
 
@@ -911,10 +918,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 11. Toplu Ürün Gönderimi (Trendyol & Hepsiburada + Kontrollü Test Limiti)
+    // 11. Toplu Ürün Gönderimi (Trendyol & Hepsiburada + Kontrollü Test Limiti + Sadece Eksik/Hatalı Modu)
     if (action === 'bulk_publish') {
       const targetMarketplace = (body.marketplace || 'Tümü') as 'Trendyol' | 'Hepsiburada' | 'Tümü';
       const publishLimit = Number(body.limit || 0);
+      const onlyUnsent = Boolean(body.onlyUnsent);
       const currentTenant = db.tenants.find((t) => t.id === tenantId);
       const tenantGs = currentTenant ? mergeTenantGeneralSettings(currentTenant) : null;
       const allTenantProducts = db.products.filter((p) => p.tenantId === tenantId);
@@ -947,9 +955,18 @@ export async function POST(req: NextRequest) {
 
       for (const acc of accounts) {
         let productsForAcc = allTenantProducts;
+
+        if (onlyUnsent) {
+          productsForAcc = allTenantProducts.filter((p) => {
+            if (p.status !== 'active') return false;
+            const st = acc.marketplace === 'trendyol' ? p.trendyolSyncStatus : p.hepsiburadaSyncStatus;
+            return st !== 'synced';
+          });
+        }
+
         if (publishLimit > 0) {
           // Test / sınırlı gönderimde önce fiyatı > 0 ve henüz gönderilmemiş ürünleri önceliklendir
-          const prioritized = [...allTenantProducts].sort((a, b) => {
+          const prioritized = [...productsForAcc].sort((a, b) => {
             const aEligible = a.salePrice > 0 && a.status === 'active' ? 0 : 1;
             const bEligible = b.salePrice > 0 && b.status === 'active' ? 0 : 1;
             if (aEligible !== bEligible) return aEligible - bEligible;
@@ -964,6 +981,10 @@ export async function POST(req: NextRequest) {
             return aUnsent - bUnsent;
           });
           productsForAcc = prioritized.slice(0, publishLimit);
+        }
+
+        if (productsForAcc.length === 0) {
+          continue;
         }
 
         const res = await publishProductsToMarketplace({
@@ -982,27 +1003,50 @@ export async function POST(req: NextRequest) {
 
         const syncedSet = new Set(res.syncedProductIds);
         const targetedIds = new Set(productsForAcc.map((p) => p.id));
+        const chunkFallbackErr = res.errors.find(
+          (e) => e.stockCode.startsWith('HB-CHUNK-') || e.stockCode === 'HB-IMPORT-HTTP'
+        );
         for (const p of db.products) {
           if (p.tenantId !== tenantId || !targetedIds.has(p.id)) continue;
           modifiedProdIds.add(p.id);
+          const isSynced = syncedSet.has(p.id);
+          const err = res.errors.find((e) => e.stockCode === p.stockCode);
           if (acc.marketplace === 'trendyol') {
-            p.trendyolSyncStatus = syncedSet.has(p.id) ? 'synced' : 'error';
-            const err = res.errors.find((e) => e.stockCode === p.stockCode);
-            p.trendyolErrorMessage = err?.message;
+            p.trendyolSyncStatus = isSynced ? 'synced' : 'error';
+            p.trendyolErrorMessage = isSynced ? undefined : err?.message;
           } else {
-            p.hepsiburadaSyncStatus = syncedSet.has(p.id) ? 'synced' : 'error';
-            const err = res.errors.find((e) => e.stockCode === p.stockCode);
-            p.hepsiburadaErrorMessage = err?.message;
+            p.hepsiburadaSyncStatus = isSynced ? 'synced' : 'error';
+            p.hepsiburadaErrorMessage = isSynced
+              ? undefined
+              : err?.message || chunkFallbackErr?.message || 'Hepsiburada aktarımı tamamlanamadı.';
           }
         }
       }
+
+      if (totalAttempted === 0) {
+        return NextResponse.json({
+          ok: true,
+          message: onlyUnsent
+            ? `${targetMarketplace} için gönderilmeyi bekleyen eksik veya hatalı aktif ürün kalmadı.`
+            : 'Gönderilecek uygun ürün bulunamadı.'
+        });
+      }
+
+      const opTypeLabel =
+        publishLimit > 0
+          ? onlyUnsent
+            ? `EKSİK / HATALI (${publishLimit} ÜRÜN)`
+            : `KONTROLLÜ GÖNDERİM (${publishLimit} ÜRÜN)`
+          : onlyUnsent
+          ? 'EKSİK / HATALI ÜRÜNLER'
+          : 'TÜM ÜRÜNLER';
 
       const newBatch = {
         id: `batch-${Date.now()}`,
         tenantId,
         batchNumber: 803255 + db.syncBatches.length,
         marketplace: targetMarketplace,
-        operationType: publishLimit > 0 ? `KONTROLLÜ GÖNDERİM (${publishLimit} ÜRÜN)` : 'TÜM ÜRÜNLER',
+        operationType: opTypeLabel,
         remoteBatchId: remoteBatchIds.join(' | ') || `BATCH-${Date.now()}`,
         attemptedCount: totalAttempted,
         successCount: totalSuccess,

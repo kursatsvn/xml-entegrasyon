@@ -277,6 +277,7 @@ export function findBestHepsiburadaCategoryMatch(
 
   const isXmlErkek = /\berkek\b/.test(combined);
   const isXmlBebekOrCocuk = /\b(bebek|çocuk|cocuk|kız çocuk|erkek çocuk)\b/.test(combined);
+  const isXmlHamile = /\b(hamile|lohusa|emzirme)\b/.test(combined);
   const isXmlFantezi = /fant[ae]zi|jartiyer|babydoll|kost[üu]m|harness|vücut çorabı|string|tanga/.test(combined);
 
   const keywordHints: { match: string[]; target: string[] }[] = [
@@ -286,9 +287,9 @@ export function findBestHepsiburadaCategoryMatch(
     { match: ['kostüm', 'kostum'], target: ['fantezi kostüm', 'kostüm'] },
     { match: ['vücut çorabı', 'vucut corabi'], target: ['vücut çorabı'] },
     { match: ['çorap', 'corap'], target: ['jartiyer çorabı', 'vücut çorabı', 'çorap'] },
+    { match: ['pijama', 'şortlu', 'saten takım', 'saten takımlar', 'ev giyim', 'uzun kol takım', 'alt üst takım', 'monamise', 'monamıse'], target: ['pijama', 'pijama takımı'] },
     { match: ['sabahlık', 'sabahlik'], target: ['sabahlık', 'gecelik'] },
     { match: ['gecelik', 'hamile', 'lohusa'], target: ['gecelik'] },
-    { match: ['pijama', 'şortlu', 'saten takım', 'saten takımlar', 'ev giyim', 'uzun kol takım', 'alt üst takım', 'monamise', 'monamıse'], target: ['pijama', 'pijama takımı'] },
     { match: ['bralet', 'büstiyer', 'bustiyer'], target: ['büstiyer', 'bralet', 'sütyen'] },
     { match: ['sütyen & külot', 'sütyen takımları', 'sütyen / büstiyer'], target: ['iç çamaşır takımı', 'sütyen takımı', 'sütyen'] },
     { match: ['sütyen', 'sutyen'], target: ['sütyen'] },
@@ -298,11 +299,17 @@ export function findBestHepsiburadaCategoryMatch(
     { match: ['korse'], target: ['korse'] },
     { match: ['kombinezon', 'jupon', 'jüpon'], target: ['kombinezon', 'jüpon'] },
     { match: ['tayt'], target: ['tayt', 'korse'] },
-    { match: ['atlet', 'termal'], target: ['atlet', 'termal'] },
+    { match: ['atlet', 'termal'], target: ['atlet', 'termal', 'fanila'] },
+    { match: ['erkek iç giyim'], target: ['boxer', 'atlet', 'külot', 'iç giyim'] },
     { match: ['aksesuar', 'maske', 'kelepçe'], target: ['aksesuar'] },
     { match: ['elbise', 'tulum'], target: ['büyük beden elbise', 'fantezi gecelik', 'gecelik', 'elbise'] },
     { match: ['body', 'bodysuit', 'harness', 'deri', 'fantazi iç giyim', 'büyük beden fantezi'], target: ['fantezi iç giyim', 'fantezi gecelik', 'babydoll', 'body'] }
   ];
+
+  // Yaprak kategori adına uyan hint'i önce bul; yoksa tam XML ağacında ara
+  const matchedHint =
+    keywordHints.find((h) => h.match.some((m) => nameNorm.includes(m))) ||
+    keywordHints.find((h) => h.match.some((m) => combined.includes(m)));
 
   let bestCat: HepsiburadaLeafCategory | null = null;
   let bestScore = 0;
@@ -311,13 +318,26 @@ export function findBestHepsiburadaCategoryMatch(
     const catName = normalizeTr(cat.name);
     const catPath = normalizeTr(cat.displayName);
 
-    // Giyim / Ayakkabı dışındaki tamamen ilgisiz kategorileri (Mobilya, Ev Dekorasyon vb.) ele
-    if (!catPath.startsWith('giyim') && !catPath.includes('iç giyim') && !catPath.includes('fantezi')) {
+    // Giyim / Ayakkabı dışındaki ilgisiz ağaçları (Mobilya, Ev Dekorasyon, Spor Outdoor, Taraftar vb.) kesin ele
+    if (!catPath.startsWith('giyim')) {
+      continue;
+    }
+    if (
+      catPath.includes('taraftar') ||
+      catPath.includes('spor outdoor') ||
+      catPath.includes('mobilya') ||
+      catPath.includes('ev dekorasyon')
+    ) {
       continue;
     }
 
     // Bebek / Çocuk koruması
     if (!isXmlBebekOrCocuk && (catPath.includes('bebek') || catPath.includes('çocuk'))) {
+      continue;
+    }
+
+    // Hamile / Lohusa koruması (XML'de hamile/lohusa/emzirme yoksa Hamile Giyim dalına düşmesin)
+    if (!isXmlHamile && (catPath.includes('hamile') || catPath.includes('lohusa'))) {
       continue;
     }
 
@@ -346,16 +366,13 @@ export function findBestHepsiburadaCategoryMatch(
     else if (catName && nameNorm.includes(catName)) score += 20;
     else if (nameNorm && catName.includes(nameNorm)) score += 18;
 
-    for (const hint of keywordHints) {
-      if (hint.match.some((m) => combined.includes(m))) {
-        if (hint.target.some((t) => catName === t)) {
-          score += 55;
-        } else if (hint.target.some((t) => catName.includes(t))) {
-          score += 40;
-        } else if (hint.target.some((t) => catPath.includes(t))) {
-          score += 18;
-        }
-        break;
+    if (matchedHint) {
+      if (matchedHint.target.some((t) => catName === t)) {
+        score += 60;
+      } else if (matchedHint.target.some((t) => catName.includes(t))) {
+        score += 42;
+      } else if (matchedHint.target.some((t) => catPath.includes(t))) {
+        score += 18;
       }
     }
 

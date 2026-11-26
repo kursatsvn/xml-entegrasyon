@@ -324,7 +324,7 @@ export async function publishProductsToHepsiburada(params: {
   const importItems: Record<string, unknown>[] = [];
   const skuToProduct = new Map<string, { id: string; stockCode: string; title: string }>();
 
-  // Gönderilecek ürünlerin benzersiz HB kategori şemalarını ve zorunlu enum değerlerini tek seferde önbellekle
+  // Gönderilecek ürünlerin benzersiz HB kategori şemalarını ve zorunlu enum değerlerini paralel önbellekle (hız optimizasyonu)
   const catSchemaMap = new Map<number, HepsiburadaCategoryAttribute[]>();
   const attrValuesMap = new Map<string, HepsiburadaAttributeValue[]>();
   const uniqueCatIds = Array.from(
@@ -335,26 +335,32 @@ export async function publishProductsToHepsiburada(params: {
     )
   );
 
-  for (const cid of uniqueCatIds) {
-    const attrRes = await fetchHepsiburadaCategoryAttributes(account, cid);
-    if (attrRes.ok) {
-      catSchemaMap.set(cid, attrRes.attributes);
-      // Zorunlu veya varyant enum özelliklerin geçerli değer listesini çek (önbellekli)
-      const enumTargets = attrRes.attributes.filter(
-        (a) =>
-          !a.isBase &&
-          (a.mandatory || a.isVariant) &&
-          a.type.toLowerCase().includes('enum')
-      );
-      await Promise.all(
-        enumTargets.map(async (attr) => {
-          const valRes = await fetchHepsiburadaAttributeValues(account, cid, attr.id);
-          if (valRes.ok && valRes.values.length > 0) {
-            attrValuesMap.set(`${cid}:${attr.id}`, valRes.values);
-          }
-        })
-      );
-    }
+  const SCHEMA_CONCURRENCY = 6;
+  for (let i = 0; i < uniqueCatIds.length; i += SCHEMA_CONCURRENCY) {
+    const batchCids = uniqueCatIds.slice(i, i + SCHEMA_CONCURRENCY);
+    await Promise.all(
+      batchCids.map(async (cid) => {
+        const attrRes = await fetchHepsiburadaCategoryAttributes(account, cid);
+        if (attrRes.ok) {
+          catSchemaMap.set(cid, attrRes.attributes);
+          // Zorunlu veya varyant enum özelliklerin geçerli değer listesini çek (önbellekli)
+          const enumTargets = attrRes.attributes.filter(
+            (a) =>
+              !a.isBase &&
+              (a.mandatory || a.isVariant) &&
+              a.type.toLowerCase().includes('enum')
+          );
+          await Promise.all(
+            enumTargets.map(async (attr) => {
+              const valRes = await fetchHepsiburadaAttributeValues(account, cid, attr.id);
+              if (valRes.ok && valRes.values.length > 0) {
+                attrValuesMap.set(`${cid}:${attr.id}`, valRes.values);
+              }
+            })
+          );
+        }
+      })
+    );
   }
 
   for (const prod of products) {
@@ -604,62 +610,101 @@ export async function publishProductsToHepsiburada(params: {
     };
   }
 
-  // Resmi MPOP /product/api/products/import multipart/form-data (.json dosyası) gönderimi (1000'li chunk)
-  for (let i = 0; i < importItems.length; i += 1000) {
-    const chunk = importItems.slice(i, i + 1000);
-    const formData = new FormData();
-    const jsonBlob = new Blob([JSON.stringify(chunk)], { type: 'application/json' });
-    formData.append('file', jsonBlob, 'products.json');
+  // Resmi MPOP /product/api/products/import multipart/form-data (.json dosyası) gönderimi
+  // 250'li güvenli paket boyutu + 45sn timeout + geçici HTTP 0/429/5xx için otomatik retry + 2'li paralel aktarım
+  const IMPORT_CHUNK_SIZE = 250;
+  const UPLOAD_CONCURRENCY = 2;
+  const importChunks: Record<string, unknown>[][] = [];
+  for (let i = 0; i < importItems.length; i += IMPORT_CHUNK_SIZE) {
+    importChunks.push(importItems.slice(i, i + IMPORT_CHUNK_SIZE));
+  }
 
-    const res = await hepsiburadaFetch<any>(
-      account,
-      'mpop',
-      `/product/api/products/import?version=1`,
-      {
-        method: 'POST',
-        body: formData,
-        multipart: true,
-        timeoutMs: 20000
-      }
+  for (let c = 0; c < importChunks.length; c += UPLOAD_CONCURRENCY) {
+    const batchChunks = importChunks.slice(c, c + UPLOAD_CONCURRENCY);
+    await Promise.all(
+      batchChunks.map(async (chunk, offset) => {
+        const chunkIdx = c + offset + 1;
+        let lastRes: Awaited<ReturnType<typeof hepsiburadaFetch<any>>> | null = null;
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) {
+            await new Promise((r) => setTimeout(r, attempt === 1 ? 1200 : 2500));
+          }
+          const formData = new FormData();
+          const jsonBlob = new Blob([JSON.stringify(chunk)], { type: 'application/json' });
+          formData.append('file', jsonBlob, `products-part-${chunkIdx}.json`);
+
+          const res = await hepsiburadaFetch<any>(
+            account,
+            'mpop',
+            `/product/api/products/import?version=1`,
+            {
+              method: 'POST',
+              body: formData,
+              multipart: true,
+              timeoutMs: 45000
+            }
+          );
+          lastRes = res;
+
+          if (res.ok) {
+            const tid = String(res.data?.data?.trackingId || res.data?.trackingId || '');
+            if (tid) trackingIds.push(tid);
+            return;
+          }
+
+          // Yalnızca geçici ağ/timeout/rate-limit/sunucu hatalarında tekrar dene
+          const isTransient = res.status === 0 || res.status === 429 || res.status >= 500;
+          if (!isTransient) break;
+        }
+
+        const failedChunkMsg = lastRes?.errorMessage || 'Hepsiburada API paket gönderimi başarısız oldu.';
+        for (const item of chunk) {
+          const sku = String((item.attributes as Record<string, string>)?.merchantSku || '');
+          const meta = skuToProduct.get(sku);
+          if (meta) failedProductIds.add(meta.id);
+        }
+        errors.push({
+          stockCode: `HB-CHUNK-${chunkIdx}`,
+          title: `Hepsiburada Katalog API Hatası — Paket #${chunkIdx}/${importChunks.length} (HTTP ${lastRes?.status ?? 0})`,
+          marketplace: 'Hepsiburada',
+          message: failedChunkMsg
+        });
+      })
     );
-
-    if (res.ok) {
-      const tid = String(res.data?.data?.trackingId || res.data?.trackingId || '');
-      if (tid) trackingIds.push(tid);
-    } else {
-      for (const item of chunk) {
-        const sku = String((item.attributes as Record<string, string>)?.merchantSku || '');
-        const meta = skuToProduct.get(sku);
-        if (meta) failedProductIds.add(meta.id);
-      }
-      errors.push({
-        stockCode: 'HB-IMPORT-HTTP',
-        title: `Hepsiburada Katalog API Hatası (HTTP ${res.status})`,
-        marketplace: 'Hepsiburada',
-        message: res.errorMessage
-      });
-    }
   }
 
   if (trackingIds.length > 0) {
-    remoteBatchId = trackingIds[0];
+    remoteBatchId =
+      trackingIds.length === 1
+        ? trackingIds[0]
+        : `${trackingIds[0]} (+${trackingIds.length - 1} paket)`;
     await new Promise((r) => setTimeout(r, 1800));
-    const statusCheck = await checkHepsiburadaImportStatus(account, remoteBatchId);
-    if (statusCheck.ok && statusCheck.items.length > 0) {
-      const seenStocks = new Set<string>();
-      for (const stItem of statusCheck.items) {
-        if (stItem.errors.length > 0 || stItem.importStatus === 'FAILED') {
-          const meta = skuToProduct.get(stItem.merchantSku.toUpperCase());
-          if (meta) {
-            failedProductIds.add(meta.id);
-            if (!seenStocks.has(meta.stockCode)) {
-              seenStocks.add(meta.stockCode);
-              errors.push({
-                stockCode: meta.stockCode,
-                title: meta.title,
-                marketplace: 'Hepsiburada',
-                message: stItem.errors.join(' | ') || `Import statüsü: ${stItem.importStatus}`
-              });
+    const seenStocks = new Set<string>();
+    const STATUS_CONCURRENCY = 4;
+
+    for (let t = 0; t < trackingIds.length; t += STATUS_CONCURRENCY) {
+      const tidSlice = trackingIds.slice(t, t + STATUS_CONCURRENCY);
+      const statusChecks = await Promise.all(
+        tidSlice.map((tid) => checkHepsiburadaImportStatus(account, tid))
+      );
+      for (const statusCheck of statusChecks) {
+        if (statusCheck.ok && statusCheck.items.length > 0) {
+          for (const stItem of statusCheck.items) {
+            if (stItem.errors.length > 0 || stItem.importStatus === 'FAILED') {
+              const meta = skuToProduct.get(stItem.merchantSku.toUpperCase());
+              if (meta) {
+                failedProductIds.add(meta.id);
+                if (!seenStocks.has(meta.stockCode)) {
+                  seenStocks.add(meta.stockCode);
+                  errors.push({
+                    stockCode: meta.stockCode,
+                    title: meta.title,
+                    marketplace: 'Hepsiburada',
+                    message: stItem.errors.join(' | ') || `Import statüsü: ${stItem.importStatus}`
+                  });
+                }
+              }
             }
           }
         }
@@ -704,8 +749,8 @@ export async function checkHepsiburadaImportStatus(
   const res = await hepsiburadaFetch<any>(
     account,
     'mpop',
-    `/product/api/products/status/${encodeURIComponent(trackingId)}?page=0&size=200`,
-    { timeoutMs: 10000 }
+    `/product/api/products/status/${encodeURIComponent(trackingId)}?page=0&size=250`,
+    { timeoutMs: 12000 }
   );
 
   if (!res.ok) {

@@ -1331,14 +1331,25 @@ export async function writeDbAsync(
       : state.products;
 
   const WRITE_CHUNK = 200;
+  const WRITE_CONCURRENCY = 4;
+  const productChunks: Product[][] = [];
   for (let i = 0; i < targetProducts.length; i += WRITE_CHUNK) {
-    const slice = targetProducts.slice(i, i + WRITE_CHUNK);
-    const { error: prodErr } = await supabase.rpc('sopyo_upsert_products_chunk', {
-      p_secret: serverSecret,
-      p_products: slice
-    });
-    if (prodErr) {
-      throw new Error(`Supabase ürün kayıt hatası: ${prodErr.message}`);
+    productChunks.push(targetProducts.slice(i, i + WRITE_CHUNK));
+  }
+  for (let c = 0; c < productChunks.length; c += WRITE_CONCURRENCY) {
+    const batchSlices = productChunks.slice(c, c + WRITE_CONCURRENCY);
+    const results = await Promise.all(
+      batchSlices.map((slice) =>
+        supabase.rpc('sopyo_upsert_products_chunk', {
+          p_secret: serverSecret,
+          p_products: slice
+        })
+      )
+    );
+    for (const r of results) {
+      if (r.error) {
+        throw new Error(`Supabase ürün kayıt hatası: ${r.error.message}`);
+      }
     }
   }
 
