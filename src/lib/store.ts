@@ -1325,10 +1325,14 @@ export async function writeDbAsync(
     return;
   }
 
-  const targetProducts =
-    options?.onlyProductIds && options.onlyProductIds.length > 0
-      ? state.products.filter((p) => options.onlyProductIds!.includes(p.id))
-      : state.products;
+  const onlyIdsSet = Array.isArray(options?.onlyProductIds)
+    ? new Set(options.onlyProductIds)
+    : null;
+  const targetProducts = onlyIdsSet
+    ? onlyIdsSet.size === 0
+      ? []
+      : state.products.filter((p) => onlyIdsSet.has(p.id))
+    : state.products;
 
   const WRITE_CHUNK = 200;
   const WRITE_CONCURRENCY = 4;
@@ -1353,7 +1357,7 @@ export async function writeDbAsync(
     }
   }
 
-  if (options?.syncDeletedProducts && !options?.onlyProductIds) {
+  if (options?.syncDeletedProducts) {
     const keepIds = options?.tenantId
       ? state.products.filter((p) => p.tenantId === options.tenantId).map((p) => p.id)
       : state.products.map((p) => p.id);

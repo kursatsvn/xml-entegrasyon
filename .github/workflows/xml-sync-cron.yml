@@ -1,16 +1,15 @@
-name: 3-Hour XML Sync & AI Compliance Guard
+name: Manual XML Sync & AI Compliance Guard (Backup Trigger)
 
 on:
-  schedule:
-    # Her 3 saatte bir otomatik çalışır (00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 UTC)
-    - cron: '0 */3 * * *'
+  # Ana 3 saatlik zamanlayıcı artık Supabase pg_cron + pg_net üzerinde %100 dakik çalışmaktadır.
+  # Bu workflow çakışma olmaması için yalnızca isteğe bağlı manuel tetikleyici (workflow_dispatch) olarak bırakılmıştır.
   workflow_dispatch:
 
 jobs:
   trigger-xml-sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Production 3-Hour XML & AI Compliance Sync
+      - name: Trigger Production XML & AI Compliance Sync
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           APP_BASE_URL: ${{ secrets.APP_BASE_URL || 'https://xml-entegrasyon-orcin.vercel.app' }}
@@ -19,7 +18,7 @@ jobs:
             echo "CRON_SECRET gizli değişkeni GitHub Actions Secrets altında tanımlanmalıdır."
             exit 1
           fi
-          echo "Triggering 3-hour automatic XML sync on ${APP_BASE_URL}/api/cron/sync ..."
-          curl -s -S -L --fail-with-body --max-time 60 \
+          echo "Triggering XML sync on ${APP_BASE_URL}/api/cron/sync ..."
+          curl -s -S -L --fail-with-body --max-time 240 \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "${APP_BASE_URL}/api/cron/sync"

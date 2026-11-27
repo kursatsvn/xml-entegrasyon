@@ -123,23 +123,40 @@ export async function syncPriceAndInventoryToMarketplace(params: {
   try {
     if (itemsPayload.length > 0) {
       const url = `https://apigw.trendyol.com/integration/inventory/sellers/${account.supplierOrMerchantId}/products/price-and-inventory`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: getTrendyolAuthHeaders(account),
-        body: JSON.stringify({ items: itemsPayload.slice(0, 1000) }),
-        signal: AbortSignal.timeout(12000)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.batchRequestId) remoteBatchId = data.batchRequestId;
-      } else {
-        const errBody = await res.text().catch(() => '');
-        errors.push({
-          stockCode: 'SYNC-HTTP',
-          title: `Trendyol Stok/Fiyat API Hatası (HTTP ${res.status})`,
-          marketplace: 'Trendyol',
-          message: errBody.slice(0, 200) || `HTTP ${res.status}`
-        });
+      const chunks: any[][] = [];
+      for (let i = 0; i < itemsPayload.length; i += 1000) {
+        chunks.push(itemsPayload.slice(i, i + 1000));
+      }
+      const CONCURRENCY = 3;
+      const batchIds: string[] = [];
+      for (let c = 0; c < chunks.length; c += CONCURRENCY) {
+        const sliceChunks = chunks.slice(c, c + CONCURRENCY);
+        await Promise.all(
+          sliceChunks.map(async (chunk) => {
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: getTrendyolAuthHeaders(account),
+              body: JSON.stringify({ items: chunk }),
+              signal: AbortSignal.timeout(15000)
+            });
+            if (res.ok) {
+              const data = await res.json().catch(() => null);
+              if (data?.batchRequestId) batchIds.push(String(data.batchRequestId));
+            } else {
+              const errBody = await res.text().catch(() => '');
+              errors.push({
+                stockCode: 'SYNC-HTTP',
+                title: `Trendyol Stok/Fiyat API Hatası (HTTP ${res.status})`,
+                marketplace: 'Trendyol',
+                message: errBody.slice(0, 200) || `HTTP ${res.status}`
+              });
+            }
+          })
+        );
+      }
+      if (batchIds.length > 0) {
+        remoteBatchId =
+          batchIds.length === 1 ? batchIds[0] : `${batchIds[0]} (+${batchIds.length - 1} paket)`;
       }
     }
   } catch (err: unknown) {
