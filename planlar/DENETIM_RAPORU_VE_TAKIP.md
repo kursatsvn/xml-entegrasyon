@@ -25,8 +25,9 @@
 - [x] **Faz 3 — Veri Mimarisi, Performans ve Hata Yönetimi Dönüşümü** *(Tamamlandı: 26.11.2026 — `FAZ_3_VERI_PERFORMANS_HATA_PLANI.md`)*
 - [x] **Faz 4 — Güvenli UI State, Tarih/Saat ve Kiracı Dinamizmi** *(Tamamlandı: 26.11.2026 — `FAZ_4_UI_STATE_IS_MANTIGI_PLANI.md`)*
 - [x] **Faz 5 — Next.js App Router Bölünmesi ve UI/UX Standartlaştırma** *(Tamamlandı: 26.11.2026 — `FAZ_5_TASARIM_UI_UX_APP_ROUTER_PLANI.md`)*
-- [x] **Faz 6 — Hepsiburada API Tam Entegrasyonu (Trendyol Birebir Özellik Eşitliği)** *(Tamamlandı: 26.11.2026 — `FAZ_6_HEPSIBURADA_API_TAM_ENTEGRASYON_PLANI.md`)*
-- [x] **Faz 7 — İşlem Geri Bildirimi (Yükleniyor Popup), Navigasyon Kilidi ve Sayfadan Çıkış Koruması** *(Tamamlandı: 26.11.2026 — `FAZ_7_ISLEM_GERIBILDIRIM_VE_SAYFA_KORUMA_PLANI.md`)*
+- [x] **Faz 6 — Hepsiburada API Tam Entegrasyonu (Trendyol Birebir Özellik Eşitliği)** *(Tamamlandı: 26.11.2026 — `planlar/FAZ_6_HEPSIBURADA_API_TAM_ENTEGRASYON_PLANI.md`)*
+- [x] **Faz 7 — İşlem Geri Bildirimi (Yükleniyor Popup), Navigasyon Kilidi ve Sayfadan Çıkış Koruması** *(Tamamlandı: 26.11.2026 — `planlar/FAZ_7_ISLEM_GERIBILDIRIM_VE_SAYFA_KORUMA_PLANI.md`)*
+- [x] **Faz 8 — Supabase `pg_cron` 3 Saatlik Dakik Zamanlayıcı, `/api/cron/sync` Hız Optimizasyonu ve Canlı Hepsiburada Sertleştirmeleri** *(Tamamlandı: 27.11.2026 — `planlar/FAZ_8_PG_CRON_VE_HEPSIBURADA_PERFORMANS_PLANI.md`)*
 
 ---
 
